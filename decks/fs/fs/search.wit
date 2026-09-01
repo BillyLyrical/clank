@@ -1,0 +1,56 @@
+#!wit/toml
+author="CLAM"
+description="Search for files by pattern or content"
+enabled=true
+license="Artistic-2.0"
+name="fs_search"
+notes="Read-only. Finds files matching criteria.\n"
+priority=10
+timeout=30
+type="rule"
+usage="Input: { path: \".\", pattern: \"*.wit\", contains: \"source\" }\nOutput: { files: [...], count: 5 }\n"
+version="1.0.0"
+triggers=[
+  "fs_search",
+]
+
+[metadata]
+category="filesystem"
+complexity="moderate"
+safety="read_only"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $path = ref $input eq 'HASH' ? ($input->{path} // '.') : $input;
+my $pattern = ref $input eq 'HASH' ? ($input->{pattern} // '*') : '*';
+my $contains = ref $input eq 'HASH' ? ($input->{contains} // '') : '';
+
+return { error => "Path contains .." } if $path =~ /\.\./;
+return { error => "Not a directory: $path" } unless -d $path;
+
+my $cmd = "find $path -name '$pattern' -type f 2>/dev/null";
+my @files = `$cmd`;
+chomp @files;
+
+my @matches;
+for my $file (@files) {
+    if ($contains) {
+        open my $fh, '<', $file or next;
+        my $content = do { local $/; <$fh> };
+        close $fh;
+        next unless $content =~ /\Q$contains\E/;
+    }
+    push @matches, {
+        path => $file,
+        size => -s $file,
+    };
+}
+
+return {
+    files => \@matches,
+    count => scalar @matches,
+    search_path  => $path,
+    pattern      => $pattern,
+    contains     => $contains,
+};
+
+PERL

@@ -1,0 +1,52 @@
+#!wit/toml
+author="CLAM"
+description="Show git status"
+enabled=true
+license="Artistic-2.0"
+name="git_status"
+notes="Read-only. Shows working tree status.\n"
+priority=10
+timeout=10
+type="rule"
+usage="Input: { path: \".\" }\nOutput: { clean: false, modified: [...], untracked: [...] }\n"
+version="1.0.0"
+triggers=[
+  "git_status",
+]
+
+[metadata]
+category="git"
+complexity="simple"
+safety="read_only"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $path = ref $input eq 'HASH' ? ($input->{path} // '.') : '.';
+
+my $output = `cd '$path' && git status --porcelain 2>/dev/null`;
+my $exit = $? >> 8;
+
+return { error => "Not a git repository" } if $exit != 0;
+
+my (@modified, @untracked, @staged);
+for my $line (split /\n/, $output) {
+    my ($status, $file) = $line =~ /^(.)(.)\s+(.+)$/;
+    next unless $file;
+
+    if ($status eq '?') {
+        push @untracked, $file;
+    } elsif ($status eq 'M' || $status eq 'A' || $status eq 'D') {
+        push @staged, { status => $status, file => $file };
+    } elsif ($status eq ' ') {
+        push @modified, $file if $2 eq 'M';
+    }
+}
+
+return {
+    clean     => !@modified && !@untracked && !@staged,
+    modified  => \@modified,
+    untracked => \@untracked,
+    staged    => \@staged,
+    path      => $path,
+};
+
+PERL

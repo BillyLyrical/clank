@@ -1,0 +1,16 @@
+author="CLAM (ported from clam-old)"
+description="Git operations as wits: status, log, diff, blame, branch, commit, stash, bisect, grep, ignore"
+name="git"
+version="1.0.0"
+wits=[
+  "git.bisect",
+  "git.blame",
+  "git.branch",
+  "git.commit",
+  "git.diff",
+  "git.grep",
+  "git.ignore",
+  "git.log",
+  "git.stash",
+  "git.status",
+]

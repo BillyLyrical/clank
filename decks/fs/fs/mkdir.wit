@@ -1,0 +1,39 @@
+#!wit/toml
+author="CLAM"
+description="Create directory safely"
+enabled=true
+license="Artistic-2.0"
+name="fs_mkdir"
+notes="Creates directory and parents.\nPath validation included.\n"
+priority=10
+timeout=10
+type="rule"
+usage="Input: { path: \"/tmp/new_dir\" }\nOutput: { ok: true, path: \"/tmp/new_dir\" }\n"
+version="1.0.0"
+triggers=[
+  "fs_mkdir",
+]
+
+[metadata]
+category="filesystem"
+complexity="simple"
+safety="write_with_validation"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $path = ref $input eq 'HASH' ? ($input->{path} // '') : $input;
+
+return { error => "No path provided" } unless $path;
+return { error => "Path contains .." } if $path =~ /\.\./;
+
+if (-d $path) {
+    return { ok => 1, path => $path, exists => 1 };
+}
+
+make_path($path) or return { error => "Cannot create: $!" };
+
+return {
+    ok   => 1,
+    path => $path,
+};
+
+PERL

@@ -1,0 +1,76 @@
+#!wit/toml
+author="CLAM"
+description="File test operations — existence, permissions, type, age"
+enabled=true
+license="Artistic-2.0"
+name="fs_test"
+notes="Read-only. Wraps Perl file test operators: -e -f -d -l -r -w -x -o -s -M -A -C\n"
+priority=10
+timeout=5
+type="rule"
+usage="Input: { path: \"/home/user/file.txt\" }\nOutput: { exists: true, type: \"file\", readable: true, executable: false, ... }\n"
+version="1.0.0"
+triggers=[
+  "fs_test",
+  "fs.exists",
+]
+
+[metadata]
+category="filesystem"
+complexity="simple"
+safety="read_only"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $path = ref $input eq 'HASH' ? ($input->{path} // '') : $input;
+
+return { error => "No path provided" } unless $path;
+
+my $exists = -e $path;
+
+my %result = (
+    exists     => $exists,
+    path       => $path,
+);
+
+if ($exists) {
+    my $type = 'other';
+    $type = 'file'      if -f _;
+    $type = 'directory' if -d _;
+    $type = 'symlink'   if -l _;
+    $type = 'pipe'      if -p _;
+    $type = 'socket'    if -S _;
+    $type = 'block'     if -b _;
+    $type = 'char'      if -c _;
+
+    %result = (
+        %result,
+        type       => $type,
+        readable   => -r _,
+        writable   => -w _,
+        executable => -x _,
+        owned      => -o _,
+        size       => -s _ // 0,
+        age_days   => sprintf("%.2f", -M _),
+        access_days => sprintf("%.2f", -A _),
+        change_days => sprintf("%.2f", -C _),
+        symlink    => -l _,
+    );
+} else {
+    %result = (
+        %result,
+        type       => 'none',
+        readable   => 0,
+        writable   => 0,
+        executable => 0,
+        owned      => 0,
+        size       => 0,
+        age_days   => undef,
+        access_days => undef,
+        change_days => undef,
+        symlink    => 0,
+    );
+}
+
+return \%result;
+
+PERL

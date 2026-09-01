@@ -1,0 +1,52 @@
+#!wit/toml
+author="CLAM"
+description="Rule: validate agents principles"
+enabled=1
+name="validate_agents_principles"
+priority=10
+stateful=0
+timeout=5
+type="rule"
+version="1.0.0"
+triggers=[
+  "validate_agents_principles",
+]
+
+[metadata]
+author="CLAM"
+description="Validates code against AGENTS.md principles"
+priority=1
+version=1.0
+triggers=[
+  "validate_agents",
+]
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $text = ref $input eq 'HASH' ? ($input->{text} // '') : $input;
+my @violations;
+
+# Check for big functions (>50 lines)
+if ($text =~ /^(?:sub|function)\s+\w+.*?\n((?:.*\n)*?.*?\n){50,}/m) {
+    push @violations, { type => 'complexity', message => 'Function exceeds 50 lines — decompose' };
+}
+
+# Check for mutation patterns
+if ($text =~ /\$\w+\s*=\s*\$\w+\s*\+\s*1/) {
+    push @violations, { type => 'mutation', message => 'Variable mutation detected — use immutable values' };
+}
+
+# Check for side effects in subroutines
+if ($text =~ /sub\s+\w+.*?\n((?:.*\n)*?.*?print\s)/m) {
+    push @violations, { type => 'side_effect', message => 'Print in subroutine — separate I/O from logic' };
+}
+
+if (@violations) {
+    return {
+        topic      => 'validation.failed',
+        violations => \@violations,
+        text       => substr($text, 0, 200),
+    };
+}
+return { topic => 'validation.passed' };
+
+PERL

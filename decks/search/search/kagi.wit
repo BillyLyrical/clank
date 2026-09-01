@@ -1,0 +1,122 @@
+#!wit/toml
+author="CLAM"
+description="Web search provider: Kagi Search API (paid, no ads)"
+enabled=1
+license="Artistic-2.0"
+name="search_kagi"
+notes="Requires Kagi API key. Paid service — no ads, no tracking, high quality.\n$5/month for 300 searches, $25/month for unlimited.\nBest quality results of all providers — worth it for research.\n"
+priority=30
+stateful=1
+timeout=10
+type="agent"
+usage="Input: { action: \"search\", query: \"Perl tie IPC\", limit: 5 }\nInput: { action: \"configure\", api_key: \"...\" }\nOutput: { results: [{ content, url, title, provenance }] }\n"
+version="1.0.0"
+publishes=[
+  "search.kagi.results",
+]
+triggers=[
+  "search_kagi",
+]
+
+[metadata]
+category="search"
+complexity="moderate"
+cost="medium"
+output_format="{ topic: 'search.kagi.results', results: [{ content, title, url, provenance }] }"
+requires_context="{ action: 'search|configure', query: '...', api_key?: '...' }"
+requires_network=true
+when_to_use="Provider: Kagi Search. Paid, no ads, highest quality. Needs API key."
+
+[metadata.queryable]
+action="search"
+ttl=1800
+weight=0.4
+fields=[
+  "query",
+]
+types=[
+  "web",
+  "knowledge",
+  "solution",
+  "research",
+  "all",
+]
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $action = ref $input eq 'HASH' ? ($input->{action} // 'search') : 'search';
+my $state = $ctx{state} // {};
+
+$state->{api_key} //= $ctx{config}{kagi_api_key} // '';
+$state->{last_query} //= 0;
+$state->{min_interval} //= 1;
+
+if ($action eq 'configure') {
+    $state->{api_key} = ref $input eq 'HASH' ? ($input->{api_key} // $state->{api_key}) : $state->{api_key};
+    return { topic => 'search.kagi.configured', has_key => !!$state->{api_key} };
+}
+
+if ($action eq 'search') {
+    my $query = ref $input eq 'HASH' ? ($input->{query} // '') : '';
+    my $limit = ref $input eq 'HASH' ? ($input->{limit} // 5) : 5;
+    return { error => "No query" } unless $query;
+    return { error => "Not configured — need api_key", topic => 'search.kagi.results', results => [] }
+        unless $state->{api_key};
+
+    my $now = time();
+    if ($now - $state->{last_query} < $state->{min_interval}) {
+        return { topic => 'search.kagi.results', results => [], error => "Rate limited" };
+    }
+    $state->{last_query} = $now;
+
+    # Kagi uses POST for search
+    my $payload = encode_json({ query => $query, limit => $limit });
+    my $response = _post("https://api.kagi.com/v0/search", $state->{api_key}, $payload);
+    return { topic => 'search.kagi.results', results => [] } unless $response;
+
+    my $data = eval { JSON::XS::decode_json($response) };
+    return { topic => 'search.kagi.results', results => [] } unless ref $data eq 'HASH';
+
+    my @results;
+    for my $item (@{$data->{data} // []}) {
+        next if ($item->{t} // '') eq 'infobox';  # skip infoboxes
+        push @results, {
+            content    => $item->{snippet} // $item->{description} // '',
+            text       => $item->{snippet} // $item->{description} // '',
+            title      => $item->{title} // '',
+            _provider  => 'kagi',
+            _weight    => 0.4,
+            _timestamp => time(),
+            _url       => $item->{url} // '',
+            _ref       => 'kagi:' . ($item->{host} // ''),
+            _score     => 0.75,
+        };
+    }
+
+    return { topic => 'search.kagi.results', results => \@results };
+}
+
+return { error => "Unknown action: $action" };
+
+sub _post {
+    my ($url, $key, $body) = @_;
+    if (eval { require HTTP::Tiny; 1 }) {
+        my $http = HTTP::Tiny->new(timeout => 8, agent => 'CLAM/1.0');
+        my $res = $http->post($url, {
+            content => $body,
+            headers => { 'Content-Type' => 'application/json', Authorization => "Bot $key" },
+        });
+        return $res->{content} if $res->{success};
+    } elsif (eval { require LWP::UserAgent; 1 }) {
+        my $http = LWP::UserAgent->new(timeout => 8, agent => 'CLAM/1.0');
+        my $res = $http->post($url, Content => $body, 'Content-Type' => 'application/json', Authorization => "Bot $key");
+        return $res->decoded_content if $res->is_success;
+    }
+    return undef;
+}
+
+sub encode_json {
+    require JSON::XS;
+    return JSON::XS::encode_json($_[0]);
+}
+
+PERL

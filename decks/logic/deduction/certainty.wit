@@ -1,0 +1,68 @@
+#!wit/toml
+author="CLAM"
+description="Mark or propagate certainty through a derivation chain"
+enabled=true
+license="Artistic-2.0"
+name="deduction_certainty"
+notes="Certainty propagation: certain + certain = certain. Any contingent makes the result contingent.\nLevels: certain, contingent, impossible.\n"
+priority=10
+timeout=5
+type="rule"
+usage="Input: { claim: \"code is safe\", level: \"certain\" }\nOutput: { certified: \"code is safe\", level: \"certain\", valid: true }\n"
+version="1.0.0"
+triggers=[
+  "deduction.certainty",
+]
+
+[metadata]
+category="deduction"
+complexity="simple"
+safety="read_only"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $claim = ref $input eq 'HASH' ? ($input->{claim} // '') : $input;
+my $level = ref $input eq 'HASH' ? ($input->{level} // 'contingent') : 'contingent';
+my $premises = ref $input eq 'HASH' ? ($input->{premises} // []) : [];
+
+return { error => "No claim provided" } unless $claim;
+
+my %valid_levels = (certain => 1, contingent => 1, impossible => 1);
+unless ($valid_levels{$level}) {
+    return { error => "Invalid certainty level: $level (use certain/contingent/impossible)" };
+}
+
+if (@$premises) {
+    my $weakest = 'certain';
+    for my $p (@$premises) {
+        my $cert = ref $p eq 'HASH' ? ($p->{certainty} // 'contingent') : 'contingent';
+        if ($cert eq 'impossible') {
+            $weakest = 'impossible';
+            last;
+        } elsif ($cert eq 'contingent' && $weakest ne 'impossible') {
+            $weakest = 'contingent';
+        }
+    }
+    $level = $weakest;
+}
+
+my $valid = ($level eq 'certain') ? 1 : ($level eq 'impossible' ? 0 : 1);
+
+my $state = $ctx{state} // {};
+my $next_id = ($state->{certainty_count} // 0) + 1;
+$state->{certainty_count} = $next_id;
+$state->{certainties} //= [];
+push @{$state->{certainties}}, {
+    id        => $next_id,
+    claim     => $claim,
+    level     => $level,
+    valid     => $valid,
+    timestamp => scalar localtime,
+};
+
+return {
+    certainty_id => $next_id,
+    certified    => $claim,
+    level        => $level,
+    valid        => $valid,
+};
+PERL

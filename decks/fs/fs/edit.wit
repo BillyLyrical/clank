@@ -1,0 +1,66 @@
+#!wit/toml
+author="CLAM"
+description="Edit file with backup and atomic operation"
+enabled=true
+license="Artistic-2.0"
+name="fs_edit"
+notes="Creates backup before edit.\nAtomic: edit to temp, then rename.\n"
+priority=10
+timeout=10
+type="rule"
+usage="Input: { path: \"/tmp/test.txt\", search: \"old\", replace: \"new\" }\nOutput: { ok: true, replacements: 3 }\n"
+version="1.0.0"
+triggers=[
+  "fs_edit",
+]
+
+[metadata]
+category="filesystem"
+complexity="moderate"
+safety="write_with_backup"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $path = ref $input eq 'HASH' ? ($input->{path} // '') : $input;
+my $search = ref $input eq 'HASH' ? ($input->{search} // '') : '';
+my $replace = ref $input eq 'HASH' ? ($input->{replace} // '') : '';
+my $backup = ref $input eq 'HASH' ? ($input->{backup} // 1) : 1;
+
+return { error => "No path provided" } unless $path;
+return { error => "No search term" } unless $search;
+return { error => "Path contains .." } if $path =~ /\.\./;
+return { error => "File not found: $path" } unless -f $path;
+
+# Create backup
+if ($backup) {
+    my $backup_dir = '/tmp/clam_backups';
+    make_path($backup_dir) unless -d $backup_dir;
+    my $backup_name = "$path." . strftime("%Y%m%d_%H%M%S", localtime);
+    $backup_name =~ s{^/}{};
+    $backup_name = "$backup_dir/$backup_name";
+    copy($path, $backup_name) or warn "Backup failed: $!";
+}
+
+# Read file
+open my $fh, '<', $path or return { error => "Cannot read: $!" };
+my $content = do { local $/; <$fh> };
+close $fh;
+
+# Perform replacement
+my $count = () = $content =~ /\Q$search\E/g;
+$content =~ s/\Q$search\E/$replace/g;
+
+# Atomic write
+my $tmp = "$path.tmp.$$";
+open my $fh2, '>', $tmp or return { error => "Cannot write: $!" };
+print $fh2 $content;
+close $fh2;
+
+rename $tmp, $path or return { error => "Cannot rename: $!" };
+
+return {
+    ok           => 1,
+    path         => $path,
+    replacements => $count,
+};
+
+PERL

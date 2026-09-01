@@ -1,0 +1,46 @@
+#!wit/toml
+author="CLAM"
+description="State an axiom — an accepted truth requiring no justification"
+enabled=true
+license="Artistic-2.0"
+name="deduction_axiom"
+notes="Foundation of deductive reasoning. Axioms are accepted as true.\n"
+priority=10
+timeout=5
+type="rule"
+usage="Input: { truth: \"Functions must have no side effects\", source: \"AGENTS.md\" }\nOutput: { axiom_id: 1, truth: \"...\", certainty: \"certain\" }\n"
+version="1.0.0"
+triggers=[
+  "deduction.axiom",
+]
+
+[metadata]
+category="deduction"
+complexity="simple"
+safety="read_only"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $truth = ref $input eq 'HASH' ? ($input->{truth} // '') : $input;
+my $source = ref $input eq 'HASH' ? ($input->{source} // 'assumed') : 'assumed';
+
+return { error => "No truth provided" } unless $truth;
+
+my $state = $ctx{state} // {};
+my $next_id = ($state->{axiom_count} // 0) + 1;
+$state->{axiom_count} = $next_id;
+$state->{axioms} //= [];
+push @{$state->{axioms}}, {
+    id        => $next_id,
+    truth     => $truth,
+    source    => $source,
+    certainty => 'certain',
+    timestamp => scalar localtime,
+};
+
+return {
+    axiom_id  => $next_id,
+    truth     => $truth,
+    source    => $source,
+    certainty => 'certain',
+};
+PERL

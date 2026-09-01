@@ -1,0 +1,132 @@
+#!wit/toml
+author="CLAM"
+description="Web search provider: DuckDuckGo instant answers and results"
+enabled=1
+license="Artistic-2.0"
+name="search_duckduckgo"
+notes="Uses DuckDuckGo instant answer API. No API key required.\nReturns abstract, related topics, and results.\nRate-limited — cache aggressively.\n"
+priority=30
+stateful=0
+timeout=8
+type="agent"
+usage="Input: { action: \"search\", query: \"Perl tie IPC\", limit: 5 }\nOutput: { results: [{ content, url, title, provenance }] }\n"
+version="1.0.0"
+publishes=[
+  "search.ddg.results",
+]
+triggers=[
+  "search_duckduckgo",
+]
+
+[metadata]
+category="search"
+complexity="moderate"
+cost="low"
+output_format="{ topic: 'search.ddg.results', results: [{ content, title, url, provenance }] }"
+requires_context="{ action: 'search', query: '...', limit?: N }"
+when_to_use="Provider: DuckDuckGo web search. No API key needed. Good for general queries."
+
+[metadata.queryable]
+action="search"
+ttl=1800
+weight=0.3
+fields=[
+  "query",
+]
+types=[
+  "web",
+  "solution",
+  "knowledge",
+  "all",
+]
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $action = ref $input eq 'HASH' ? ($input->{action} // 'search') : 'search';
+
+if ($action eq 'search') {
+    my $query = ref $input eq 'HASH' ? ($input->{query} // '') : '';
+    my $limit = ref $input eq 'HASH' ? ($input->{limit} // 5) : 5;
+    return { error => "No query" } unless $query;
+
+    my @results;
+
+    # DuckDuckGo instant answer API
+    my $encoded = $query;
+    $encoded =~ s/ /+/g;
+    $encoded =~ s/([^A-Za-z0-9])/sprintf("%%%02X", ord($1))/ge;
+
+    my $url = "https://api.duckduckgo.com/?q=$encoded&format=json&no_html=1&skip_disambig=1";
+    my $ua = 'CLAM/1.0 (search provider)';
+    my $response = '';
+    if (eval { require LWP::UserAgent; 1 }) {
+        my $http = LWP::UserAgent->new(timeout => 5, agent => $ua);
+        my $res = $http->get($url);
+        $response = $res->decoded_content if $res->is_success;
+    } elsif (eval { require HTTP::Tiny; 1 }) {
+        my $http = HTTP::Tiny->new(timeout => 5, agent => $ua);
+        my $res = $http->get($url);
+        $response = $res->{content} if $res->{success};
+    }
+
+    return { topic => 'search.ddg.results', results => [] } unless $response;
+
+    my $data = eval { JSON::XS::decode_json($response) };
+    return { topic => 'search.ddg.results', results => [] } unless ref $data eq 'HASH';
+
+    # Abstract (main answer)
+    if ($data->{Abstract} && length($data->{Abstract}) > 20) {
+        push @results, {
+            content    => $data->{Abstract},
+            text       => $data->{Abstract},
+            title      => $data->{Heading} // '',
+            _provider  => 'duckduckgo',
+            _weight    => 0.3,
+            _timestamp => time(),
+            _url       => $data->{AbstractURL} // '',
+            _ref       => $data->{AbstractSource} // 'duckduckgo',
+            _score     => 0.8,
+        };
+    }
+
+    # Related topics
+    if (ref $data->{RelatedTopics} eq 'ARRAY') {
+        for my $t (@{$data->{RelatedTopics}}[0..($limit > 4 ? 4 : $limit-1)]) {
+            next unless ref $t eq 'HASH';
+            my $text = $t->{Text} // '';
+            next unless length($text) > 10;
+            push @results, {
+                content    => $text,
+                text       => $text,
+                title      => $t->{Text} // '',
+                _provider  => 'duckduckgo',
+                _weight    => 0.3,
+                _timestamp => time(),
+                _url       => $t->{FirstURL} // '',
+                _ref       => 'duckduckgo:related',
+                _score     => 0.5,
+            };
+        }
+    }
+
+    # Answer
+    if ($data->{Answer} && length($data->{Answer}) > 5) {
+        unshift @results, {
+            content    => $data->{Answer},
+            text       => $data->{Answer},
+            title      => 'Answer',
+            _provider  => 'duckduckgo',
+            _weight    => 0.3,
+            _timestamp => time(),
+            _url       => $data->{AnswerURL} // '',
+            _ref       => 'duckduckgo:answer',
+            _score     => 0.9,
+        };
+    }
+
+    @results = @results[0..$limit-1] if @results > $limit;
+    return { topic => 'search.ddg.results', results => \@results };
+}
+
+return { error => "Unknown action: $action" };
+
+PERL

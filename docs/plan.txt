@@ -1,0 +1,467 @@
+
+
+sketch out the basic structure of an AI Harness like Pi, what are the critical core elements, what do we need to keep in mind to make it excellent for plugins.  I am interested in creating a similar harness in Perl, built around sqlite RAG (prolly using FTS5 or vector?). So please write a blueprint, that I can feed to an AI code generator.
+
+Here is a blueprint for a minimal, highly extensible AI agent harness in Perl. This design follows the "Pi" philosophy - the harness itself is just a small, robust event loop and state manager. It ships with a deliberately narrow set of core tools (like file reading and basic shell execution), while delegating all advanced behaviour to plugins and context engineering.
+
+You can feed this document directly into your AI code generator to scaffold the project.
+
+## 1. Core Architecture & Philosophy
+
+To build a Pi-like harness, the architecture must remain strictly separated into three layers:
+
+* The Event Loop (Harness): Manages the conversation transcript, calls the LLM, parses tool requests, executes them, and loops until the model returns a final response to the user.
+* The State Store (SQLite): Acts as the single source of truth for session history, configuration, and the RAG document store.
+* The Plugin Ecosystem: Dynamic modules that register new tools (via JSON Schema), inject context, or intercept the event loop.
+
+## 2. Database Schema (SQLite + RAG)
+
+Your SQLite database will handle both conversation history and the Retrieval-Augmented Generation (RAG) knowledge base.
+
+Instruct your code generator to create the following schema structure:
+
+* `sessions` table: `id` (UUID), `created_at`, `title`.
+* `messages` table: `id`, `session_id`, `parent_id` (crucial for tree-based branching, allowing the user to jump back to a previous point in the conversation), `role` (user, assistant, tool), `content` (JSON or text), `created_at`.
+* `rag_documents` table: `id`, `metadata` (JSON for file paths or URLs), `chunk_text`.
+* RAG Index (FTS5 or Vector):
+* *If using FTS5:* A virtual table `rag_fts` using `FTS5(chunk_text)`.
+* *If using sqlite-vec:* A virtual table `rag_embeddings` using `vec0(embedding float[1536])` linked to the `rag_documents` table.
+
+
+
+## 3. Core Perl Module Structure
+
+Tell your AI generator to scaffold the following object-oriented Perl structure (using a modern system like `Moo` or `Corinna` if you are using Perl 5.38+):
+
+* `AgentCore::App`: The main entry point. Initialises the database, loads plugins, and starts the REPL (Read-Eval-Print Loop).
+* `AgentCore::Store`: Wraps `DBI` and manages all SQLite transactions. Handles fetching message trees and executing RAG queries.
+* `AgentCore::LLM`: A thin wrapper around an HTTP client (like `HTTP::Tiny`) to communicate with your chosen provider (e.g., Anthropic, OpenAI, or a local Ollama instance).
+* `AgentCore::Loop`: The heart of the harness. It reads the user prompt, appends it to the store, fetches the context window, calls `AgentCore::LLM`, intercepts any tool calls, executes them, and feeds the results back to the LLM.
+* `AgentCore::PluginManager`: Uses `Module::Pluggable` to dynamically discover and load `.pm` files from a `plugins/` directory.
+
+## 4. Making it Excellent for Plugins
+
+To emulate Pi's extensibility, the plugin system must be frictionless. Your `PluginManager` should enforce a standard interface for all plugins. Instruct your generator to implement the following features for plugins:
+
+* Tool Registration: Plugins must return a JSON Schema defining their capabilities. The harness collects these schemas and injects them into the system prompt.
+* Hook System: Allow plugins to hook into the lifecycle.
+* `before_llm_call`: For RAG plugins to search SQLite and dynamically inject context based on the user's prompt.
+* `on_tool_call`: To execute the specific code when the LLM requests a plugin's tool.
+* `after_response`: For logging or post-processing.
+
+
+* Namespace Isolation: Keep plugin dependencies contained so a broken plugin does not crash the main harness loop.
+
+## 5. Generator Prompts
+
+To get the best results from your AI coding assistant, use these specific prompts sequentially:
+
+1. Prompt 1 (Database): `"Write a Perl module AgentCore::Store using DBI that sets up a SQLite database with a sessions table, a tree-based messages table, and an FTS5 virtual table for RAG document chunking"`.
+2. Prompt 2 (Plugin System): `"Write a Perl module AgentCore::PluginManager using Module::Pluggable. It should discover plugins in an AgentCore::Plugin:: namespace, load them, and collect a list of tools formatted as JSON schemas"`.
+3. Prompt 3 (The Loop): `"Write the AgentCore::Loop module. It should take a user prompt, fetch history from AgentCore::Store, call a mock LLM endpoint, and loop if the LLM returns a tool execution request. Handle tool routing to the appropriate loaded plugin"`.
+
+I'm interested in incorporating Marvin Minskies "Society of Mind", where the AI harness can create networks of Plugins, built over pub/sub channels.  This would include Perl Plugins (using perl eval), classic AI Skills, and rules engines (grammar parsing like Perl 6, datalog style return fast first match solving and calling picosat for more complex Sat solving, etc).  Sketch out the basic structure to enable this to add to the basic plan you juts sketched out.
+
+To evolve your harness into a "Society of Mind" architecture, we need to shift from a linear read-eval-print loop to a Blackboard system driven by an event bus. In Minsky's model, the "mind" is made of many specialised, narrow-focus agents that observe a shared mental space, volunteer solutions, and sometimes compete or collaborate.
+
+Here is the blueprint to expand your existing Perl SQLite harness into a multi-agent pub/sub ecosystem.
+
+## 1. The Pub/Sub Blackboard Architecture
+
+Instead of the `AgentCore::Loop` directly calling a plugin and waiting for a result, the Loop now acts as an orchestrator for an Event Bus (the Blackboard).
+
+* `AgentCore::Bus`: A lightweight in-memory pub/sub broker. Agents subscribe to specific topics (e.g., `task.parse_grammar`, `task.solve_logic`, `user.intent`).
+* Message Protocol: Every message on the bus must have a strict schema: `message_id`, `correlation_id` (to track the parent task), `topic`, `sender`, and `payload`.
+* The Mediator: The LLM acts as the "conscious" mediator. It looks at the user's prompt, breaks it into sub-tasks, and publishes them to the bus. It then waits for the subordinate agents to publish their results back to the blackboard before synthesising a final answer.
+
+## 2. Agent Typology (The Society)
+
+Instruct your AI code generator to build a base class `AgentCore::Agent` that provides `subscribe()` and `publish()` methods. Then, scaffold these specific agent classes:
+
+* `AgentCore::Agent::LLM` (Classic AI Skills)
+* Subscribes to: `task.reason`, `task.summarise`, `task.extract`.
+* Function: Spins up smaller, highly-prompted LLM calls (perhaps using a faster local model) to handle semantic tasks.
+
+
+* `AgentCore::Agent::PerlWorker` (Dynamic Execution)
+* Subscribes to: `task.execute_perl`.
+* Function: Uses Perl's `Safe` compartment (or dynamic `eval` within a tightly controlled sandbox) to run code generated by the LLM on the fly. This gives the harness the ability to script its own solutions for math or string manipulation.
+
+
+* `AgentCore::Agent::Rules` (The Logic Engines)
+* *Grammar Sub-agent*: Subscribes to `task.parse`. Uses modules like `Regexp::Grammars` (to emulate Raku/Perl 6 grammar parsing) or `Marpa::R2` for rigid, fast text extraction.
+* *Datalog Sub-agent*: Subscribes to `task.query_logic`. Implements a fast first-match forward-chaining rules engine in Perl for immediate fact retrieval.
+* *SAT Sub-agent*: Subscribes to `task.solve_constraints`. Uses `Math::PicoSAT` (or shells out to the `picosat` binary) to solve complex boolean satisfiability problems that the LLM formulates but cannot mathematically solve itself.
+
+
+
+## 3. Database Schema Additions
+
+The SQLite RAG store needs to be updated to support asynchronous agent collaboration:
+
+* `blackboard_state` table: `id`, `correlation_id`, `topic`, `status` (pending, resolved, failed), `payload`, `created_at`.
+* Why? If the system crashes, or if a SAT solving task takes 30 seconds, the SQLite database acts as a persistent pub/sub queue. The harness can resume exactly where it left off, and agents can query the `blackboard_state` to see what other agents have recently solved.
+
+## 4. Generator Prompts
+
+To scaffold this extension, feed these prompts sequentially to your AI code generator:
+
+1. Prompt 1 (The Bus): "Write a Perl module AgentCore::Bus that implements a lightweight publish/subscribe event broker. It must allow anonymous subroutines to subscribe to string-based topics, and it must log all published messages to a new SQLite table called blackboard_state via the existing AgentCore::Store."
+2. Prompt 2 (The Base Agent & Perl Eval): "Write a base role AgentCore::Agent using Moo/Role that requires a 'register' method. Then, write AgentCore::Agent::PerlWorker which subscribes to the topic 'task.execute'. It should safely evaluate the Perl code provided in the payload using the Safe module and publish the output back to the bus on the topic 'result.execute'."
+3. Prompt 3 (The Logic Agents): "Write AgentCore::Agent::Rules. It should subscribe to 'task.solve_constraints'. Upon receiving a payload containing CNF (Conjunctive Normal Form) clauses, it should write them to a temporary file, execute the system binary 'picosat', parse the output, and publish the result back to the bus."
+
+
+How can I implement a simple Datalog-style fast first-match rules engine in pure Perl to act as a logic agent? 
+
+Here is a blueprint for implementing a lightweight, first-match Datalog-style rules engine in pure Perl. Because you want a 'fast first match' rather than an exhaustive search, a standard depth-first backward-chaining algorithm with unification is the best approach. It is fast, requires no external dependencies, and evaluates beautifully inside your Pub/Sub blackboard system.
+
+You can feed this architectural guide and the subsequent prompts to your AI code generator.
+
+## 1. Core Data Structures
+
+In pure Perl, you can represent the entire logic knowledge base using standard nested arrayrefs and hashrefs.
+
+* Terms: Can be atoms (strings like `'bob'`), or variables (strings prefixed with a question mark like `'?X'`).
+* Predicates (Facts): Arrayrefs where the first element is the relation, and the rest are arguments.
+* Example: `['parent', 'alice', 'bob']`
+
+
+* Rules: Hashrefs containing a `head` (a predicate) and a `body` (an arrayref of predicates).
+* Example: `{ head => ['grandparent', '?X', '?Y'], body => [ ['parent', '?X', '?Z'], ['parent', '?Z', '?Y'] ] }`
+
+
+
+## 2. The Unification Engine
+
+The heart of the logic agent is the `unify` routine. It takes two terms (e.g. a query goal and a known fact) and an environment (a hashref of bound variables), and attempts to make them match.
+
+Instruct your code generator to implement a unification function that:
+
+1. Recursively resolves any already-bound variables in the current environment.
+2. Returns the environment unchanged if the terms are identical.
+3. Binds a variable to a value if one term is a variable, updating the environment.
+4. Recursively unifies array elements if both terms are arrayrefs of the same length.
+5. Returns `undef` if unification fails.
+
+## 3. The First-Match Solver
+
+To achieve the 'fast first match' behaviour, the solver uses depth-first search. It iterates through the knowledge base (facts and rules) and attempts to prove a list of goals. As soon as it finds a valid variable substitution environment, it returns immediately - it does not search for all possible solutions.
+
+The solver (`prove_goals`) must:
+
+1. Take a list of goals and a current environment.
+2. If the goal list is empty, return the environment (success).
+3. Take the first goal, and iterate over every rule/fact in the knowledge base.
+4. Attempt to unify the goal with the rule's head.
+5. If unification succeeds, prepend the rule's body to the remaining goals, and recursively call `prove_goals`.
+6. If the recursive call succeeds, return that environment immediately (the fast first-match exit).
+7. If all rules fail, return `undef`.
+
+## 4. Blackboard Integration
+
+To turn this engine into an agent for Minsky's 'Society of Mind', it must wrap the solver in your `AgentCore::Agent` interface.
+
+* The agent subscribes to `'task.query_logic'`.
+* The payload contains a knowledge base (or loads it from the SQLite database) and a query goal (e.g. `['grandparent', 'alice', '?Who']`).
+* The agent runs the solver. If it gets a match, it publishes the resolved variable bindings (e.g. `{ '?Who' => 'charlie' }`) back to the bus on the topic `'result.query_logic'`.
+
+## 5. Generator Prompts
+
+Feed these prompts sequentially to your AI coding assistant to build the logic agent:
+
+1. Prompt 1 (Unification): 'Write a pure Perl module called AgentCore::Logic::Unify. It should contain a subroutine `unify($term1, $term2, $env)` that implements standard logical unification. Variables are denoted by strings starting with "?". Provide a helper subroutine `resolve_var($term, $env)` to look up variables in the environment hashref.'
+2. Prompt 2 (The Solver): 'Write a Perl module AgentCore::Logic::Solver that uses AgentCore::Logic::Unify. Implement a subroutine `prove($goals, $knowledge_base, $env)` that performs depth-first backward chaining. It must return the variable environment on the very first successful match and stop searching.'
+3. Prompt 3 (The Agent Wrapper): 'Write AgentCore::Agent::Datalog. It should consume the AgentCore::Agent role, subscribe to the topic `'task.query_logic'`, and extract the query and knowledge base from the incoming payload. It will call `AgentCore::Logic::Solver::prove()`. If a match is found, publish the resulting hashref to `'result.query_logic'`. If no match is found, publish a failure message.'
+
+what is the modern standard AI harness Context Compaction system?
+
+In modern AI agent frameworks (or "harnesses"), Context Compaction is the architectural process of reducing the size of an agent's accumulated state before sending it to the Large Language Model (LLM).
+https://arxiv.org/html/2608.01326v1
+
+Even with today's massive context windows, agents accumulate state rapidly through user prompts, reasoning traces, and bulky tool outputs (like file reads or database queries). Without compaction, inference costs skyrocket, latency increases, and models suffer from "lost in the middle" degradation where they ignore critical constraints buried in the noise.
+https://www.morphllm.com/context-compaction
+
+The modern standard is not a single technique, but a tiered context engine that applies different compaction strategies based on token pressure.
+https://redis.io/blog/context-compaction/
+
+Here is how the standard context compaction system is structured today.
+
+### The Compaction Hierarchy
+
+Modern harnesses (like those built on LangChain, Pydantic AI, or custom event loops) treat context management as a hierarchy of interventions. They apply these steps in order as the context window fills:
+
+#### 1. Reversible Compaction (Tool Offloading)
+
+Before deleting anything permanently, the harness moves bulky, static data out of the active context and into an external memory store (like a Redis cache or a local SQLite database).
+
+* How it works: A 5,000-token file read is replaced in the context window with a tiny pointer (e.g., `<file_reference id="xyz" lines="1-200">`) and a brief summary of what was found.
+* Why it's standard: It is 100% reversible. If the agent explicitly needs the exact text again, it can retrieve it from the external memory.
+
+#### 2. Verbatim Deletion (Noise Pruning)
+
+When the context is still too large, the system removes "low-signal" tokens without rewriting the text that remains. This is heavily favored for coding agents, where rewriting code can introduce syntax errors.
+
+* How it works: The harness (often using lightweight routing models like LLMlingua or dedicated APIs like Morph Compact) scores the relevance of past blocks. It deletes redundant tool outputs, exploratory dead ends, and verbose boilerplate, while leaving high-signal content completely intact.
+https://www.morphllm.com/context-compaction
+
+* Why it's standard: It achieves a 50–70% compression ratio with a 0% hallucination risk, because the surviving text is entirely verbatim.
+
+#### 3. Lossy Summarization (The Handoff Note)
+
+If the token limit is still breached, the harness falls back to LLM-based summarization.
+
+* How it works: The harness pauses the main agent and uses an LLM to rewrite the oldest part of the conversation into a dense "state block." It acts like a skilled engineering handoff note: preserving active constraints, completed tasks, and open decisions, while permanently destroying the step-by-step reasoning that led there.
+
+* Why it's standard: It provides massive compression (up to 90%), but it is considered a last resort because the agent cannot recover the granular details once they are summarized.
+
+---
+
+### Comparison of Modern Compaction Methods
+
++-----------------------+-------------------------------------------+-------------------+--------------------+--------------------------------------+
+| Strategy              | Mechanism                                 | Compression Ratio | Hallucination Risk | Best Used For                        |
++=======================+===========================================+===================+====================+======================================+
+| Reversible Offloading | Move data to external DB; leave a pointer | Variable          | None               | Raw tool outputs, large documents    |
++-----------------------+-------------------------------------------+-------------------+--------------------+--------------------------------------+
+| Verbatim Deletion     | Score and drop low-signal lines/tokens    | 50–70%            | None               | Codebases, exact constraints, syntax |
++-----------------------+-------------------------------------------+-------------------+--------------------+--------------------------------------+
+| LLM Summarization     | Rewrite history into a dense summary      | 70–90%            | Moderate           | Long-running conversational history  |
++-----------------------+-------------------------------------------+-------------------+--------------------+--------------------------------------+
+| Sliding Window        | Hard-delete the oldest *N* messages       | Bounded           | None (but lossy)   | Short-horizon or stateless tasks     |
++-----------------------+-------------------------------------------+-------------------+--------------------+--------------------------------------+
+
+### Implementation in the Harness
+
+If you are building an AI harness, the context compaction system sits directly between your State Store (the database) and the LLM API call.
+
+A standard implementation loop looks like this:
+
+1. Accumulate: The user prompts the agent, and the agent executes tools, appending raw results to the Session State.
+2. Measure: Before the next LLM call, the Context Engine counts the tokens of the pending payload.
+3. Trigger: If the token count exceeds the defined threshold (e.g., 80% of the model's maximum window or a budget-defined limit), the engine pauses the loop.
+4. Compact: The engine applies Reversible Offloading first. If still over the limit, it applies Verbatim Deletion. If still over, it summarizes the oldest messages.
+5. Execute: The compacted context is sent to the LLM, and the newly condensed state overwrites the active history in the database.
+
+What is the modern best practice system for an AI harness' multi-step long context, Goal-seeking and self correcting, planning and execution engine?
+
+The modern standard for an AI execution engine has fundamentally shifted over the last couple of years. Until recently, the industry standard was a freeform reasoning loop (often called ReAct) where a single agent repeatedly thought about what to do, used a tool, observed the result, and looped.
+https://redis.io/blog/agentic-ai-architecture-examples/
+
+The 2026 standard abandons that approach because freeform loops are prone to hallucinating tool calls, getting stuck in infinite loops, and quickly blowing out the context window.
+https://infrasketch.net/blog/agentic-ai-system-architecture
+
+Today, the best practice is the Plan-and-Execute State Graph with Grounded Reflection. Here is the architectural blueprint for how to build this into your Perl/SQLite harness.
+
+### 1. The Architecture: State Machines over Freeform Loops
+
+Modern engines model the workflow as a strict State Machine (or Directed Acyclic Graph). Instead of letting the LLM decide the entire control flow, your Perl harness handles the deterministic routing. The system is explicitly moved between strict states: `Planning`, `Executing`, `Evaluating`, and `Replanning`. This explicit control flow makes the agent predictable and testable.
+
+### 2. The Engine: Plan-and-Execute
+
+To handle long-context goals, you must strictly separate the long-horizon strategy from the granular execution.
+
+* The Planner Agent: Looks at the user's goal, evaluates the available plugins, and generates a strict, step-by-step array of sub-tasks. Think of it like a hierarchical narrative framework: the Planner breaks the overarching objective into Acts and Chapters, but does not actually execute the fine details.
+* The Executor Agents: Your harness feeds the Executor exactly one sub-task from the plan. The Executor focuses entirely on resolving that immediate scene or beat. It does not know about the grand plan, which keeps its context window tiny and prevents it from getting confused by unrelated data.
+
+### 3. Goal-Seeking & Self-Correction: Grounded Reflection
+
+Asking an LLM `"Are you sure?".` (intrinsic self-correction) is a known anti-pattern that just makes the model confidently double down on mistakes. The modern standard is Grounded Reflection - a closed `generate -> critique -> revise` loop.
+https://www.taskade.com/blog/self-improving-ai-agents-reflection
+
+* The Generator: Drafts the code, SQL query, or text.
+* The Critic: Evaluates the output against a concrete, external test. For your harness, this means checking if the Perl `eval` compiled successfully, or verifying that the Datalog solver returned a valid hash rather than a failure state.
+* The Loop: If the test fails, the exact error message is fed back to the Generator for a revision.
+* The Circuit Breaker: The reflection loop MUST have a strict iteration cap (e.g. 3 attempts). If it fails 3 times, the Executor halts, marks the sub-task as failed, and the harness routes back to the Planner Agent to generate a new path around the obstacle.
+
+### 4. Long Context Management: Tiered Memory
+
+You cannot feed the entire execution history into every prompt. Multi-step engines use tiered memory.
+
+* Global State (The Blackboard): Stored in SQLite. It holds the original goal, the current Plan array, and the compacted summaries of completed steps.
+* Working Context (Local State): The immediate prompt given to the Executor. It contains only the current sub-task, the output of the tools it just called, and perhaps the immediately preceding step. Once a task is complete, its verbose tool outputs are summarised or dropped via your Context Compaction engine before being saved back to the Global State.
+
+### Implementation in your Pub/Sub Bus
+
+To build this into your blackboard architecture, you need three routing topics on your message bus:
+
+1. `task.plan`: The main LLM reads the user prompt and publishes an array of steps to the `blackboard_state` SQLite table.
+2. `task.execute`: The harness loop pops the first step off the plan and publishes it to the relevant specialist (like your Perl execution or SAT solving agents).
+3. `task.reflect`: Before moving to step 2, the output is published here. A Critic logic block runs tests. If it passes, the harness marks step 1 as complete. If it fails, it publishes a retry to `task.execute` with the error appended.
+
+By separating the high-level planning from the low-level execution, your harness will be able to solve complex, multi-stage logic trees without getting lost in its own context.
+
+
+What is the modern best practice system for an AI harness' discovering and deciding what "Skills" to use, and how it incorporates them into it's prompts?
+
+The modern best practice for AI skill discovery has moved away from static system prompts. Historically, developers dumped every available tool schema into the system prompt, which created bloated, brittle 'franken-prompts' that consumed tokens, caused 'prompt debt', and confused the model.
+https://www.zenml.io/llmops-database/dynamic-prompt-injection-for-reliable-ai-agent-behavior
+
+The 2026 standard is Retrieval-Augmented Tool Selection (RATS), commonly referred to as 'Tool RAG'. It treats your plugin library exactly like a knowledge base, fetching only the tools relevant to the immediate task.
+https://rewire.it/blog/dynamic-tool-allocation-for-ai-agents-the-rats-pattern/
+
+Here is how you structure this dynamic skill selection in your Perl/SQLite harness.
+
+### 1. The Two-Step Router Architecture
+
+Modern harnesses separate the problem of finding a capability from the execution of the task.
+
+* The Router (Discovery): A fast, lightweight agent (or purely a database query) analyses the user's goal. It searches your tool index and answers the question: 'What capability is needed?'.
+* The Specialist (Execution): The main, heavy-duty agent receives the prompt, but the harness only provides the 2 to 4 tool schemas that the Router selected. This focused context allows the model to accurately choose parameters without hallucinating non-existent tools.
+
+### 2. Discovering Skills via SQLite RAG
+
+Since you are building around SQLite, your plugin manager should register tools directly into the database when the harness boots up.
+
+* The Index Table: Create a `tools_index` virtual table using FTS5 (or your vector extension).
+* The Payload: Each row must store the tool's namespace, a highly descriptive text block of what it does, and its JSON Schema definition.
+* The Search: When a task is published to your blackboard, the harness runs a similarity search against the `tools_index` using the task description. For example, if the task is 'Extract the entities from this text', SQLite returns your `AgentCore::Rules` grammar parser, but safely ignores the PicoSAT solver.
+
+### 3. Dynamic Prompt Injection
+
+Once the harness has discovered the relevant tools, how do you feed them to the LLM? The industry standard is Intentional Prompt Injection.
+
+Instead of appending tools to the static top-level system prompt (which models often ignore due to recency bias), the harness injects them just-in-time.
+
+* Late Binding: The harness intercepts the user's message and dynamically injects the JSON schemas of the selected tools right before passing the payload to the LLM API.
+* Rule Pairing: Alongside the tool schema, the harness injects specific behavioural rules mapped to that tool. For instance, if the Router selects your Perl Eval plugin, the harness injects the rule: 'When using the Perl Eval tool, never attempt to install CPAN modules'. This keeps your global system prompt clean and ensures rules are only loaded when the relevant tool is active.
+
+### 4. The Workflow in your Perl Pub/Sub Bus
+
+To integrate this into Minsky's 'Society of Mind' blackboard, the event loop looks like this:
+
+1. Event: A new goal is published to `task.plan`.
+2. Discovery: The harness intercepts this and queries the SQLite `tools_index` for the top 3 matching skills.
+3. Injection: The harness constructs a temporary working context, injecting the selected JSON schemas.
+4. Generation: The Planner agent reads the injected prompt and publishes a structured tool call.
+5. Routing: The harness parses the tool call and routes the payload to the specific Perl plugin via the event bus.
+
+By dynamically routing and injecting schemas, your Perl harness can support hundreds of specialised plugins without ever overwhelming the LLM's context window.
+
+
+Given our new perl AI harness will have a query loop AND a rich perl ecosystem of powerful functions, it seems to be hinting at a new execution environment, neither simple one off queries, nor standard perl scripts (although It can do both), but something new.. maybe AI  stitched together logic and llm queries maybe stored in sqlite, maybe.  It feels like a new paradigm slowly being born. I'm interested in exploring what this new execution environment (Minky Mind) might look like -discuss
+
+What is emerging here is a Neuro-Symbolic Blackboard Engine - a hybrid runtime that blurs the line between interpreted code, symbolic logic engines, and probabilistic language models.
+
+In standard programming, control flow is rigid and human-authored. In basic AI scripts, control flow is delegated entirely to a single LLM prompt loop. This new paradigm creates a third space: an execution environment where the environment itself constantly negotiates *how* to solve a task, choosing the cheapest, fastest, and most exact tool for every step of a computation.
+
+---
+
+## 1. The Execution Continuum (From Soft to Hard Code)
+
+In this runtime, a "subroutine" is no longer just a block of instructions. Tasks exist along a spectrum of computation:
+
+```
+[ Soft / Probabilistic ] <-----------------------------------> [ Hard / Deterministic ]
+	 LLM Generation        Datalog / SAT       Regex Grammar        Pure Perl
+	 (High cost, slow)    (Exact logic)     (Strict parsing)    (Fast, zero cost)
+
+```
+
+Instead of running an LLM prompt every time, the harness operates on a principle of Computational Escalation:
+
+1. Tier 0 (Deterministic): Can a registered Perl subroutine solve this instantly?
+2. Tier 1 (Grammar & Constraint): Can a Regex grammar or Datalog/SAT solver parse or prove this rule deterministically?
+3. Tier 2 (Cached Artifact): Has an LLM previously solved a similar problem and stored a dynamic script in SQLite?
+4. Tier 3 (Neural Fallback): Route to an LLM agent to reason through the problem, generate a solution, and attempt to collapse the solution down to Tiers 0-2 for future runs.
+
+---
+
+## 2. Crystallisation: Self-Optimising Code Generation
+
+One of the most exciting aspects of this environment is Code Crystallisation.
+
+When an LLM agent solves a multi-step task (for example, extracting specific entities from unstructured text), relying on the LLM for every single run is expensive and slow.
+
+In a "Minsky Mind" environment:
+
+* The LLM executes the extraction once or twice.
+* The harness asks a specialist Critic agent: *"Can we write a pure Perl Regexp::Grammars rule or a Datalog clause that performs this exact extraction deterministically?"*
+* If yes, the agent generates the Perl code, tests it using Grounded Reflection, and saves it into the SQLite database.
+* The system has now crystallised a soft, expensive neural prompt into a hard, fast, zero-cost Perl routine. Over time, the environment gets faster, cheaper, and more robust the more it is used.
+
+---
+
+## 3. SQLite as the Operating System Kernel
+
+In a standard OS, the kernel manages process tables, memory allocation, and message pipes in memory. In this architecture, SQLite acts as the system kernel:
+
++--------------------+---------------------------+-----------------------------------------------------------+
+| OS Concept         | Traditional Runtime       | Minsky Mind Paradigm                                      |
++====================+===========================+===========================================================+
+| Call Stack         | CPU stack frames          | Nested parent-child rows in SQLite `messages`             |
++--------------------+---------------------------+-----------------------------------------------------------+
+| Process Queue      | OS Scheduler              | SQLite `blackboard_state` topic subscription table        |
++--------------------+---------------------------+-----------------------------------------------------------+
+| Instruction Memory | Disk files (`.pl`, `.py`) | Dynamic code snippets and schemas stored in SQLite tables |
++--------------------+---------------------------+-----------------------------------------------------------+
+| Inter-Process Comm | Unix Sockets / Pipes      | SQLite pub/sub triggers and event tables                  |
++--------------------+---------------------------+-----------------------------------------------------------+
+| Long-Term Memory   | External files / S3       | Integrated FTS5 and Vector tables                         |
++--------------------+---------------------------+-----------------------------------------------------------+
+
+Because the entire state of the engine is continuous data in SQLite, execution can be paused, inspected, branched, rolled back, or distribution-swapped mid-computation without losing state.
+
+---
+
+## 4. The "Minsky Mind" Mental Model
+
+The fundamental shift is moving from Procedural Execution ("Do step A, then step B") to Declarative Intent on a Shared Blackboard:
+
+```
+[ User Goal ]
+	 │
+	 ▼
+[ Blackboard (SQLite) ] ◄─── Publishers / Subscribers ───► [ Agent Pool ]
+	 │                                                           │
+	 ├── Task: Extract entities ─────────────────────────────────┤ (Handled by Perl Grammar Agent)
+	 ├── Task: Resolve scheduling constraints ───────────────────┤ (Handled by SAT Solver Agent)
+	 └── Task: Draft creative synthesis ─────────────────────────┤ (Handled by LLM Reasoning Agent)
+
+```
+
+1. You post a goal to the SQLite Blackboard.
+2. Independent agents (Perl workers, SAT solvers, Datalog engines, LLM prompts) inspect the task.
+3. The agent with the highest specificity and lowest cost claims the task, posts its output back to the Blackboard, and notifies the bus.
+4. The system continues until the goal's criteria are satisfied.
+
+This forms a true heterarchy: no single module is in complete control, but the combination of rigid logic solvers and flexible neural networks creates a resilient, self-healing runtime.
+
+---
+
+How can we design the code crystallisation pipeline in Perl, where LLM outputs are converted into saved, compiled subroutines?
+
+The process of crystallising probabilistic LLM outputs into deterministic Perl subroutines requires a pipeline that can safely compile, test, and persist code. This turns a slow, expensive neural call into a fast, zero-cost function.
+
+Here is the blueprint for building this pipeline in your harness.
+
+## 1. The Trigger and Generation Phase
+
+The pipeline begins when the harness identifies a repetitive semantic task, such as formatting data or parsing specific text structures.
+
+* The Request: The harness sends a prompt to the LLM Planner asking for a self-contained, pure Perl subroutine.
+* The Constraints: The prompt must enforce strict rules - no external module dependencies unless explicitly allowed, and the output must be wrapped in an anonymous subroutine block.
+
+## 2. The Sandboxed Crucible
+
+You cannot blindly execute LLM-generated code in your main process. The string must be compiled in a restricted environment.
+
+* The Safe Compartment: Use the `Safe` core module to create a restricted opcode space. This prevents the LLM from executing dangerous system commands.
+* The Compilation: Pass the string to the compartment's `reval` method.
+* The Result: If it compiles successfully, Perl returns a `CODE` reference. If it contains a syntax error, Perl sets the `$@` variable, which your harness intercepts.
+
+## 3. The Validation Loop
+
+Before saving the compiled code, it must pass a functional test.
+
+* The Test Harness: Execute the new subroutine against a known set of inputs and expected outputs.
+* Grounded Reflection: If the execution fails or produces the wrong output, capture the error string and publish it back to the bus on a 'task.revise_code' topic.
+* The Circuit Breaker: Limit the LLM to a maximum number of revision attempts before aborting the crystallisation attempt.
+
+## 4. SQLite Persistence and Retrieval
+
+Once the code passes validation, it must become a permanent part of the execution environment.
+
+* The Schema: Save the successful code string to a 'crystallised_functions' table, including columns for the topic it solves, the source string, and a hash for version control.
+* Just-in-Time Loading: The next time a matching task hits the event bus, the harness queries SQLite, pulls the source string, compiles it via `Safe` once during the session, and executes it instantly - completely bypassing the LLM.
+
+

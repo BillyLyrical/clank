@@ -1,0 +1,71 @@
+#!wit/toml
+author="CLAM"
+description="Critique code frugality — resource usage, efficiency, waste reduction"
+enabled=1
+license="Artistic-2.0"
+name="critic_frugality"
+notes="Checks for resource waste:\n- Unnecessary memory allocation\n- Excessive computation\n- Redundant operations\n- Over-engineering\n"
+priority=10
+timeout=10
+type="rule"
+usage="Input: { text: \"my @data = map { process($_) } @huge_list; my @sorted = sort @data;\" }\nOutput: { score: 5, issues: [...], suggestions: [...] }\n"
+version="1.0.0"
+triggers=[
+  "critic_frugality",
+]
+
+[metadata]
+category="critic"
+complexity="simple"
+safety="read_only"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $text = ref $input eq 'HASH' ? ($input->{text} // '') : $input;
+return { error => "No text provided" } unless $text;
+
+my @issues;
+my @suggestions;
+my $score = 10;
+
+# Memory waste
+if ($text =~ /\bmy\s+@\w+\s*=\s*\(/ && $text !~ /\b(?:map|grep)\b/) {
+    push @issues, { severity => 'low', message => 'large array literal — consider lazy loading' };
+    $score -= 0.5;
+}
+if ($text =~ /\bmy\s+\$[\w]+\s*=\s*(?:\[|\{)/ && $text =~ /\b(?:foreach|for)\b/) {
+    push @issues, { severity => 'low', message => 'data structure created in loop — move outside' };
+    $score -= 1;
+}
+
+# Computation waste
+if ($text =~ /\b(?:sort|grep|map)\b.*\b(?:sort|grep|map)\b/) {
+    push @issues, { severity => 'medium', message => 'chained sort/grep/map — combine into single pass' };
+    $score -= 1;
+}
+if ($text =~ /\bfor\b.*\bfor\b/s) {
+    push @issues, { severity => 'medium', message => 'nested loops — consider algorithm optimization' };
+    $score -= 1;
+}
+if ($text =~ /\bsleep\b/) {
+    push @issues, { severity => 'low', message => 'sleep in code — consider async/event-driven' };
+    $score -= 0.5;
+}
+
+# Redundant operations
+if ($text =~ /\bmy\s+\$\w+\s*=.*\n.*\$\w+\s*=/s) {
+    push @suggestions, 'check if variable is reassigned unnecessarily';
+}
+if ($text =~ /\bopen\b.*\bopen\b/s) {
+    push @suggestions, 'reuse file handles instead of reopening';
+}
+
+push @suggestions, 'use lazy evaluation for large datasets';
+push @suggestions, 'cache expensive computations';
+push @suggestions, 'profile before optimizing';
+
+$score = 0 if $score < 0;
+my $grade = $score >= 8 ? 'A' : $score >= 6 ? 'B' : $score >= 4 ? 'C' : 'D';
+
+return { topic => 'critic.frugality', score => $score, grade => $grade, issues => \@issues, suggestions => \@suggestions };
+
+PERL

@@ -1,0 +1,248 @@
+#!wit/toml
+author="CLAM"
+description="Encode constraints into DIMACS CNF format"
+enabled=true
+license="Artistic-2.0"
+name="sat.encode"
+notes="Convert variables, domains, and constraints to DIMACS CNF.\nSupports boolean, range, and enumerated domains.\nConstraint types: clause, atleast, atmost, exactly, alldiff, implies, iff, xor.\n"
+priority=10
+timeout=10
+type="rule"
+usage="Input: { variables: { A: [1,2,3], B: [1,2,3] }, constraints: [{ type: \"alldiff\", vars: [\"A\",\"B\"] }, { type: \"clause\", literals: [\"A=1\",\"B=2\"] }] }\nOutput: { ok: true, dimacs: \"p cnf 6 5\\n...\", vars: {A: [1,2], B: [3,4]}, num_vars: 6, num_clauses: 5 }\n"
+version="1.0.0"
+triggers=["sat.encode"]
+
+[metadata]
+category="sat"
+complexity="moderate"
+safety="read_only"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $vars_def   = ref $input eq 'HASH' ? ($input->{variables}  // {}) : {};
+my $constraints= ref $input eq 'HASH' ? ($input->{constraints}// []) : [];
+my $bool_vars  = ref $input eq 'HASH' ? ($input->{bool_vars} // []) : [];
+
+my %var_map;  # var_name => { value => sat_var }
+my $next_var = 1;
+my @clauses;
+
+# === Encode boolean variables ===
+for my $bv (@$bool_vars) {
+    $var_map{$bv}{1} = $next_var++;
+}
+
+# === Encode enumerated/range variables ===
+for my $vname (sort keys %$vars_def) {
+    my $domain = $vars_def->{$vname};
+    next unless ref $domain eq 'ARRAY' && @$domain;
+
+    for my $val (@$domain) {
+        $var_map{$vname}{$val} = $next_var++;
+    }
+
+    # At-most-one constraint: can't assign two values to same variable
+    my @sv = map { $var_map{$vname}{$_} } @$domain;
+    for my $i (0..$#sv) {
+        for my $j ($i+1..$#sv) {
+            push @clauses, [-$sv[$i], -$sv[$j]];
+        }
+    }
+
+    # At-least-one constraint: must assign some value
+    push @clauses, [@sv];
+}
+
+# === Encode explicit constraints ===
+for my $c (@$constraints) {
+    my $type = $c->{type} // 'clause';
+
+    if ($type eq 'clause') {
+        # Direct CNF clause: list of literals like "A=1", "B=2", negated with "!"
+        my @lits;
+        for my $lit (@{$c->{literals} // []}) {
+            my $neg = ($lit =~ s/^!//);
+            if ($lit =~ /^(\w+)=(.+)$/) {
+                my ($vn, $val) = ($1, $2);
+                return { error => "Variable '$vn' value '$val' not in domain" } unless exists $var_map{$vn}{$val};
+                my $sv = $var_map{$vn}{$val};
+                push @lits, $neg ? -$sv : $sv;
+            } elsif ($lit =~ /^\d+$/) {
+                # Direct SAT variable
+                push @lits, $neg ? -$lit : $lit;
+            }
+        }
+        push @clauses, [@lits] if @lits;
+    }
+
+    elsif ($type eq 'atleast') {
+        my $k = $c->{k} // 1;
+        my @lits;
+        for my $lit (@{$c->{literals} // []}) {
+            if ($lit =~ /^(\w+)=(.+)$/) {
+                my ($vn, $val) = ($1, $2);
+                return { error => "Unknown: $vn=$val" } unless exists $var_map{$vn}{$val};
+                push @lits, $var_map{$vn}{$val};
+            }
+        }
+        # At-least-k encoding: enumerate all (k-1)-subsets, negate each
+        if (@lits >= $k) {
+            my @combos = _combinations(\@lits, $k - 1);
+            for my $combo (@combos) {
+                push @clauses, [map { -$_ } @$combo];
+            }
+        }
+    }
+
+    elsif ($type eq 'atmost') {
+        my $k = $c->{k} // 1;
+        my @lits;
+        for my $lit (@{$c->{literals} // []}) {
+            if ($lit =~ /^(\w+)=(.+)$/) {
+                my ($vn, $val) = ($1, $2);
+                return { error => "Unknown: $vn=$val" } unless exists $var_map{$vn}{$val};
+                push @lits, $var_map{$vn}{$val};
+            }
+        }
+        if (@lits > $k) {
+            my @combos = _combinations(\@lits, $k + 1);
+            for my $combo (@combos) {
+                push @clauses, [map { -$_ } @$combo];
+            }
+        }
+    }
+
+    elsif ($type eq 'exactly') {
+        my $k = $c->{k} // 1;
+        my @lits;
+        for my $lit (@{$c->{literals} // []}) {
+            if ($lit =~ /^(\w+)=(.+)$/) {
+                my ($vn, $val) = ($1, $2);
+                return { error => "Unknown: $vn=$val" } unless exists $var_map{$vn}{$val};
+                push @lits, $var_map{$vn}{$val};
+            }
+        }
+        # Exactly-k = at-least-k AND at-most-k
+        if (@lits >= $k) {
+            my @atleast = _combinations(\@lits, $k - 1);
+            for my $combo (@atleast) {
+                push @clauses, [map { -$_ } @$combo];
+            }
+        }
+        if (@lits > $k) {
+            my @atmost = _combinations(\@lits, $k + 1);
+            for my $combo (@atmost) {
+                push @clauses, [map { -$_ } @$combo];
+            }
+        }
+    }
+
+    elsif ($type eq 'alldiff') {
+        my @anames = @{$c->{vars} // []};
+        my @all_svars;
+        for my $vn (@anames) {
+            return { error => "Unknown variable '$vn'" } unless exists $var_map{$vn};
+            push @all_svars, { name => $vn, svars => $var_map{$vn} };
+        }
+        # For each pair of variables, they can't have the same value
+        for my $i (0..$#all_svars) {
+            for my $j ($i+1..$#all_svars) {
+                my $vi = $all_svars[$i];
+                my $vj = $all_svars[$j];
+                for my $val (keys %{$vi->{svars}}) {
+                    next unless exists $vj->{svars}{$val};
+                    push @clauses, [-$vi->{svars}{$val}, -$vj->{svars}{$val}];
+                }
+            }
+        }
+    }
+
+    elsif ($type eq 'implies') {
+        # A => B  ===  !A OR B
+        my ($ant, $cons) = @{$c}{qw(antecedent consequent)};
+        my @ant_lits = _parse_literal_list($ant, \%var_map);
+        my @cons_lits = _parse_literal_list($cons, \%var_map);
+        # !antecedent OR consequent
+        my @neg_ant = map { -$_ } @ant_lits;
+        push @clauses, [@neg_ant, @cons_lits];
+    }
+
+    elsif ($type eq 'xor') {
+        my @lits;
+        for my $lit (@{$c->{literals} // []}) {
+            if ($lit =~ /^(\w+)=(.+)$/) {
+                return { error => "Unknown: $1=$2" } unless exists $var_map{$1}{$2};
+                push @lits, $var_map{$1}{$2};
+            }
+        }
+        # Odd number must be true — encode all odd-parity subsets
+        my $n = scalar @lits;
+        for my $mask (0..2**$n - 1) {
+            my $bits = 0;
+            for my $b (0..$n-1) { $bits++ if $mask & (1 << $b); }
+            next if $bits % 2 == 0;  # Skip even parity
+            push @clauses, [map { ($mask & (1 << $_)) ? $lits[$_] : -$lits[$_] } 0..$n-1];
+        }
+    }
+
+    elsif ($type eq 'iff') {
+        # A <=> B  ===  (A => B) AND (B => A)
+        my ($a, $b) = @{$c}{qw(a b)};
+        my @a_lits = _parse_literal_list($a, \%var_map);
+        my @b_lits = _parse_literal_list($b, \%var_map);
+        push @clauses, [map { -$_ } @a_lits, @b_lits];
+        push @clauses, [map { -$_ } @b_lits, @a_lits];
+    }
+}
+
+sub _parse_literal_list {
+    my ($spec, $vmap) = @_;
+    return () unless $spec;
+    if (ref $spec eq 'ARRAY') {
+        my @result;
+        for my $lit (@$spec) {
+            if ($lit =~ /^(\w+)=(.+)$/) {
+                push @result, $vmap->{$1}{$2} if exists $vmap->{$1}{$2};
+            }
+        }
+        return @result;
+    }
+    if ($spec =~ /^(\w+)=(.+)$/) {
+        return ($vmap->{$1}{$2}) if exists $vmap->{$1}{$2};
+    }
+    return ();
+}
+
+sub _combinations {
+    my ($arr, $k) = @_;
+    return ([]) if $k == 0;
+    return () unless @$arr >= $k;
+    my @result;
+    for my $i (0..$#$arr - $k + 1) {
+        my @rest = @{$arr}[$i+1..$#$arr];
+        my @subs = _combinations(\@rest, $k - 1);
+        for my $sub (@subs) {
+            my @flat = @$sub;
+            push @result, [$arr->[$i], @flat];
+            return @result if @result > 100_000;
+        }
+    }
+    return @result;
+}
+
+# === Build DIMACS ===
+my $num_vars = $next_var - 1;
+my $num_clauses = scalar @clauses;
+
+my $dimacs = "p cnf $num_vars $num_clauses\n";
+for my $clause (@clauses) {
+    $dimacs .= join(' ', @$clause) . " 0\n";
+}
+
+return {
+    ok          => 1,
+    dimacs      => $dimacs,
+    var_map     => \%var_map,
+    num_vars    => $num_vars,
+    num_clauses => $num_clauses,
+};
+PERL

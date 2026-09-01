@@ -1,0 +1,50 @@
+#!wit/toml
+author="CLAM"
+description="Search code in git repository"
+enabled=true
+license="Artistic-2.0"
+name="git_grep"
+notes="Read-only. Searches tracked files.\n"
+priority=10
+timeout=30
+type="rule"
+usage="Input: { path: \".\", pattern: \"function\", branch: \"main\" }\nOutput: { matches: [{file: \"...\", line: 123, content: \"...\"}] }\n"
+version="1.0.0"
+triggers=[
+  "git_grep",
+]
+
+[metadata]
+category="git"
+complexity="simple"
+safety="read_only"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $path = ref $input eq 'HASH' ? ($input->{path} // '.') : '.';
+my $pattern = ref $input eq 'HASH' ? ($input->{pattern} // '') : '';
+my $branch = ref $input eq 'HASH' ? ($input->{branch} // '') : '';
+
+return { error => "No pattern provided" } unless $pattern;
+
+my $cmd = "cd '$path' && git grep -n '$pattern'";
+$cmd .= " '$branch'" if $branch;
+my $output = `$cmd 2>/dev/null`;
+
+my @matches;
+for my $line (split /\n/, $output) {
+    if ($line =~ /^(.+?):(\d+):(.+)$/) {
+        push @matches, {
+            file    => $1,
+            line    => $2,
+            content => $3,
+        };
+    }
+}
+
+return {
+    matches => \@matches,
+    count   => scalar @matches,
+    pattern => $pattern,
+};
+
+PERL

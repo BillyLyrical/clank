@@ -1,0 +1,30 @@
+#!wit/toml
+author="CLAM"
+description="Rule: classify code"
+enabled=1
+name="classify_code"
+priority=10
+stateful=0
+timeout=5
+type="rule"
+version="1.0.0"
+triggers=[
+  "classify_code",
+]
+
+[metadata]
+author="CLAM"
+description="Classify code creation inputs into code domain"
+version=1.0
+triggers=[
+  "classify_code",
+]
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $text = ref $input eq 'HASH' ? ($input->{text} // '') : $input;
+if ($text =~ /^(?:write|create|implement|add|build|function|class|module)/i) {
+    return { domain => 'code', mode => 'build', confidence => 1.0 };
+}
+return undef;
+
+PERL

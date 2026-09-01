@@ -1,0 +1,63 @@
+#!wit/toml
+author="CLAM"
+description="Logical XOR — exactly one condition must be truthy"
+enabled=true
+license="Artistic-2.0"
+name="induction_xor"
+notes="Exclusive OR: true when inputs differ. False when both same.\nUseful for mutual exclusion reasoning.\n"
+priority=10
+timeout=5
+type="rule"
+usage="Input: { conditions: [true, false] }\nInput: { a: 1, b: 0 }\nOutput: { result: true, truthy_count: 1, count: 2 }\n"
+version="1.0.0"
+triggers=[
+  "induction.xor",
+]
+
+[metadata]
+category="induction"
+complexity="simple"
+safety="read_only"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+ref $input eq 'HASH' or return { error => "Input must be a hash" };
+
+my @values;
+
+if (ref $input->{conditions} eq 'ARRAY') {
+    @values = @{$input->{conditions}};
+}
+elsif (exists $input->{a}) {
+    for my $k (sort keys %$input) {
+        next if $k eq 'error';
+        push @values, $input->{$k};
+    }
+}
+else {
+    @values = ($input->{value} // 0);
+}
+
+my $truthy = 0;
+for my $v (@values) {
+    $truthy++ if _to_bool($v);
+}
+
+# XOR: exactly one truthy.
+my $result = $truthy == 1 ? 1 : 0;
+
+return {
+    result       => $result,
+    truthy_count => $truthy,
+    falsy_count  => scalar(@values) - $truthy,
+    count        => scalar @values,
+};
+
+sub _to_bool {
+    my $v = shift;
+    return 0 unless defined $v;
+    return 0 if !ref $v && ($v eq '' || $v eq '0' || $v eq 'false');
+    return 1 if ref $v eq 'ARRAY';
+    return 1 if ref $v eq 'HASH' && keys %$v;
+    return $v ? 1 : 0;
+}
+PERL

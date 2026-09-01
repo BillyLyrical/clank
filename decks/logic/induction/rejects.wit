@@ -1,0 +1,59 @@
+#!wit/toml
+author="CLAM"
+description="Logical rejection — A rejects B (A is incompatible with B)"
+enabled=true
+license="Artistic-2.0"
+name="induction_rejects"
+notes="Mutual exclusion: A and B cannot both be true.\nTrue when A is true and B is false, or vice versa.\nDifferent from XOR — this is directional: A rejects B.\n"
+priority=10
+timeout=5
+type="rule"
+usage="Input: { a: true, b: false }\nOutput: { result: true, a: true, b: false, description: \"A rejects B\" }\n"
+version="1.0.0"
+triggers=[
+  "induction.rejects",
+]
+
+[metadata]
+category="induction"
+complexity="simple"
+safety="read_only"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+ref $input eq 'HASH' or return { error => "Input must be a hash" };
+
+my $a = _to_bool($input->{a} // 0);
+my $b = _to_bool($input->{b} // 0);
+
+# A rejects B: A is incompatible with B.
+# True when A is true and B is false (A rules out B).
+# Also true when A is false and B is true (B rules out A).
+# False when both same (no conflict).
+my $result = ($a != $b) ? 1 : 0;
+
+my $desc;
+if ($a && !$b) {
+    $desc = "A rejects B (A true, B false — conflict)";
+} elsif (!$a && $b) {
+    $desc = "B rejects A (B true, A false — conflict)";
+} else {
+    $desc = "No conflict (" . ($a ? "both true" : "both false") . ")";
+}
+
+return {
+    result => $result,
+    a      => $a,
+    b      => $b,
+    conflict => $result ? 1 : 0,
+    description => $desc,
+};
+
+sub _to_bool {
+    my $v = shift;
+    return 0 unless defined $v;
+    return 0 if !ref $v && ($v eq '' || $v eq '0' || $v eq 'false');
+    return 1 if ref $v eq 'ARRAY';
+    return 1 if ref $v eq 'HASH' && keys %$v;
+    return $v ? 1 : 0;
+}
+PERL

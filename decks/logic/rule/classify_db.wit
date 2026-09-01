@@ -1,0 +1,31 @@
+#!wit/toml
+author="CLAM"
+description="Rule: classify db"
+enabled=1
+name="classify_db"
+priority=10
+stateful=0
+timeout=5
+type="rule"
+version="1.0.0"
+triggers=[
+  "classify_db",
+]
+
+[metadata]
+author="CLAM"
+description="Classify database-related input"
+priority=10
+version=1.0
+triggers=[
+  "classify_db",
+]
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $text = ref $input eq 'HASH' ? ($input->{text} // '') : $input;
+if ($text =~ /\b(?:query|table|schema|connect|pool|database|sql|dbi|sqlite)\b/i) {
+    return { domain => 'db', tags => [qw(database storage)] };
+}
+return undef;
+
+PERL

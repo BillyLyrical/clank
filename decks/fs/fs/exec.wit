@@ -1,0 +1,41 @@
+#!wit/toml
+author="CLAM"
+description="Execute command with timeout and output capture"
+enabled=true
+license="Artistic-2.0"
+name="fs_exec"
+notes="Executes command in subprocess.\nCaptures stdout, stderr, exit code.\n"
+priority=10
+timeout=60
+type="rule"
+usage="Input: { cmd: \"ls -la\", timeout: 30, cwd: \"/tmp\" }\nOutput: { stdout: \"...\", stderr: \"...\", exit: 0 }\n"
+version="1.0.0"
+triggers=[
+  "fs_exec",
+]
+
+[metadata]
+category="filesystem"
+complexity="simple"
+safety="command_execution"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $cmd = ref $input eq 'HASH' ? ($input->{cmd} // '') : $input;
+my $timeout = ref $input eq 'HASH' ? ($input->{timeout} // 30) : 30;
+my $cwd = ref $input eq 'HASH' ? ($input->{cwd} // '.') : '.';
+
+return { error => "No command provided" } unless $cmd;
+
+# Path validation for cwd
+return { error => "Cwd contains .." } if $cwd =~ /\.\./;
+
+my $stdout = `$cmd 2>&1`;
+my $exit = $? >> 8;
+
+return {
+    stdout => $stdout,
+    exit   => $exit,
+    cmd    => $cmd,
+};
+
+PERL

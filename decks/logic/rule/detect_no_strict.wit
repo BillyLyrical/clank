@@ -1,0 +1,31 @@
+#!wit/toml
+author="CLAM"
+description="Rule: detect no strict"
+enabled=1
+name="detect_no_strict"
+priority=10
+stateful=0
+timeout=5
+type="rule"
+version="1.0.0"
+triggers=[
+  "detect_no_strict",
+]
+
+[metadata]
+author="CLAM"
+description="Detect missing 'use strict'"
+priority=5
+version=1.0
+triggers=[
+  "detect_no_strict",
+]
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $text = ref $input eq 'HASH' ? ($input->{text} // '') : $input;
+if (($text =~ /\.pm$/ || $text =~ /\.pl$/) && $text !~ /^use strict;/m) {
+    return { found => 0, suggestion => 'Add "use strict;" at top' };
+}
+return undef;
+
+PERL

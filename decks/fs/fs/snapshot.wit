@@ -1,0 +1,280 @@
+#!wit/toml
+author="CLAM"
+description="Filesystem snapshot management — task rollback, disaster recovery via btrfs/zfs/LVM snapshots"
+enabled=true
+license="Artistic-2.0"
+name="clam_snapshot"
+notes="Leverages CoW filesystem snapshots for near-instant rollback.\nSupports btrfs, zfs, and LVM. Detects which is available.\nSnapshots are the Unix way — no custom backup logic needed.\nbtrfs/zfs snapshots take <1 second regardless of volume size.\nLVM snapshots are slower but work on any filesystem.\n"
+priority=10
+timeout=30
+type="rule"
+usage="Input: { action: \"create\", path: \"/project\", name: \"pre-deploy\" }\nInput: { action: \"rollback\", snapshot: \"pre-deploy\" }\nInput: { action: \"list\", path: \"/project\" }\nInput: { action: \"diff\", snapshot_a: \"...\", snapshot_b: \"...\" }\nInput: { action: \"auto_snapshot\", path: \"/project\", interval: \"task\" }\nOutput: depends on action\n"
+version="1.0.0"
+triggers=[
+  "clam_snapshot",
+]
+
+[metadata]
+category="infrastructure"
+complexity="moderate"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+$input = ref $input eq 'HASH' ? $input : { action => 'list' };
+
+my $action = $input->{action} // 'list';
+my $snap_dir = $input->{snap_dir} // '.clam/snapshots';
+
+my $fstype = _detect_fs($input->{path} // '/');
+my $snap_cmd = _detect_snap_cmd($fstype);
+
+sub _detect_fs {
+  my $path = shift;
+  my $output = `df -T "$path" 2>/dev/null | tail -1`;
+  if ($output =~ /\s+(\S+)\s*$/) {
+    return $1;
+  }
+  return 'unknown';
+}
+
+sub _detect_snap_cmd {
+  my $fs = shift;
+  return 'btrfs' if $fs eq 'btrfs';
+  return 'zfs' if $fs eq 'zfs';
+  return 'lvm' if -e '/dev/mapper';
+  return 'rsync';
+}
+
+if ($action eq 'create') {
+  my $path = $input->{path} // '.';
+  my $name = $input->{name} // ("snap_" . time());
+  my $description = $input->{description} // '';
+
+  if ($snap_cmd eq 'btrfs') {
+    my $parent = `findmnt -n -o TARGET --source "$(df -P "$path" | tail -1 | awk '{print $1}')" 2>/dev/null`;
+    chomp $parent;
+    $parent //= '/';
+    my $snap_path = "$parent/.clam_snapshots/$name";
+    my $output = `btrfs subvolume snapshot -r "$parent" "$snap_path" 2>&1`;
+    my $exit = $? >> 8;
+    if ($exit == 0) {
+      _save_meta($name, $path, $fstype, $description);
+      return { ok => 1, snapshot => $name, path => $snap_path, fs => 'btrfs', read_only => 1 };
+    }
+    return { ok => 0, error => "btrfs snapshot failed: $output" };
+  }
+
+  if ($snap_cmd eq 'zfs') {
+    my $dataset = `zfs list -H -o name -S mountpoint 2>/dev/null | head -1`;
+    chomp $dataset;
+    my $snap_name = "$dataset\@$name";
+    my $output = `zfs snapshot "$snap_name" 2>&1`;
+    my $exit = $? >> 8;
+    if ($exit == 0) {
+      _save_meta($name, $path, $fstype, $description);
+      return { ok => 1, snapshot => $snap_name, fs => 'zfs' };
+    }
+    return { ok => 0, error => "zfs snapshot failed: $output" };
+  }
+
+  if ($snap_cmd eq 'lvm') {
+    my $lv = `lvs --noheadings -o lv_name,vg_name 2>/dev/null | head -1`;
+    chomp $lv;
+    my ($lv_name, $vg_name) = split /\s+/, $lv;
+    my $snap_lv = "${lv_name}_snap_${name}";
+    my $size = $input->{size} // '5G';
+    my $output = `lvcreate -s -n "$snap_lv" -L "$size" "/dev/$vg_name/$lv_name" 2>&1`;
+    my $exit = $? >> 8;
+    if ($exit == 0) {
+      _save_meta($name, $path, $fstype, $description);
+      return { ok => 1, snapshot => $snap_lv, vg => $vg_name, fs => 'lvm' };
+    }
+    return { ok => 0, error => "LVM snapshot failed: $output" };
+  }
+
+  my $backup_path = "$snap_dir/$name";
+  unless (-d $backup_path) {
+    eval { require File::Path; File::Path::make_path($backup_path) };
+  }
+  my $output = `tar czf "$backup_path/data.tar.gz" -C "$(dirname $path)" "$(basename $path)" 2>&1`;
+  my $exit = $? >> 8;
+  if ($exit == 0) {
+    _save_meta($name, $path, 'rsync', $description);
+    return { ok => 1, snapshot => $name, path => $backup_path, fs => 'rsync_fallback' };
+  }
+  return { ok => 0, error => "rsync fallback failed: $output" };
+}
+
+if ($action eq 'rollback') {
+  my $snapshot = $input->{snapshot} // '';
+  my $target = $input->{target} // '.';
+  return { ok => 0, error => "No snapshot name" } unless $snapshot;
+
+  my $meta = _load_meta($snapshot);
+  return { ok => 0, error => "Unknown snapshot: $snapshot" } unless $meta;
+
+  if ($meta->{fs} eq 'btrfs') {
+    my $parent = `findmnt -n -o TARGET --source "$(df -P "$target" | tail -1 | awk '{print $1}')" 2>/dev/null`;
+    chomp $parent;
+    my $snap_path = "$parent/.clam_snapshots/$snapshot";
+
+    my $output = `btrfs subvolume delete "$target" 2>&1`;
+    $output = `btrfs subvolume snapshot "$snap_path" "$target" 2>&1`;
+    my $exit = $? >> 8;
+    return { ok => $exit == 0, rollback => $snapshot, fs => 'btrfs', output => $output };
+  }
+
+  if ($meta->{fs} eq 'zfs') {
+    my $dataset = `zfs list -H -o name -S mountpoint 2>/dev/null | head -1`;
+    chomp $dataset;
+    my $output = `zfs rollback "$dataset\@$snapshot" 2>&1`;
+    my $exit = $? >> 8;
+    return { ok => $exit == 0, rollback => $snapshot, fs => 'zfs', output => $output };
+  }
+
+  if ($meta->{fs} eq 'rsync_fallback') {
+    my $backup_path = "$snap_dir/$snapshot/data.tar.gz";
+    return { ok => 0, error => "Backup not found: $backup_path" } unless -f $backup_path;
+    my $output = `tar xzf "$backup_path" -C "$(dirname $target)" 2>&1`;
+    my $exit = $? >> 8;
+    return { ok => $exit == 0, rollback => $snapshot, fs => 'rsync', output => $output };
+  }
+
+  return { ok => 0, error => "Unknown filesystem: $meta->{fs}" };
+}
+
+if ($action eq 'list') {
+  my @snapshots;
+
+  if ($snap_cmd eq 'btrfs') {
+    my $parent = `findmnt -n -o TARGET --source "$(df -P "." | tail -1 | awk '{print $1}')" 2>/dev/null`;
+    chomp $parent;
+    my $output = `btrfs subvolume list "$parent/.clam_snapshots" 2>/dev/null`;
+    for my $line (split /\n/, $output) {
+      if ($line =~ /\s+([\w\/]+)$/) {
+        push @snapshots, { name => $1, fs => 'btrfs' };
+      }
+    }
+  } elsif ($snap_cmd eq 'zfs') {
+    my $dataset = `zfs list -H -o name -S mountpoint 2>/dev/null | head -1`;
+    chomp $dataset;
+    my $output = `zfs list -t snapshot -H -o name 2>/dev/null | grep "^$dataset@"`;
+    for my $line (split /\n/, $output) {
+      $line =~ s/^.*\@//;
+      push @snapshots, { name => $line, fs => 'zfs' };
+    }
+  } else {
+    if (-d $snap_dir) {
+      for my $d (glob("$snap_dir/*")) {
+        next unless -d $d;
+        my $name = $d;
+        $name =~ s|.*/||;
+        my $meta = _load_meta($name);
+        push @snapshots, { name => $name, fs => 'rsync', created => $meta->{created} // 0, description => $meta->{description} // '' };
+      }
+    }
+  }
+
+  @snapshots = sort { ($b->{created} // 0) <=> ($a->{created} // 0) } @snapshots;
+  return { ok => 1, snapshots => \@snapshots, count => scalar @snapshots, fstype => $fstype, snap_cmd => $snap_cmd };
+}
+
+if ($action eq 'delete') {
+  my $snapshot = $input->{snapshot} // '';
+  return { ok => 0, error => "No snapshot" } unless $snapshot;
+
+  if ($snap_cmd eq 'btrfs') {
+    my $parent = `findmnt -n -o TARGET --source "$(df -P "." | tail -1 | awk '{print $1}')" 2>/dev/null`;
+    my $output = `btrfs subvolume delete "$parent/.clam_snapshots/$snapshot" 2>&1`;
+    return { ok => $? == 0, deleted => $snapshot };
+  }
+  if ($snap_cmd eq 'zfs') {
+    my $dataset = `zfs list -H -o name -S mountpoint 2>/dev/null | head -1`;
+    chomp $dataset;
+    my $output = `zfs destroy "$dataset\@$snapshot" 2>&1`;
+    return { ok => $? == 0, deleted => $snapshot };
+  }
+
+  my $path = "$snap_dir/$snapshot";
+  if (-d $path) {
+    eval { require File::Path; File::Path::remove_tree($path) };
+    return { ok => 1, deleted => $snapshot };
+  }
+  return { ok => 0, error => "Snapshot not found: $snapshot" };
+}
+
+if ($action eq 'auto_snapshot') {
+  my $path = $input->{path} // '.';
+  my $interval = $input->{interval} // 'task';
+  my $max_snaps = $input->{max} // 10;
+
+  my $name = "auto_${interval}_" . time();
+  my $result = __PACKAGE__->execute(undef, {
+    action => 'create',
+    path => $path,
+    name => $name,
+    description => "auto-snapshot ($interval)",
+  }, %ctx);
+
+  return $result unless $result->{ok};
+
+  my $list = __PACKAGE__->execute(undef, { action => 'list' }, %ctx);
+  if ($list->{ok} && $list->{count} > $max_snaps) {
+    my @auto = grep { $_->{name} =~ /^auto_${interval}_/ } @{$list->{snapshots}};
+    while (@auto > $max_snaps) {
+      my $old = pop @auto;
+      __PACKAGE__->execute(undef, { action => 'delete', snapshot => $old->{name} }, %ctx);
+    }
+  }
+
+  return { ok => 1, snapshot => $name, auto_rotated => 1 };
+}
+
+if ($action eq 'status') {
+  my $meta_files = glob("$snap_dir/*/*.toml");
+  my @meta;
+  for my $f (@$meta_files) {
+    my $m = _load_meta($f);
+    push @meta, $m if $m;
+  }
+  return {
+    ok => 1,
+    fstype => $fstype,
+    snap_cmd => $snap_cmd,
+    snapshots => scalar @meta,
+    snap_dir => $snap_dir,
+  };
+}
+
+sub _save_meta {
+  my ($name, $path, $fs, $desc) = @_;
+  my $dir = "$snap_dir/$name";
+  eval { require File::Path; File::Path::make_path($dir) };
+  eval {
+    require Clam::Adapter::TOML;
+    open my $fh, '>', "$dir/meta.toml" or die "Cannot write: $!";
+    print $fh Clam::Adapter::TOML::encode_toml({
+      name => $name, path => $path, fs => $fs,
+      description => $desc, created => time(),
+    });
+    close $fh;
+  };
+}
+
+sub _load_meta {
+  my $name = shift;
+  my $file = "$snap_dir/$name/meta.toml";
+  $file = $name if $name =~ /\.toml$/;
+  return undef unless -f $file;
+  eval {
+    require Clam::Adapter::TOML;
+    open my $fh, '<', $file or die "Cannot read: $!";
+    my $content = do { local $/; <$fh> };
+    close $fh;
+    return Clam::Adapter::TOML::parse_toml($content);
+  };
+  return undef;
+}
+
+return { ok => 0, error => "Unknown action: $action" };
+
+PERL

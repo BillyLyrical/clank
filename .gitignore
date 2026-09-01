@@ -1,0 +1,8 @@
+# editor / OS noise
+*.swp
+*~
+.DS_Store
+
+# clam runtime scratch (workdirs, installed wits) — never in-tree
+_work/
+.clam/

@@ -1,0 +1,55 @@
+#!wit/toml
+author="CLAM"
+description="Stage and commit changes"
+enabled=true
+license="Artistic-2.0"
+name="git_commit"
+notes="Stages specified files (or all) and commits.\n"
+priority=10
+timeout=30
+type="rule"
+usage="Input: { path: \".\", message: \"commit message\", files: [\"file1.txt\"] }\nOutput: { ok: true, hash: \"abc123\" }\n"
+version="1.0.0"
+triggers=[
+  "git_commit",
+]
+
+[metadata]
+category="git"
+complexity="simple"
+safety="write_operation"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $path = ref $input eq 'HASH' ? ($input->{path} // '.') : '.';
+my $message = ref $input eq 'HASH' ? ($input->{message} // '') : '';
+my $files = ref $input eq 'HASH' ? ($input->{files} // []) : [];
+
+return { error => "No commit message" } unless $message;
+
+# Stage files
+if (@$files) {
+    for my $file (@$files) {
+        system("cd '$path' && git add '$file'");
+    }
+} else {
+    system("cd '$path' && git add -A");
+}
+
+# Commit
+my $output = `cd '$path' && git commit -m '$message' 2>&1`;
+my $exit = $? >> 8;
+
+return { error => "Commit failed: $output" } if $exit != 0;
+
+# Get commit hash
+my $hash = `cd '$path' && git rev-parse --short HEAD`;
+chomp $hash;
+
+return {
+    ok      => 1,
+    hash    => $hash,
+    message => $message,
+    path    => $path,
+};
+
+PERL

@@ -1,0 +1,49 @@
+#!wit/toml
+author="CLAM"
+description="List directory contents safely"
+enabled=true
+license="Artistic-2.0"
+name="fs_list"
+notes="Read-only. Lists files matching pattern.\n"
+priority=10
+timeout=10
+type="rule"
+usage="Input: { path: \"/home/user\", pattern: \"*.txt\" }\nOutput: { files: [...], count: 10 }\n"
+version="1.0.0"
+triggers=[
+  "fs_list",
+]
+
+[metadata]
+category="filesystem"
+complexity="simple"
+safety="read_only"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $path = ref $input eq 'HASH' ? ($input->{path} // '.') : $input;
+my $pattern = ref $input eq 'HASH' ? ($input->{pattern} // '*') : '*';
+
+return { error => "Path contains .." } if $path =~ /\.\./;
+return { error => "Not a directory: $path" } unless -d $path;
+
+opendir my $dh, $path or return { error => "Cannot list: $!" };
+my @files = sort grep { -f File::Spec->catfile($path, $_) && $_ =~ /$pattern/ } readdir $dh;
+closedir $dh;
+
+my @result;
+for my $file (@files) {
+    my $full = File::Spec->catfile($path, $file);
+    push @result, {
+        name => $file,
+        size => -s $full,
+        modified => scalar localtime(-M $full),
+    };
+}
+
+return {
+    files => \@result,
+    count => scalar @result,
+    path  => $path,
+};
+
+PERL

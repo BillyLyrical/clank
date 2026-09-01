@@ -1,0 +1,29 @@
+#!wit/toml
+author="CLAM"
+description="Rule: greet"
+enabled=1
+name="greet"
+priority=10
+stateful=0
+timeout=5
+type="rule"
+version="1.0.0"
+triggers=[
+  "greet",
+]
+
+[metadata]
+author="Test"
+version=1.0
+triggers=[
+  "greet",
+]
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $text = ref $input eq 'HASH' ? ($input->{text} // '') : $input;
+if ($text =~ /^hello/i) {
+    return { greeting => "Hello, $text", confidence => 1.0 };
+}
+return undef;
+
+PERL

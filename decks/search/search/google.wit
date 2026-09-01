@@ -1,0 +1,117 @@
+#!wit/toml
+author="CLAM"
+description="Web search provider: Google Custom Search API"
+enabled=1
+license="Artistic-2.0"
+name="search_google"
+notes="Requires Google Custom Search API key and Custom Search Engine ID.\nConfigure via ~/.clam/config.toml or action: configure.\n100 queries/day free tier, then $5/1000.\n"
+priority=30
+stateful=1
+timeout=10
+type="agent"
+usage="Input: { action: \"search\", query: \"Perl tie IPC\", limit: 5 }\nInput: { action: \"configure\", api_key: \"...\", cx: \"...\" }\nOutput: { results: [{ content, url, title, provenance }] }\n"
+version="1.0.0"
+publishes=[
+  "search.google.results",
+]
+triggers=[
+  "search_google",
+]
+
+[metadata]
+category="search"
+complexity="moderate"
+cost="medium"
+output_format="{ topic: 'search.google.results', results: [{ content, title, url, provenance }] }"
+requires_context="{ action: 'search|configure', query: '...', api_key?: '...', cx?: '...' }"
+requires_network=true
+when_to_use="Provider: Google Custom Search. Needs API key + CX configured."
+
+[metadata.queryable]
+action="search"
+ttl=1800
+weight=0.35
+fields=[
+  "query",
+]
+types=[
+  "web",
+  "knowledge",
+  "solution",
+  "all",
+]
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $action = ref $input eq 'HASH' ? ($input->{action} // 'search') : 'search';
+my $state = $ctx{state} // {};
+
+$state->{api_key} //= $ctx{config}{google_api_key} // '';
+$state->{cx} //= $ctx{config}{google_cx} // '';
+$state->{last_query} //= 0;
+$state->{min_interval} //= 1;
+
+if ($action eq 'configure') {
+    $state->{api_key} = ref $input eq 'HASH' ? ($input->{api_key} // $state->{api_key}) : $state->{api_key};
+    $state->{cx} = ref $input eq 'HASH' ? ($input->{cx} // $state->{cx}) : $state->{cx};
+    return { topic => 'search.google.configured', has_key => !!$state->{api_key}, has_cx => !!$state->{cx} };
+}
+
+if ($action eq 'search') {
+    my $query = ref $input eq 'HASH' ? ($input->{query} // '') : '';
+    my $limit = ref $input eq 'HASH' ? ($input->{limit} // 5) : 5;
+    return { error => "No query" } unless $query;
+    return { error => "Not configured — need api_key and cx", topic => 'search.google.results', results => [] }
+        unless $state->{api_key} && $state->{cx};
+
+    my $now = time();
+    if ($now - $state->{last_query} < $state->{min_interval}) {
+        return { topic => 'search.google.results', results => [], error => "Rate limited" };
+    }
+    $state->{last_query} = $now;
+
+    my $encoded = $query;
+    $encoded =~ s/ /+/g;
+    $encoded =~ s/([^A-Za-z0-9])/sprintf("%%%02X", ord($1))/ge;
+    my $url = "https://www.googleapis.com/customsearch/v1?key=$state->{api_key}&cx=$state->{cx}&q=$encoded&num=$limit";
+
+    my $response = _fetch($url);
+    return { topic => 'search.google.results', results => [] } unless $response;
+
+    my $data = eval { JSON::XS::decode_json($response) };
+    return { topic => 'search.google.results', results => [] } unless ref $data eq 'HASH';
+
+    my @results;
+    for my $item (@{$data->{items} // []}) {
+        push @results, {
+            content    => $item->{snippet} // '',
+            text       => $item->{snippet} // '',
+            title      => $item->{title} // '',
+            _provider  => 'google',
+            _weight    => 0.3,
+            _timestamp => time(),
+            _url       => $item->{link} // '',
+            _ref       => 'google:' . ($item->{displayLink} // ''),
+            _score     => 0.7,
+        };
+    }
+
+    return { topic => 'search.google.results', results => \@results };
+}
+
+return { error => "Unknown action: $action" };
+
+sub _fetch {
+    my ($url) = @_;
+    if (eval { require HTTP::Tiny; 1 }) {
+        my $http = HTTP::Tiny->new(timeout => 8, agent => 'CLAM/1.0');
+        my $res = $http->get($url);
+        return $res->{content} if $res->{success};
+    } elsif (eval { require LWP::UserAgent; 1 }) {
+        my $http = LWP::UserAgent->new(timeout => 8, agent => 'CLAM/1.0');
+        my $res = $http->get($url);
+        return $res->decoded_content if $res->is_success;
+    }
+    return undef;
+}
+
+PERL

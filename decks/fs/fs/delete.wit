@@ -1,0 +1,56 @@
+#!wit/toml
+author="CLAM"
+description="Delete file with backup before removal"
+enabled=true
+license="Artistic-2.0"
+name="fs_delete"
+notes="Creates backup before deletion.\nSupports dry_run to preview.\n"
+priority=10
+timeout=10
+type="rule"
+usage="Input: { path: \"/tmp/test.txt\", backup: true }\nOutput: { ok: true, backup: \"/tmp/clam_backups/test.txt.20250629\" }\n"
+version="1.0.0"
+triggers=[
+  "fs_delete",
+]
+
+[metadata]
+category="filesystem"
+complexity="simple"
+safety="delete_with_backup"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $path = ref $input eq 'HASH' ? ($input->{path} // '') : $input;
+my $backup = ref $input eq 'HASH' ? ($input->{backup} // 1) : 1;
+my $dry_run = ref $input eq 'HASH' ? ($input->{dry_run} // 0) : 0;
+
+return { error => "No path provided" } unless $path;
+return { error => "Path contains .." } if $path =~ /\.\./;
+return { error => "File not found: $path" } unless -f $path;
+
+if ($dry_run) {
+    return {
+        ok       => 0,
+        dry_run  => 1,
+        would_delete => $path,
+    };
+}
+
+# Create backup before deletion
+if ($backup) {
+    my $backup_dir = '/tmp/clam_backups';
+    make_path($backup_dir) unless -d $backup_dir;
+    my $backup_name = "$path." . strftime("%Y%m%d_%H%M%S", localtime);
+    $backup_name =~ s{^/}{};
+    $backup_name = "$backup_dir/$backup_name";
+    copy($path, $backup_name) or warn "Backup failed: $!";
+}
+
+unlink $path or return { error => "Delete failed: $!" };
+
+return {
+    ok   => 1,
+    path => $path,
+};
+
+PERL

@@ -1,0 +1,40 @@
+#!wit/toml
+author="CLAM"
+description="Pipe data through a command"
+enabled=true
+license="Artistic-2.0"
+name="fs_pipe"
+notes="Feeds data to command's stdin.\n"
+priority=10
+timeout=30
+type="rule"
+usage="Input: { data: \"hello world\", cmd: \"tr '[:lower:]' '[:upper:]'\" }\nOutput: { result: \"HELLO WORLD\", exit: 0 }\n"
+version="1.0.0"
+triggers=[
+  "fs_pipe",
+]
+
+[metadata]
+category="filesystem"
+complexity="simple"
+safety="command_execution"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $data = ref $input eq 'HASH' ? ($input->{data} // '') : $input;
+my $cmd = ref $input eq 'HASH' ? ($input->{cmd} // '') : $input;
+
+return { error => "No data or command provided" } unless $data && $cmd;
+
+open my $fh, '|-', $cmd or return { error => "Cannot pipe: $!" };
+print $fh $data;
+close $fh;
+
+my $exit = $? >> 8;
+
+return {
+    result => $data,
+    exit   => $exit,
+    cmd    => $cmd,
+};
+
+PERL

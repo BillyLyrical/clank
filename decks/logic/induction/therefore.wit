@@ -1,0 +1,52 @@
+#!wit/toml
+author="CLAM"
+description="Draw a conclusion from facts and theorems"
+enabled=true
+license="Artistic-2.0"
+name="induction_therefore"
+notes="Derives a conclusion by applying theorems to facts.\n"
+priority=10
+timeout=5
+type="rule"
+usage="Input: { facts: [...], theorems: [...], conclusion: \"...\" }\nOutput: { conclusion: \"...\", confidence: 0.0-1.0, based_on: { facts: [...], theorems: [...] } }\n"
+version="1.0.0"
+triggers=[
+  "induction.therefore",
+]
+
+[metadata]
+category="induction"
+complexity="simple"
+safety="read_only"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $conclusion = ref $input eq 'HASH' ? ($input->{conclusion} // '') : $input;
+my $facts = ref $input eq 'HASH' ? ($input->{facts} // []) : [];
+my $theorems = ref $input eq 'HASH' ? ($input->{theorems} // []) : [];
+my $confidence = ref $input eq 'HASH' ? ($input->{confidence} // 0.5) : 0.5;
+
+return { error => "No conclusion provided" } unless $conclusion;
+
+my $state = $ctx{state} // {};
+my $next_id = ($state->{therefore_count} // 0) + 1;
+$state->{therefore_count} = $next_id;
+$state->{conclusions} //= [];
+push @{$state->{conclusions}}, {
+    id          => $next_id,
+    conclusion  => $conclusion,
+    facts       => $facts,
+    theorems    => $theorems,
+    confidence  => $confidence,
+    timestamp   => scalar localtime,
+};
+
+return {
+    therefore_id => $next_id,
+    conclusion   => $conclusion,
+    confidence   => $confidence,
+    based_on     => {
+        facts    => [ map { ref $_ eq 'HASH' ? $_->{fact_id} // $_->{data} : $_ } @$facts ],
+        theorems => [ map { ref $_ eq 'HASH' ? $_->{theorem_id} // $_->{principle} : $_ } @$theorems ],
+    },
+};
+PERL

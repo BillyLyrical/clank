@@ -1,0 +1,192 @@
+#!wit/toml
+author="CLAM"
+description="Workspace lifecycle — request, list, read/write files, snapshot, clean"
+enabled=true
+license="Artistic-2.0"
+name="fs_work"
+notes="Manages isolated workspaces for tasks.\nTest workspaces live in _test/, work in _work/.\nEach workspace has a unique ID, files, and optional git snapshots.\n"
+priority=10
+timeout=30
+type="rule"
+usage="Input: { action: \"request\", scope: \"test\", name: \"my_task\" }\nOutput: { ok: 1, id: \"20260828-abc123\", path: \"_test/my_task_abc123\", name: \"my_task\" }\n"
+version="1.0.0"
+triggers=[
+  "fs_work",
+]
+
+[metadata]
+category="filesystem"
+complexity="moderate"
+safety="read_write"
+source = <<'PERL'
+no warnings 'redefine';
+my ($self, $input, %ctx) = @_;
+my $action = ref $input eq 'HASH' ? ($input->{action} // 'list') : 'list';
+my $input_scope = ref $input eq 'HASH' ? ($input->{scope} // '') : '';
+my $state  = $ctx{state} // {};
+
+my @c = ('0'..'9', 'a'..'z');
+my $date_part = sprintf("%04d%02d%02d", (localtime)[5]+1900, (localtime)[4]+1, (localtime)[3]);
+my $rand_part = join('', map { $c[rand @c] } 1..6);
+my $gen_id = sub { "$date_part-$rand_part" };
+
+my $find_ws = sub {
+    my ($id) = @_;
+    for my $key (keys %$state) {
+        next unless $key =~ /^(.+)_ws$/;
+        my $base = $1;
+        for my $ws (@{$state->{$key} // []}) {
+            return ($ws, $base) if $ws->{id} eq $id;
+        }
+    }
+    return (undef, undef);
+};
+
+my $list_files;
+$list_files = sub {
+    my ($dir, $prefix) = @_;
+    $prefix //= '';
+    my @result;
+    opendir my $dh, $dir or return @result;
+    while (my $entry = readdir $dh) {
+        next if $entry =~ /^\./;
+        my $full = "$dir/$entry";
+        my $rel = $prefix ? "$prefix/$entry" : $entry;
+        if (-f $full) {
+            push @result, $rel;
+        } elsif (-d $full) {
+            push @result, $list_files->($full, $rel);
+        }
+    }
+    closedir $dh;
+    return @result;
+};
+
+if ($action eq 'request') {
+    my $scope = $input_scope || 'test';
+    my $name = ref $input eq 'HASH' ? ($input->{name} // 'workspace') : 'workspace';
+    my $id = $gen_id->();
+    my $base = $scope eq 'work' ? '_work' : '_test';
+    my $dir_name = "${name}_${id}";
+    my $path = "$base/$dir_name";
+
+    mkdir $base unless -d $base;
+    mkdir $path;
+
+    system("cd $path && git init -q 2>/dev/null");
+
+    my $ws = { id => $id, name => $name, path => $path, scope => $scope, created => time() };
+    my $key = "${base}_ws";
+    push @{$state->{$key} //= []}, $ws;
+
+    return { ok => 1, id => $id, path => "$path/", name => $name };
+}
+
+if ($action eq 'list') {
+    my $scope = $input_scope || 'test';
+    my $base = $scope eq 'work' ? '_work' : '_test';
+    my $key = "${base}_ws";
+    my @list = @{$state->{$key} // []};
+    for my $ws (@list) {
+        $ws->{on_disk} = -d $ws->{path} ? 1 : 0;
+    }
+    return { count => scalar @list, workspaces => \@list };
+}
+
+if ($action eq 'file') {
+    my $id      = ref $input eq 'HASH' ? ($input->{id} // '') : '';
+    my $file    = ref $input eq 'HASH' ? ($input->{file} // '') : '';
+    my $content = ref $input eq 'HASH' ? (exists $input->{content} ? $input->{content} : undef) : undef;
+
+    my ($ws) = $find_ws->($id);
+    return { error => "Workspace '$id' not found" } unless $ws;
+
+    my $full = "$ws->{path}/$file";
+
+    if (defined $content) {
+        my $dir = $full;
+        $dir =~ s{/[^/]+$}{};
+        File::Path::make_path($dir) unless -d $dir;
+        open my $fh, '>', $full or return { error => "Cannot write: $!" };
+        print $fh $content;
+        close $fh;
+        return { ok => 1, written => length($content), file => $file };
+    } else {
+        return { error => "File not found: $file" } unless -f $full;
+        open my $fh, '<', $full or return { error => "Cannot read: $!" };
+        my $data = do { local $/; <$fh> };
+        close $fh;
+        return { ok => 1, content => $data, size => -s $full, file => $file };
+    }
+}
+
+if ($action eq 'info') {
+    my $id = ref $input eq 'HASH' ? ($input->{id} // '') : '';
+    my ($ws) = $find_ws->($id);
+    return { error => "Workspace '$id' not found" } unless $ws;
+
+    my @actual;
+    if (-d $ws->{path}) {
+        @actual = $list_files->($ws->{path});
+    }
+
+    return {
+        name   => $ws->{name},
+        id     => $ws->{id},
+        path   => $ws->{path},
+        actual => \@actual,
+    };
+}
+
+if ($action eq 'snapshot') {
+    my $id  = ref $input eq 'HASH' ? ($input->{id} // '') : '';
+    my $tag = ref $input eq 'HASH' ? ($input->{tag} // 'auto') : 'auto';
+
+    my ($ws) = $find_ws->($id);
+    return { error => "Workspace '$id' not found" } unless $ws;
+
+    my $snap_id = $gen_id->();
+    my $method = 'git';
+
+    if (-d "$ws->{path}/.git") {
+        my $rc = system("cd $ws->{path} && git add -A && git commit -m 'snapshot: $tag' --allow-empty -q 2>/dev/null");
+        $method = 'git' if $rc == 0;
+    }
+
+    if ($method ne 'git') {
+        $method = 'copy';
+        my $snap_dir = "$ws->{path}/.snapshots/$snap_id";
+        File::Path::make_path($snap_dir);
+        my @files = glob("$ws->{path}/*");
+        system("cp -a @files $snap_dir/ 2>/dev/null") if @files;
+    }
+
+    return { ok => 1, snap_id => $snap_id, method => $method, tag => $tag };
+}
+
+if ($action eq 'clean') {
+    my $id = ref $input eq 'HASH' ? ($input->{id} // '') : '';
+
+    if ($id) {
+        my ($ws, $base) = $find_ws->($id);
+        return { error => "Workspace '$id' not found" } unless $ws;
+        File::Path::remove_tree($ws->{path}) if -d $ws->{path};
+        my $key = "${base}_ws";
+        $state->{$key} = [grep { $_->{id} ne $id } @{$state->{$key} // []}];
+        return { ok => 1, cleaned => 1 };
+    }
+
+    my $scope = $input_scope || 'test';
+    my $base = $scope eq 'work' ? '_work' : '_test';
+    my $key = "${base}_ws";
+    my @list = @{$state->{$key} // []};
+    my $count = scalar @list;
+    for my $ws (@list) {
+        File::Path::remove_tree($ws->{path}) if -d $ws->{path};
+    }
+    $state->{$key} = [];
+    return { ok => 1, cleaned => $count };
+}
+
+return { error => "Unknown action: $action" };
+PERL

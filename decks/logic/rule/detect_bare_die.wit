@@ -1,0 +1,31 @@
+#!wit/toml
+author="CLAM"
+description="Rule: detect bare die"
+enabled=1
+name="detect_bare_die"
+priority=10
+stateful=0
+timeout=5
+type="rule"
+version="1.0.0"
+triggers=[
+  "detect_bare_die",
+]
+
+[metadata]
+author="CLAM"
+description="Detect bare die without message"
+priority=5
+version=1.0
+triggers=[
+  "detect_bare_die",
+]
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $text = ref $input eq 'HASH' ? ($input->{text} // '') : $input;
+if ($text =~ /\bdie\b(?!\s*["'])/) {
+    return { found => 1, suggestion => 'die without message — add string' };
+}
+return undef;
+
+PERL

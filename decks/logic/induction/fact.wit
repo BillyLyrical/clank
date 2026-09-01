@@ -1,0 +1,48 @@
+#!wit/toml
+author="CLAM"
+description="State a fact — an observation, data point, or measurement"
+enabled=true
+license="Artistic-2.0"
+name="induction_fact"
+notes="Atomic unit of inductive reasoning. States what was observed.\n"
+priority=10
+timeout=5
+type="rule"
+usage="Input: { data: \"module X has 500 lines\", source: \"wc -l\" }\nOutput: { fact_id: 1, data: \"...\", source: \"...\", timestamp: \"...\" }\n"
+version="1.0.0"
+triggers=[
+  "induction.fact",
+]
+
+[metadata]
+category="induction"
+complexity="simple"
+safety="read_only"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $data = ref $input eq 'HASH' ? ($input->{data} // '') : $input;
+my $source = ref $input eq 'HASH' ? ($input->{source} // 'direct') : 'direct';
+my $weight = ref $input eq 'HASH' ? ($input->{weight} // 1.0) : 1.0;
+
+return { error => "No data provided" } unless $data;
+
+my $state = $ctx{state} // {};
+my $next_id = ($state->{fact_count} // 0) + 1;
+$state->{fact_count} = $next_id;
+$state->{facts} //= [];
+push @{$state->{facts}}, {
+    id        => $next_id,
+    data      => $data,
+    source    => $source,
+    weight    => $weight,
+    timestamp => scalar localtime,
+};
+
+return {
+    fact_id   => $next_id,
+    data      => $data,
+    source    => $source,
+    weight    => $weight,
+    timestamp => $state->{facts}[-1]{timestamp},
+};
+PERL

@@ -1,0 +1,18 @@
+author="CLAM (ported from clam-old)"
+description="Code critique heuristics: style, quality, security, performance, architecture and more"
+name="critic"
+version="1.0.0"
+wits=[
+  "critic.accessibility",
+  "critic.architecture",
+  "critic.clarity",
+  "critic.ethics",
+  "critic.frugality",
+  "critic.performance",
+  "critic.quality",
+  "critic.safety",
+  "critic.security",
+  "critic.style",
+  "critic.sustainability",
+  "critic.usability",
+]

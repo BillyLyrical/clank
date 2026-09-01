@@ -1,0 +1,66 @@
+#!wit/toml
+author="CLAM"
+description="Logical AND — all conditions must be truthy"
+enabled=true
+license="Artistic-2.0"
+name="induction_and"
+notes="Returns true only if ALL conditions are truthy.\nShort-circuits on first falsy value.\n"
+priority=10
+timeout=5
+type="rule"
+usage="Input: { conditions: [true, true, false] }\nInput: { a: 1, b: 2, c: 3 }\nOutput: { result: false, truthy_count: 2, falsy_count: 1 }\n"
+version="1.0.0"
+triggers=[
+  "induction.and",
+]
+
+[metadata]
+category="induction"
+complexity="simple"
+safety="read_only"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+ref $input eq 'HASH' or return { error => "Input must be a hash" };
+
+my @values;
+
+# Array of conditions.
+if (ref $input->{conditions} eq 'ARRAY') {
+    @values = @{$input->{conditions}};
+}
+# Named keys (a, b, c, ...).
+elsif (exists $input->{a}) {
+    for my $k (sort keys %$input) {
+        next if $k eq 'error';
+        push @values, $input->{$k};
+    }
+}
+# Single condition.
+else {
+    @values = ($input->{value} // 0);
+}
+
+my $truthy = 0;
+my $falsy = 0;
+for my $v (@values) {
+    my $t = _to_bool($v);
+    if ($t) { $truthy++; }
+    else    { $falsy++; last; }  # short-circuit
+}
+
+return {
+    result       => $falsy == 0 ? 1 : 0,
+    truthy_count => $truthy,
+    falsy_count  => $falsy,
+    count        => scalar @values,
+};
+
+sub _to_bool {
+    my $v = shift;
+    return 0 unless defined $v;
+    return 0 if !ref $v && ($v eq '' || $v eq '0' || $v eq 'false');
+    return 1 if ref $v eq 'ARRAY';
+    return 1 if ref $v eq 'HASH' && keys %$v;
+    return $v ? 1 : 0;
+}
+PERL
