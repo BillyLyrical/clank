@@ -5,4 +5,5 @@
 
 # clam runtime scratch (workdirs, installed wits) — never in-tree
 _work/
+_tmp/
 .clam/

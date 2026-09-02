@@ -54,8 +54,8 @@ sub build {
         return $prompt . "\nCurrent working directory: $cwd\n";
     }
 
-    my $docs_dir     = $o{docs_dir}     // '/home/pi/dev/clam/docs';
-    my $examples_dir = $o{examples_dir} // '/home/pi/dev/clam/wits.example';
+    my $docs_dir     = $o{docs_dir}     // '/PATH/TO/CLAM/docs';
+    my $examples_dir = $o{examples_dir} // '/PATH/TO/CLAM/wits.example';
 
     my @visible = grep { defined $snippets{$_} } @tools;
     my $tools_list = @visible ? join("\n", map { "- $_: " . $snippets{$_} } @visible) : "(none)";

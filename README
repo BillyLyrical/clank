@@ -1,0 +1,20 @@
+
+Clam is a Perl AI coding harness modeled on Pi,
+with a SQLite backend, and a pub/sub bus
+modeled on Marvin Minsky's "Society of Mind".
+
+I want to try a hybrid cognitive architecture...
+LLMs for pattern recognition and intuition,
+and logic engines for deliberate reasoning,
+with a Minsky-style blackboard for coordination.
+
+Why use expensive (and slow) LLMs for those tasks
+that could be automated to perl scripts and Logic systems.
+
+It has the beginnings of a plugin system, called Wits.
+
+It's very new and I dunno if it's a good idea,
+but it's an AI harness in PERL!
+
+
+
