@@ -6,19 +6,19 @@
 #     register($api) method (see wits.example/hello).
 #   * Declarative decks (clam-old format): directories of .wit files — TOML
 #     metadata + embedded Perl source — optionally grouped into subdirs and
-#     described by a deck.toml manifest.  Loaded via Clam::WitLoader; each
+#     described by a deck.toml manifest.  Loaded via Clam::Wit::Loader; each
 #     .wit becomes an LLM-callable tool plus dispatch/bus entries.
 package Clam::PluginManager;
 use strict;
 use warnings;
-use Clam::WitAPI;      # direct dependency: load_dir constructs one per wit
-use Clam::WitDispatch;
+use Clam::Wit::API;      # direct dependency: load_dir constructs one per wit
+use Clam::Wit::Dispatch;
 
 sub new {
     my ($class, %o) = @_;
     my $self = bless { wits => [], apis => {}, errors => [], skipped => [], dwits => {} }, $class;
     # The dispatcher shares the dwits hash so late registrations are visible.
-    $self->{dispatch} = Clam::WitDispatch->new(wits => $self->{dwits});
+    $self->{dispatch} = Clam::Wit::Dispatch->new(wits => $self->{dwits});
     return $self;
 }
 
@@ -140,13 +140,13 @@ sub load_dir {
     } else {
         # Declarative deck: .wit files (clam-old format), flat or grouped.
         unless (_has_wit($dir)) { push @{ $self->{errors} }, "$dir: no wit modules, .pm files, or .wit files"; return }
-        require Clam::WitLoader;
-        my $api = Clam::WitAPI->new(
+        require Clam::Wit::Loader;
+        my $api = Clam::Wit::API->new(
             bus => $self->{bus}, store => $self->{store}, session => $self->{session},
             ui => $self->{ui}, wit_name => $name,
         );
-        my @records = @{ Clam::WitLoader->load_dir($self, $api, $dir) };
-        push @{ $self->{wits} }, { name => $name, pkg => 'Clam::WitFile', dir => $dir, wit => undef, api => $api };
+        my @records = @{ Clam::Wit::Loader->load_dir($self, $api, $dir) };
+        push @{ $self->{wits} }, { name => $name, pkg => 'Clam::Wit::File', dir => $dir, wit => undef, api => $api };
         $self->{apis}{$name} = $api;
         warn "[wits] deck $name: ", scalar(@records), " wits loaded from $dir\n" if @records && $ENV{CLAM_DEBUG};
         return;
@@ -170,7 +170,7 @@ sub load_dir {
     };
 
     # register() with a fresh API; errors here are isolated too.
-    my $api = Clam::WitAPI->new(
+    my $api = Clam::Wit::API->new(
         bus => $self->{bus}, store => $self->{store}, session => $self->{session},
         ui => $self->{ui}, wit_name => $name,
     );
@@ -196,7 +196,7 @@ sub wits      { $_[0]->{wits} }
 sub errors    { $_[0]->{errors} }
 sub skipped   { $_[0]->{skipped} }          # declarative wits skipped for missing deps
 sub dwits     { $_[0]->{dwits} }            # name/trigger -> declarative wit record
-sub dispatch  { $_[0]->{dispatch} }         # Clam::WitDispatch (the $ctx{wits} object)
+sub dispatch  { $_[0]->{dispatch} }         # Clam::Wit::Dispatch (the $ctx{wits} object)
 sub api_for   { $_[0]->{apis}{ $_[1] } }
 
 # All wit-registered tools as Clam::Tool objects.

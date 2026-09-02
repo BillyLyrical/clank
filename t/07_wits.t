@@ -110,7 +110,7 @@ ok((grep { ref $_ eq 'HASH' && $_->{action} eq 'transform' } @{ $pub->{results} 
 
 # api accessors work inside register (session/store/bus reachable)
 my $api = $pm->api_for('hello');
-isa_ok($api, 'Clam::WitAPI');
+isa_ok($api, 'Clam::Wit::API');
 is($api->bus, $bus, 'api->bus is the app bus');
 is($api->store, $store, 'api->store is the app store');
 

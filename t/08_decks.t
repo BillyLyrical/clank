@@ -11,7 +11,7 @@ use Clam::Store;
 use Clam::Bus;
 use Clam::Session;
 use Clam::PluginManager;
-use Clam::WitFile;
+use Clam::Wit::File;
 use Clam::Util qw(jdecode jencode);
 use JSON::PP;
 
@@ -26,7 +26,7 @@ chdir $tmp or die "chdir: $!";
 # ===========================================================================
 # 1. WitFile parser (TOML subset + heredoc source)
 # ===========================================================================
-my $d = Clam::WitFile::parse_toml(<<'TOML');
+my $d = Clam::Wit::File::parse_toml(<<'TOML');
 name="x"
 enabled=true
 count=3
@@ -64,13 +64,13 @@ my $pf = "$tmp/sample.wit";
 open my $sfh, '>', $pf or die;
 print {$sfh} "#!wit/toml\nname=\"sample\"\ntype=\"rule\"\nsource = <<'PERL'\nmy (\$self,\$input,%ctx) = \@_;\nreturn { ok => 1 };\nPERL\n";
 close $sfh;
-my $parsed = Clam::WitFile->parse_file($pf);
+my $parsed = Clam::Wit::File->parse_file($pf);
 is($parsed->{meta}{name}, 'sample', 'parse_file: metadata');
 like($parsed->{source}, qr/return \{ ok => 1 \}/, 'parse_file: heredoc source extracted');
 
-my $code = Clam::WitFile->compile("my (\$self,\$input,%ctx) = \@_;\nreturn { n => 7 };", name => 't');
+my $code = Clam::Wit::File->compile("my (\$self,\$input,%ctx) = \@_;\nreturn { n => 7 };", name => 't');
 is_deeply($code->(undef, {}, ()), { n => 7 }, 'compile: closure runs with ($self,$input,%ctx)');
-eval { Clam::WitFile->compile("my (\$x = \@_; oops(", name => 'bad') };
+eval { Clam::Wit::File->compile("my (\$x = \@_; oops(", name => 'bad') };
 like($@, qr/failed to compile/, 'compile: bad perl dies with clear error');
 
 # ===========================================================================

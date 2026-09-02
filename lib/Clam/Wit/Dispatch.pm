@@ -1,10 +1,10 @@
-# Clam::WitDispatch — inter-wit execution, the object wits receive as
+# Clam::Wit::Dispatch — inter-wit execution, the object wits receive as
 # $ctx{wits}.  Mirrors the clam-old Executor's execute-by-name semantics:
 #   my $r = eval { $ctx{wits}->execute('deduction.axiom', $input) };
 # Returns the result hashref or undef; failures are warned and swallowed so a
 # broken callee never takes down its caller (orchestration wits like
 # deduction.deduce rely on this).  A depth guard stops recursive loops.
-package Clam::WitDispatch;
+package Clam::Wit::Dispatch;
 use strict;
 use warnings;
 

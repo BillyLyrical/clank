@@ -1,15 +1,15 @@
 # Clam::Adapter::TOML — compat shim for ported declarative wits that parse or
-# emit TOML at runtime (e.g. fs.snapshot).  Delegates to Clam::WitFile's
+# emit TOML at runtime (e.g. fs.snapshot).  Delegates to Clam::Wit::File's
 # parser; the encoder covers the same subset (scalars, arrays of scalars,
 # nested hashes as [table] sections).
 package Clam::Adapter::TOML;
 use strict;
 use warnings;
-use Clam::WitFile;
+use Clam::Wit::File;
 
 sub parse_toml {
     my ($str) = @_;
-    return Clam::WitFile::parse_toml($str, path => 'runtime');
+    return Clam::Wit::File::parse_toml($str, path => 'runtime');
 }
 
 sub encode_toml {

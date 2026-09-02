@@ -1,5 +1,5 @@
 # What a Wit receives at register() time (mirrors Pi's ExtensionAPI).
-package Clam::WitAPI;
+package Clam::Wit::API;
 use strict;
 use warnings;
 
@@ -9,7 +9,7 @@ sub new {
         bus       => $o{bus},
         store     => $o{store},
         session   => $o{session},
-        ui        => $o{ui} // Clam::WitAPI::UI->new,
+        ui        => $o{ui} // Clam::Wit::API::UI->new,
         wit_name  => $o{wit_name} // 'anon',
         tools     => [],
         commands  => {},
@@ -59,7 +59,7 @@ sub registered_tools    { $_[0]->{tools} }
 sub registered_commands { $_[0]->{commands} }
 
 # ---------------------------------------------------------------------------
-package Clam::WitAPI::UI;
+package Clam::Wit::API::UI;
 # Readline-backed UI (REPL may swap in its own object with the same methods).
 use strict;
 use warnings;

@@ -1,12 +1,12 @@
-# Clam::WitLoader — loads declarative .wit files (clam-old format) into a
+# Clam::Wit::Loader — loads declarative .wit files (clam-old format) into a
 # WitAPI as LLM-callable tools, with inter-wit dispatch, bus subscriptions,
 # state persistence, and timeouts.  See docs/DESIGN.md section 9 and
 # decks/README.md for the deck model.
-package Clam::WitLoader;
+package Clam::Wit::Loader;
 use strict;
 use warnings;
 use File::Find;
-use Clam::WitFile;
+use Clam::Wit::File;
 use Clam::Util qw(jencode);
 
 # Recursion depth of bus-agent dispatch (see the subscribe closure in
@@ -62,7 +62,7 @@ sub load_dir {
 
 sub _load_one {
     my ($pm, $api, $dir, $file, $name) = @_;
-    my $parsed = Clam::WitFile->parse_file($file);   # dies on malformed files
+    my $parsed = Clam::Wit::File->parse_file($file);   # dies on malformed files
     my ($meta, $source) = ($parsed->{meta}, $parsed->{source});
 
     return undef unless _truthy($meta->{enabled} // 1);
@@ -82,7 +82,7 @@ sub _load_one {
         }
     }
 
-    my $code = Clam::WitFile->compile($source, name => $name);   # dies on error
+    my $code = Clam::Wit::File->compile($source, name => $name);   # dies on error
 
     my $rec;   # declared before the initializer: the run closures reference it
     $rec = {
@@ -91,7 +91,7 @@ sub _load_one {
         dir   => $dir,
         meta  => $meta,
         code  => $code,
-        wit   => bless({ %$meta }, 'Clam::WitFile::Record'),
+        wit   => bless({ %$meta }, 'Clam::Wit::File::Record'),
         # top-level run: with the declared timeout (tool entry point)
         run          => sub { _execute($pm, $rec, $_[0], timeout => ($meta->{timeout} // 30)) },
         # inter-wit run: no nested alarm (alarms are process-global; nesting
@@ -132,8 +132,8 @@ sub _load_one {
                 # Recursion cap: a result topic can match the subscription
                 # pattern (e.g. search.* vs search.results).  The old Bus
                 # republished recursively with max depth 5; mirror that.
-                return if $Clam::WitLoader::BUS_AGENT_DEPTH >= 5;
-                local $Clam::WitLoader::BUS_AGENT_DEPTH = $Clam::WitLoader::BUS_AGENT_DEPTH + 1;
+                return if $Clam::Wit::Loader::BUS_AGENT_DEPTH >= 5;
+                local $Clam::Wit::Loader::BUS_AGENT_DEPTH = $Clam::Wit::Loader::BUS_AGENT_DEPTH + 1;
                 my $payload = $ev->{payload};
                 my $input = ref $payload eq 'HASH' ? $payload
                             : (defined $payload ? { text => "$payload" } : {});
@@ -154,7 +154,7 @@ sub _execute {
 
     my %ctx = (
         wits      => $pm->{dispatch},
-        bus       => $pm->{bus} ? Clam::WitLoader::BusAdapter->new($pm->{bus}) : undef,
+        bus       => $pm->{bus} ? Clam::Wit::Loader::BusAdapter->new($pm->{bus}) : undef,
         store     => $pm->{store},
         session   => $pm->{session},
         config    => {},
@@ -221,13 +221,13 @@ sub _save_state {
 }
 
 # ---------------------------------------------------------------------------
-# Clam::WitLoader::BusAdapter — the object wits receive as $ctx{bus}.
+# Clam::Wit::Loader::BusAdapter — the object wits receive as $ctx{bus}.
 # publish() keeps all real-bus side effects (journaling, dispatch) but also
 # returns the first hashref handler result, restoring the reply semantics the
 # old-tree search wits were written against (the old Bus was fire-and-forget,
 # which left them dead code).  Other methods pass through.
 # ---------------------------------------------------------------------------
-package Clam::WitLoader::BusAdapter;
+package Clam::Wit::Loader::BusAdapter;
 
 sub new { my ($class, $bus) = @_; return bless { bus => $bus }, $class }
 
@@ -244,7 +244,7 @@ sub publish {
 sub subscribe   { my ($self, @a) = @_; $self->{bus}->subscribe(@a) }
 sub unsubscribe { my ($self, $id) = @_; $self->{bus}->unsubscribe($id) }
 
-package Clam::WitLoader;
+package Clam::Wit::Loader;
 
 sub _require_module {
     my ($mod) = @_;

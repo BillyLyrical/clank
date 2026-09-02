@@ -1,4 +1,4 @@
-# Clam::WitFile — declarative wit files (.wit), ported from clam-old.
+# Clam::Wit::File — declarative wit files (.wit), ported from clam-old.
 #
 # A .wit file is TOML metadata with an embedded Perl source heredoc:
 #
@@ -17,7 +17,7 @@
 # The handler contract (unchanged from clam-old): the compiled closure is
 # called as  $code->($wit, $input, %ctx)  and returns a result hashref or
 # undef ("did not fire").  $wit is a lightweight record with accessors.
-package Clam::WitFile;
+package Clam::Wit::File;
 use strict;
 use warnings;
 
@@ -246,12 +246,12 @@ sub _split_array_items {
 sub trim { my ($s) = @_; $s =~ s/^\s+|\s+$//g; return $s; }
 
 # ---------------------------------------------------------------------------
-# Clam::WitFile::Record — the lightweight $self passed to handlers.
+# Clam::Wit::File::Record — the lightweight $self passed to handlers.
 # Field accessors over the parsed metadata (name, type, version, description,
 # usage, priority, stateful, enabled, timeout, metadata, ...).  Unknown
 # fields return undef rather than dying (ported wits probe optional fields).
 # ---------------------------------------------------------------------------
-package Clam::WitFile::Record;
+package Clam::Wit::File::Record;
 
 sub AUTOLOAD {
     our $AUTOLOAD;
@@ -262,7 +262,7 @@ sub AUTOLOAD {
     return $self->{$field};
 }
 
-package Clam::WitFile;
+package Clam::Wit::File;
 
 # ---------------------------------------------------------------------------
 # compile($source, %o) -> coderef

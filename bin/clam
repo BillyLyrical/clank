@@ -102,16 +102,16 @@ sub _cmd_wits {
 
         # Deck awareness: validate the manifest against the files present.
         if (-f "$src/deck.toml") {
-            require Clam::WitFile;
-            require Clam::WitLoader;
+            require Clam::Wit::File;
+            require Clam::Wit::Loader;
             open my $fh, '<', "$src/deck.toml" or die "cannot read deck.toml: $!\n";
             my $c = do { local $/; <$fh> }; close $fh;
-            my $d = eval { Clam::WitFile::parse_toml($c) };
+            my $d = eval { Clam::Wit::File::parse_toml($c) };
             if ($@) {
                 warn "warning: unparseable deck.toml in $src: $@";
             } else {
                 print "deck: ", ($d->{name} // $name), " — ", ($d->{description} // ''), "\n";
-                my %have = map { $_ => 1 } @{ Clam::WitLoader->list_wits($src) };
+                my %have = map { $_ => 1 } @{ Clam::Wit::Loader->list_wits($src) };
                 for my $w (@{ $d->{wits} // [] }) {
                     warn "warning: deck lists missing wit: $w\n" unless $have{$w};
                 }
@@ -173,8 +173,8 @@ sub _cmd_wits {
 
 sub _describe_wit_dir {
     my ($d) = @_;
-    require Clam::WitLoader;
-    my @wits = @{ Clam::WitLoader->list_wits($d) };
+    require Clam::Wit::Loader;
+    my @wits = @{ Clam::Wit::Loader->list_wits($d) };
     if (@wits) {
         return (-f "$d/deck.toml" ? "deck (" . scalar(@wits) . " wits)" : "declarative (" . scalar(@wits) . " wits)");
     }

@@ -1,7 +1,7 @@
 # Base class for Wits (clam plugins). A wit is a module with:
 #   package Clam::Wit::<Name>;
 #   sub new      { ... }                # optional; defaults to {}
-#   sub register { my ($self,$api)=@_; }  # receives a Clam::WitAPI
+#   sub register { my ($self,$api)=@_; }  # receives a Clam::Wit::API
 package Clam::Wit;
 use strict;
 use warnings;

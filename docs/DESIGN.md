@@ -57,8 +57,10 @@ first, so a crash mid-task can be inspected/resumed from the log.
     lib/Clam/Tools.pm         registry: builtins + wit-registered
     lib/Clam/Session.pm       session tree over Store (new/resume/fork/leaf)
     lib/Clam/Loop.pm          agent loop = Pi runAgentLoop port (§4)
-    lib/Clam/Wit.pm           plugin base class
-    lib/Clam/WitAPI.pm        what Wits receive: on/register_tool/command/ui
+    lib/Clam/Wit.pm           plugin base class (wits are Clam::Wit::<Name>)
+    lib/Clam/Wit/API.pm       what Wits receive: on/register_tool/command/ui
+    lib/Clam/Wit/{File,Loader}.pm  declarative .wit files + deck loading
+    lib/Clam/Wit/Dispatch.pm  inter-wit execution (the $ctx{wits} object)
     lib/Clam/PluginManager.pm discovery + load + error isolation
     lib/Clam/Skills.pm        SKILL.md discovery + prompt section (Pi-style)
     lib/Clam/Compaction.pm    threshold compaction (Pi semantics, §7)
