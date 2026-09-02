@@ -6,7 +6,9 @@
 use strict; use warnings;
 use Test::More;
 use FindBin;
-use lib "$FindBin::RealBin/../lib";   # absolute: test chdirs later
+# Deck tests live in decks/logic/t: the engines are in the deck's own lib/,
+# core (Clam::Store) three levels up.  Absolute paths — test chdirs later.
+use lib "$FindBin::RealBin/../lib", "$FindBin::RealBin/../../../lib";
 use File::Temp qw(tempdir);
 use Clam::Store;
 use Clam::Rules;

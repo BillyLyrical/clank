@@ -6,7 +6,9 @@
 use strict; use warnings;
 use Test::More;
 use FindBin;
-use lib "$FindBin::RealBin/../lib";
+# Deck tests live in decks/logic/t: the engines are in the deck's own lib/,
+# core (Clam::Store etc.) three levels up.  Absolute paths — test chdirs later.
+use lib "$FindBin::RealBin/../lib", "$FindBin::RealBin/../../../lib";
 use File::Temp qw(tempdir);
 use JSON::PP;
 use Clam::Store;
@@ -16,7 +18,7 @@ use Clam::PluginManager;
 use Clam::Driver;
 use Clam::Util qw(jdecode jencode);
 
-my $DECKS = "$FindBin::RealBin/../decks";
+my $DECKS = "$FindBin::RealBin/../../../decks";   # repo root (test was moved from t/)
 my $tmp   = tempdir(CLEANUP => 1);
 local $ENV{HOME} = "$tmp/home";
 delete $ENV{CLAM_WITS_PATH};

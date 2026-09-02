@@ -1,6 +1,9 @@
+about="Formal + heuristic reasoning engines: Datalog proof search, rule DSL with classification and intent rules, SAT solving"
 author="CLAM (ported from clam-old)"
 description="Reasoning primitives: deduction chains, classification rules, SAT solving, induction"
 name="logic"
+namespace=["Clam::Logic", "Clam::Rules"]
+usage="Load when you want deterministic reasoning under the LLM: datalog.query for relational queries over facts+rules, rule.add/rule.run for a persistent shared rule registry (kv 'rules.dsl'), classify_input to tag prompts before the LLM sees them. Ships its own engines (Clam::Logic, Clam::Rules) in lib/ — no CPAN deps."
 version="1.0.0"
 wits=[
   "datalog.query",

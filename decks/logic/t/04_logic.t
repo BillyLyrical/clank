@@ -1,6 +1,9 @@
 use strict; use warnings;
 use Test::More;
-use lib 'lib';
+use FindBin;
+# Deck tests live in decks/logic/t: the engines are in the deck's own lib/,
+# core (if needed) three levels up.  Absolute paths — some tests chdir later.
+use lib "$FindBin::RealBin/../lib", "$FindBin::RealBin/../../../lib";
 use Clam::Logic;
 use Clam::Logic::Solver ();
 use Clam::Logic::Unify qw(unify);

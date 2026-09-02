@@ -7,7 +7,10 @@
 #   * Declarative decks (clam-old format): directories of .wit files — TOML
 #     metadata + embedded Perl source — optionally grouped into subdirs and
 #     described by a deck.toml manifest.  Loaded via Clam::Wit::Loader; each
-#     .wit becomes an LLM-callable tool plus dispatch/bus entries.
+#     .wit becomes an LLM-callable tool plus dispatch/bus entries.  A deck may
+#     also ship its own library modules under <dir>/lib (e.g. the logic deck
+#     ships Clam::Logic/Clam::Rules); lib/ is added to @INC before any .wit in
+#     the deck compiles, since wit sources compile at load time.
 package Clam::PluginManager;
 use strict;
 use warnings;
@@ -110,12 +113,33 @@ sub load_all {
     return @{ $self->{wits} };
 }
 
-# Load one wit directory. Layouts:
-#   <dir>/lib/Clam/Wit/<Name>.pm     (standard; first module wins)
-#   <dir>/<file>.pm                  (single-file; package read from source)
+# Load one wit directory. Layouts (checked in this order):
+#   <dir>/**/*.wit                 declarative deck — even when it also ships
+#                                  lib/ with its own engine modules (logic deck)
+#   <dir>/lib/Clam/Wit/<Name>.pm    module wit (standard; first module wins)
+#   <dir>/<file>.pm                 single-file module wit (package from source)
 sub load_dir {
     my ($self, $dir) = @_;
     (my $name = $dir) =~ s{.*/}{};
+
+    # .wit files make a dir a declarative deck — layout priority is by content,
+    # not by the presence of lib/.  A deck may ship its own library modules
+    # under lib/ (declared via the manifest's namespace field; enforced at load
+    # time — see docs/Wits.md).  Wit sources compile at load time, so lib/ must
+    # be on @INC before any .wit in the deck compiles.
+    if (_has_wit($dir)) {
+        unshift @INC, "$dir/lib" if -d "$dir/lib";
+        require Clam::Wit::Loader;
+        my $api = Clam::Wit::API->new(
+            bus => $self->{bus}, store => $self->{store}, session => $self->{session},
+            ui => $self->{ui}, wit_name => $name,
+        );
+        my @records = @{ Clam::Wit::Loader->load_dir($self, $api, $dir) };
+        push @{ $self->{wits} }, { name => $name, pkg => 'Clam::Wit::File', dir => $dir, wit => undef, api => $api };
+        $self->{apis}{$name} = $api;
+        warn "[wits] deck $name: ", scalar(@records), " wits loaded from $dir\n" if @records && $ENV{CLAM_DEBUG};
+        return;
+    }
 
     my ($pkg, $file);
     if (-d "$dir/lib") {
@@ -138,17 +162,7 @@ sub load_dir {
         unshift @INC, $dir;
         ($file, $pkg) = ("$dir/$pms[0]", _pkg_from_file("$dir/$pms[0]") // "Clam::Wit::$name");
     } else {
-        # Declarative deck: .wit files (clam-old format), flat or grouped.
-        unless (_has_wit($dir)) { push @{ $self->{errors} }, "$dir: no wit modules, .pm files, or .wit files"; return }
-        require Clam::Wit::Loader;
-        my $api = Clam::Wit::API->new(
-            bus => $self->{bus}, store => $self->{store}, session => $self->{session},
-            ui => $self->{ui}, wit_name => $name,
-        );
-        my @records = @{ Clam::Wit::Loader->load_dir($self, $api, $dir) };
-        push @{ $self->{wits} }, { name => $name, pkg => 'Clam::Wit::File', dir => $dir, wit => undef, api => $api };
-        $self->{apis}{$name} = $api;
-        warn "[wits] deck $name: ", scalar(@records), " wits loaded from $dir\n" if @records && $ENV{CLAM_DEBUG};
+        push @{ $self->{errors} }, "$dir: no wit modules, .pm files, or .wit files";
         return;
     }
 

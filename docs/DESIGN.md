@@ -159,6 +159,10 @@ session_before_compact.
 
 ## 8. Datalog Engine (maximally modular)
 
+Ships as the in-tree `logic` deck — `decks/logic/lib/Clam/{Logic,Rules}/*` — an
+installable unit per docs/Wits.md, not part of core. Core never calls these
+engines; only the deck's wits do (via bus topics and tools).
+
 Pure Perl, no deps. One concern per module:
   Clam::Logic::Term         term model; resolve_var($term,$env)
   Clam::Logic::Unify        unify($t1,$t2,$env) -> env|undef
