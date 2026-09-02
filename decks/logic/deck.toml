@@ -3,6 +3,7 @@ description="Reasoning primitives: deduction chains, classification rules, SAT s
 name="logic"
 version="1.0.0"
 wits=[
+  "datalog.query",
   "deduction.apply",
   "deduction.axiom",
   "deduction.certainty",
@@ -27,12 +28,14 @@ wits=[
   "induction.therefore",
   "induction.unless",
   "induction.xor",
+  "rule.add",
   "rule.classify_api",
   "rule.classify_auth",
   "rule.classify_build",
   "rule.classify_code",
   "rule.classify_db",
   "rule.classify_fix",
+  "rule.classify_input",
   "rule.classify_perl",
   "rule.classify_query",
   "rule.classify_test",
@@ -46,6 +49,7 @@ wits=[
   "rule.intent_fix",
   "rule.intent_refactor",
   "rule.intent_review",
+  "rule.run",
   "rule.validate_agents_principles",
   "sat.csp",
   "sat.encode",

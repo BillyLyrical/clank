@@ -141,6 +141,10 @@ sub _load_one {
                 return unless defined $result;
                 my @pub = @{ $meta->{publishes} // [] };
                 $bus->publish(@pub ? $pub[0] : "${topic}.result", { %$result, _wit => $name });
+                # Return the wit's own result (not the inner publish envelope)
+                # so hook consumers — Loop input/before_agent_start handlers —
+                # see e.g. { action => 'transform', ... } from declarative wits.
+                return $result;
             }, name => "wit.$name.$topic");
         }
     }

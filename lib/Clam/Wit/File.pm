@@ -72,7 +72,11 @@ sub parse_file {
 # Not a general TOML implementation — enough for every file in the decks.
 # ---------------------------------------------------------------------------
 sub parse_toml {
-    my ($text, %opts) = @_;
+    # Accepts both function and method call syntax: a leading package name is
+    # dropped (the only realistic TOML text starting with it would be nonsense).
+    my @a = @_;
+    shift @a if @a && !ref $a[0] && $a[0] =~ /^Clam::Wit::File\b/;
+    my ($text, %opts) = @a;
     my $where = $opts{path} // 'toml';
     my (%data, $table);
     $table = \%data;

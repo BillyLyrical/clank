@@ -171,8 +171,9 @@ Pure Perl, no deps. One concern per module:
                               parent(alice,bob).
                               gp(X,Y) :- parent(X,Z), parent(Z,Y).
   Clam::Logic               facade: parse($text)->kb; query($kb,$goal)
-Wit layer (separate tree): wit `datalog` exposes tool `logic_query`
-and bus agent on task.query_logic -> result.query_logic.
+Wit layer (decks/logic/datalog/query.wit): tool `datalog.query`
+{ program?, goal, facts? } -> { ok, solutions }; bus agent on
+task.query_logic -> result.query_logic.
 
 Sister subsystem — Clam::Rules (heuristic rules, ported from clam-old):
   Rule      pattern/fuzzy/fact/inference/production; weight + priority + guard
@@ -183,10 +184,22 @@ Sister subsystem — Clam::Rules (heuristic rules, ported from clam-old):
             bare string = literal); Parser: Janet-style parse/classify/transform
   DecisionTree / FSM / BehaviorTree — rule composition structures
 
+Wit layer (decks/logic/rule/{add,run,classify_input}.wit): the rules-first
+policy. `rule.add` appends validated DSL to a shared registry in kv under
+'rules.dsl' (knowledge: visible to every agent on this DB; the crystallization
+seam — LLM- or user-authored rules outlive the session). `rule.run` classifies
+text against registry + optional inline DSL, and is a bus agent on
+task.classify -> result.classified. `classify_input` subscribes to 'input' and,
+on a match, annotates the prompt ([rules: rule=X domain=Y] ...) before the LLM
+sees it and publishes input.classified — inert until rules exist, transform-only
+(never hijacks the conversation). Loader note: declarative bus agents return
+their own result (not the inner publish envelope) to hook consumers, so .wit
+files can participate in Loop hooks like module wits.
+
 Division of labor: Clam::Logic answers "what follows necessarily" (formal),
 Clam::Rules answers "what matches, and how confidently" (heuristic). They
-compose at the wit layer. Rule DEFINITIONS persist as wits (the existing
-.wit/deck system); only FACTS live in SQLite. Closures are session-scoped;
+compose at the wit layer. Rule DEFINITIONS persist as wits or in the rules.dsl
+registry; only FACTS live in SQLite's facts table. Closures are session-scoped;
 a DB-stored rule-definition table is a possible later extension.
 
 ## 9. Wits Ecosystem (optional installs, separate tree)
@@ -200,7 +213,8 @@ Install: `clam wits install <dir|git-url>` -> ~/.clam/wits/<name>
   3. ~/.clam/wits/ (user)          4. -w/--wit CLI flags
 A broken wit fails to load with a warning; the harness still runs.
 
-Planned wits: datalog, rag (FTS5 index+search+context injection),
+Planned wits (separate tree): rag (FTS5 index+search+context injection),
 git_guardrails (tool_call blocker for dangerous commands),
 perl_eval (Safe-compartment code execution), wisdom/perl_style
-(context injectors), hello (example).
+(context injectors), hello (example). In-repo decks: logic (incl. datalog.query,
+rule.add/rule.run/classify_input — see section 8), critic, git, fs, search.

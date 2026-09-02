@@ -1,0 +1,77 @@
+#!wit/toml
+author="CLAM"
+description="Run the shared ruleset (rules.dsl in this DB's kv store) against text: pattern/fuzzy classification with confidence scores. Also a bus agent — other agents can request classifications via task.classify and receive result.classified."
+enabled=true
+license="Artistic-2.0"
+name="rule_run"
+notes="Rules come from the shared registry (see rule.add); inline dsl in the input is appended for one-off rules.\nstrategy first (default): highest-priority match wins, reported with its confidence.\nstrategy all: every matching rule runs; each result carries _confidence/_rule.\nProduction-rule chaining over the fact store stays a Clam::Rules API concern until the DSL grows fact conditions.\n"
+priority=10
+timeout=30
+type="rule"
+usage="Input: { text: str, strategy?: first|all, dsl?: str }\nOutput: first -> { ok: 1, matched: 0|1, rule?, confidence?, result? }\n        all  -> { ok: 1, matches: [{ rule, confidence, result }] }\n"
+version="1.0.0"
+triggers=[
+  "rule.run",
+]
+subscribes=[
+  "task.classify",
+]
+publishes=[
+  "result.classified",
+]
+
+[metadata]
+category="logic"
+complexity="simple"
+safety="read_only"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+use Clam::Rules;
+
+my $store = $ctx{store};
+return { ok => 0, error => 'no store available' } unless $store;
+
+# Shared registry + optional inline DSL.
+my $reg = $store->kv_get('rules.dsl');
+$reg = {} unless ref $reg eq 'HASH';
+my $dsl = ($reg->{dsl} // '');
+$dsl .= "\n$input->{dsl}" if defined $input->{dsl} && length "$input->{dsl}";
+
+my $text     = $input->{text} // '';
+my $strategy = $input->{strategy} // 'first';
+$strategy    = 'first' unless $strategy =~ /^(?:first|all)$/;
+
+unless (length $dsl) {
+    return { ok => 1, matched => 0, matches => [], note => 'no rules in registry' };
+}
+
+my $rules = eval { Clam::Rules->parse($dsl) };
+return { ok => 0, error => "DSL parse failed: $@" } if $@;
+
+my $engine = Clam::Rules::Engine->new(store => $store, strategy => $strategy);
+$engine->load($rules);
+
+if ($strategy eq 'all') {
+    my @matches;
+    for my $m (@{ $engine->execute({ text => $text }) // [] }) {
+        next unless ref $m eq 'HASH';
+        my %r = %$m;
+        my ($conf, $rule) = (delete $r{_confidence}, delete $r{_rule});
+        push @matches, { rule => $rule, confidence => $conf, result => \%r };
+    }
+    return { ok => 1, matched => scalar(@matches) ? 1 : 0, matches => \@matches };
+}
+
+my $rule = $engine->find({ text => $text });
+unless ($rule) {
+    return { ok => 1, matched => 0 };
+}
+my $res = $rule->execute({ text => $text }) // {};
+return {
+    ok         => 1,
+    matched    => 1,
+    rule       => $rule->name,
+    confidence => $rule->test({ text => $text }),
+    result     => ref $res eq 'HASH' ? $res : { value => $res },
+};
+PERL

@@ -88,11 +88,11 @@ is(scalar(@wits), 5, 'all five decks discovered and loaded');
 is_deeply($pm->errors, [], 'no load errors across all decks');
 
 my %tools = map { $_->{name} => $_ } $pm->all_tools();
-my %count = (logic => 46, critic => 12, git => 10, fs => 18, search => 9);   # sat.solve disabled in source
-is(scalar(keys %tools), 95, '95 tools registered (96 wits minus disabled sat.solve)');
+my %count = (logic => 50, critic => 12, git => 10, fs => 18, search => 9);   # sat.solve disabled in source
+is(scalar(keys %tools), 99, '99 tools registered (100 wits minus disabled sat.solve)');
 
 for my $t (qw(deduction.axiom deduction.deduce rule.greet induction.theorem
-              critic.quality git.status fs.read search.local)) {
+              datalog.query rule.add rule.run critic.quality git.status fs.read search.local)) {
     ok($tools{$t}, "tool present: $t");
 }
 ok(!$tools{'sat.solve'}, 'disabled sat.solve not registered');
