@@ -5,6 +5,7 @@ use strict; use warnings;
 my %KNOWN = (
     lmstudio        => 'Clam::Provider::LMStudio',
     'openai-compat' => 'Clam::Provider::OpenAICompat',
+    mock            => 'Clam::Provider::Mock',
 );
 
 sub known { sort keys %KNOWN; }

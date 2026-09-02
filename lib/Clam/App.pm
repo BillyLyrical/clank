@@ -23,7 +23,9 @@ sub new {
     }, $class;
     $app->{store}    = Clam::Store->new(path => $o{db} // "$ENV{HOME}/.clam/clam.db");
     $app->{bus}      = Clam::Bus->new(store => $app->{store}, sender => 'app');
-    $app->{provider} = Clam::Providers->create(
+    # provider: a name (registry lookup) or a ready-made provider object — the
+    # latter is how tests and drivers inject scripted/mock providers.
+    $app->{provider} = ref($o{provider}) ? $o{provider} : Clam::Providers->create(
         name     => $o{provider},
         model    => $o{model},
         base_url => $o{base_url},

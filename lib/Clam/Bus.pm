@@ -19,13 +19,21 @@ sub store  { $_[0]->{store} }
 sub sender { $_[0]->{sender} }
 
 # Glob-style topic match: 'tool.*' matches 'tool.call.bash'; '*' matches all.
-sub _match {
+# Public so journal queries (Clam::Driver, clamd) can filter with the same
+# semantics as subscriptions — SQLite LIKE does not understand '*'.
+sub topic_matches {
     my ($pattern, $topic) = @_;
     return 1 if $pattern eq '*';
     my $re = quotemeta($pattern);
     $re =~ s{\\\*}{[^.]*}g;      # * -> within one segment
     $re =~ s{\\\.}{\\.}g;
     return $topic =~ /\A$re\z/;
+}
+
+# Glob-style topic match: 'tool.*' matches 'tool.call.bash'; '*' matches all.
+sub _match {
+    my ($pattern, $topic) = @_;
+    return topic_matches($pattern, $topic);
 }
 
 # Subscribe to a topic pattern. Returns sub id for unsubscribe.

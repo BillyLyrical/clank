@@ -38,6 +38,7 @@ first, so a crash mid-task can be inspected/resumed from the log.
 ## 3. Module Map (main tree)
 
     bin/clam                  CLI + Term::ReadLine REPL (no TUI)
+    bin/clamd                 NDJSON daemon front-end for AI harnesses/scripts (docs/DRIVER.md)
     lib/Clam.pm               version, facade
     lib/Clam/Util.pm          uuid4, now_ms, json, truncate_head/tail, sizes
     lib/Clam/Store.pm         DBI/SQLite: sessions, messages(tree), events, kv, rag+FTS5
@@ -47,6 +48,8 @@ first, so a crash mid-task can be inspected/resumed from the log.
     lib/Clam/Provider.pm      provider base class (stream_chat iterator)
     lib/Clam/Provider/OpenAICompat.pm   SSE chat-completions client
     lib/Clam/Provider/LMStudio.pm       OpenAICompat @ localhost:1234/v1
+    lib/Clam/Provider/Mock.pm           deterministic offline provider (tests/CI)
+    lib/Clam/Driver.pm                  programmatic multi-query session wrapper (docs/DRIVER.md)
     lib/Clam/Providers.pm     registry + config/key resolution (§6)
     lib/Clam/LLM.pm           facade used by Loop (model, stream, complete)
     lib/Clam/Tool.pm          tool base class (schema + execute)

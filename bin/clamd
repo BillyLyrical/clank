@@ -1,0 +1,222 @@
+#!/usr/bin/env perl
+# clamd — NDJSON front-end for Clam::Driver: drive a persistent, multi-query
+# Clam session from an AI harness or any script.
+#
+# Transports (pick one; stdio is the default and the most portable):
+#   clamd --stdio                 # newline-delimited JSON on stdin/stdout
+#   clamd --socket /tmp/clamd.sock  # same protocol on a UNIX socket
+#
+# Protocol — one JSON object per line, every response echoes the request id:
+#   -> {"id":1,"command":"ping"}
+#   <- {"id":1,"ok":1,"pong":1}
+#   -> {"id":2,"prompt":"list the files","timeout":60}
+#   <- {"id":2,"ok":1,"response":"...","turns":2,"tools":[...],"events":[...]}
+#   -> {"id":3,"command":"session_info"}
+#   <- {"id":3,"ok":1,"session_id":"...","messages":5,...}
+#   -> {"id":4,"command":"events","topic":"tool_*","limit":50}
+#   -> {"id":5,"command":"tools"}
+#   -> {"id":6,"command":"shutdown"}
+#   <- {"id":6,"ok":1,"bye":1}        (process then exits 0)
+#
+# Teardown guarantees (the old clam-sock leaked zombies):
+#   * stdio mode: EOF on stdin — i.e. the parent closing the pipe or dying —
+#     exits the process cleanly and promptly. No daemon outlives its driver.
+#   * explicit shutdown command, SIGTERM/SIGINT all take the same path.
+#   * socket mode unlinks its socket file on every exit path.
+#
+# Only protocol lines go to stdout; everything else goes to stderr.
+use strict;
+use warnings;
+use FindBin;
+use lib "$FindBin::RealBin/../lib";
+use Getopt::Long qw(:config no_ignore_case bundling);
+use IO::Socket::UNIX;
+use IO::Select;
+use Clam::Driver;
+use Clam::Util qw(jencode jdecode);
+
+sub _usage {
+    my ($code) = @_;
+    print STDERR "try: clamd --help\n" unless $code == 0;
+    return $code;
+}
+
+my %o;
+$o{wit_paths} = [];
+GetOptions(
+    'provider=s' => \$o{provider},
+    'model=s'    => \$o{model},
+    'base_url=s' => \$o{base_url},
+    'api_key=s'  => \$o{api_key},
+    'db=s'       => \$o{db},
+    'workdir=s'  => \$o{workdir},
+    'resume=s'   => \$o{resume},
+    'timeout=i'  => \$o{timeout},
+    'wit|w+'     => $o{wit_paths},
+    'socket=s'   => \$o{socket},
+    'stdio'      => \$o{stdio},
+    'help'       => \$o{help},
+) or exit _usage(2);
+
+if ($o{help}) { print <<'USAGE'; exit 0; }
+clamd — NDJSON front-end for Clam::Driver (multi-query Clam sessions).
+
+Options:
+  --provider=NAME   provider name (default lmstudio; 'mock' = offline echo)
+  --model=NAME      model name
+  --base_url=URL    OpenAI-compatible endpoint
+  --api_key=KEY     API key (or CLAM_API_KEY env / ~/.clam/config.json)
+  --db=PATH         SQLite path (default ~/.clam/clam.db; ':memory:' for ephemerality)
+  --workdir=DIR     working directory the agent operates in
+  --resume=ID       continue an existing session from --db
+  --timeout=N       default per-prompt timeout in seconds
+  -w, --wit DIR     extra wit/deck path (repeatable)
+  --socket PATH     listen on a UNIX socket instead of stdio
+  --stdio           force stdio transport (the default without --socket)
+
+Protocol: newline-delimited JSON; see the header comment for commands.
+USAGE
+
+my $driver = eval {
+    Clam::Driver->new(
+        provider  => $o{provider},
+        model     => $o{model},
+        base_url  => $o{base_url},
+        api_key   => $o{api_key},
+        db        => $o{db},
+        workdir   => $o{workdir},
+        wit_paths => $o{wit_paths},
+    )->start($o{resume} ? (resume => $o{resume}) : ());
+};
+if ($@) {
+    print STDERR "clamd: failed to start session: $@";
+    exit 1;
+}
+
+$| = 1;   # autoflush stdout — parents read line-by-line
+
+my $socket_path = $o{socket};
+unlink $socket_path if $socket_path && -e $socket_path;   # stale socket from a crashed run
+
+sub cleanup {
+    unlink $socket_path if $socket_path && -e $socket_path;
+    $driver->close;
+}
+my $SHUTTING_DOWN = 0;   # set by handle_request on the shutdown command
+$SIG{TERM} = $SIG{INT} = sub { cleanup(); exit 0 };
+
+# --- request dispatch ---------------------------------------------------------
+# Returns ($line, $exit_after): the response line to write (possibly empty for
+# blank input) and whether the process must exit right after writing it.
+# Never dies: protocol errors come back as ok=0 JSON.
+
+sub handle_request {
+    my ($raw) = @_;
+    chomp $raw;
+    return ('', 0) unless length $raw;
+
+    my $msg  = eval { jdecode($raw) };
+    my $resp;
+    if ($@ || ref $msg ne 'HASH') {
+        $resp = { ok => 0, error => 'invalid JSON' };
+    } else {
+        my $cmd = $msg->{command} // ($msg->{prompt} ? 'prompt' : undef);
+
+        if (!defined $cmd) {
+            $resp = { id => $msg->{id}, ok => 0, error => 'unknown or missing command' };
+        } elsif ($cmd eq 'ping') {
+            $resp = { id => $msg->{id}, ok => 1, pong => 1 };
+        } elsif ($cmd eq 'prompt' || $cmd eq 'input') {
+            my $text = $msg->{prompt} // $msg->{input};
+            if (!defined $text || !length($text)) {
+                $resp = { id => $msg->{id}, ok => 0, error => 'no prompt text' };
+            } else {
+                my %ask;
+                $ask{timeout} = $msg->{timeout} // $o{timeout} if defined ($msg->{timeout} // $o{timeout});
+                $resp = $driver->ask($text, %ask);
+                $resp->{id} = $msg->{id};
+            }
+        } elsif ($cmd eq 'session_info') {
+            my $info = eval { $driver->info() };
+            $resp = $@ ? { id => $msg->{id}, ok => 0, error => "$@" } : { id => $msg->{id}, %$info };
+        } elsif ($cmd eq 'events') {
+            # driver->events returns an ARRAYREF — assigning it to a list would
+            # wrap it as one element ([[]]) instead of dereferencing.
+            my $evs = eval { $driver->events(topic => $msg->{topic}, limit => $msg->{limit} // 200) };
+            $resp = $@ ? { id => $msg->{id}, ok => 0, error => "$@" } : { id => $msg->{id}, ok => 1, events => $evs };
+        } elsif ($cmd eq 'tools') {
+            my @wits    = eval { $driver->wit_names };
+            my $skipped = eval { $driver->skipped_wits };
+            $resp = {
+                id => $msg->{id}, ok => 1,
+                tools   => [ sort $driver->tool_names ],
+                wits    => \@wits,
+                skipped => (ref($skipped) eq 'ARRAY') ? $skipped : [],
+            };
+        } elsif ($cmd eq 'shutdown') {
+            print STDERR "clamd: shutdown requested\n";
+            my $out = jencode({ id => $msg->{id}, ok => 1, bye => 1 }) . "\n";
+            cleanup();
+            $SHUTTING_DOWN = 1;
+            return ($out, 1);   # the process must not survive its own goodbye
+        } else {
+            $resp = { id => $msg->{id}, ok => 0, error => "unknown command '$cmd'" };
+        }
+    }
+
+    my $out = eval { jencode($resp) };
+    if ($@) {   # a non-serializable value must not kill the loop
+        $out = jencode({ id => (ref $msg eq 'HASH' ? $msg->{id} : undef), ok => 0, error => 'internal: result not JSON-serializable' });
+    }
+    return ($out . "\n", 0);
+}
+
+# --- transports ----------------------------------------------------------------
+
+if ($socket_path) {
+    my $server = IO::Socket::UNIX->new(
+        Local => $socket_path, Type => SOCK_STREAM, Listen => 5,
+    ) or do { print STDERR "clamd: cannot create socket $socket_path: $!\n"; exit 1 };
+    chmod 0600, $socket_path;
+    print STDERR "clamd: listening on $socket_path (session ", $driver->session_id, ")\n";
+
+    my $select = IO::Select->new($server);
+    my %buffers;
+    while (!$SHUTTING_DOWN && (my @ready = $select->can_read)) {
+        for my $fh (@ready) {
+            if ($fh == $server) {
+                my $client = $server->accept or next;
+                $client->autoflush(1);
+                $select->add($client);
+                $buffers{$client} = '';
+            } else {
+                my $n = sysread($fh, my $data, 65536);
+                if ($n) {
+                    $buffers{$fh} .= $data;
+                    while ($buffers{$fh} =~ s/^(.*\n)//) {
+                        my ($out, $exit_after) = handle_request($1);
+                        print {$fh} $out if length $out;
+                        last if $exit_after;
+                    }
+                } else {
+                    $select->remove($fh);
+                    delete $buffers{$fh};
+                    $fh->close;
+                }
+            }
+        }
+    }
+    cleanup();
+} else {
+    # stdio: the parent's pipe IS the lifecycle.  EOF (parent closed or died)
+    # exits cleanly — this is what prevents zombie daemons.
+    print STDERR "clamd: stdio transport (session ", $driver->session_id, ")\n";
+    while (defined(my $line = <STDIN>)) {
+        my ($out, $exit_after) = handle_request($line);
+        print STDOUT $out if length $out;
+        last if $exit_after;
+    }
+    cleanup();
+}
+
+exit 0;
