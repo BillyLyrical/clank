@@ -64,6 +64,18 @@ CREATE TABLE IF NOT EXISTS kv (
   key TEXT PRIMARY KEY,
   value TEXT
 )});
+    # Facts: shared blackboard state for Clam::Rules. One row per asserted fact;
+    # attributes is a JSON hashref so every agent on this DB reads/writes the
+    # same structured space (the Minsky blackboard).
+$db->do(qq{
+CREATE TABLE IF NOT EXISTS facts (
+  id TEXT PRIMARY KEY,
+  type TEXT NOT NULL,
+  attributes TEXT,          -- JSON: hashref of fact attributes
+  asserted_by TEXT,         -- who/what asserted it (rule name, agent, 'external')
+  created_at INTEGER
+)});
+$db->do(qq{CREATE INDEX IF NOT EXISTS idx_facts_type ON facts(type)});
     # RAG: documents + FTS5 index (guarded; FTS5 may be absent in old builds)
     my $has_fts = eval {
         $db->do("CREATE VIRTUAL TABLE IF NOT EXISTS _fts_probe USING fts5(x)");
@@ -267,6 +279,75 @@ sub kv_get {
     return undef unless defined $v;
     my $d = jdecode($v);
     return defined $d ? $d : $v;   # not JSON -> raw string
+}
+
+# --- facts (Clam::Rules blackboard) ----------------------------------------
+# One row per asserted fact. attributes is stored as a JSON hashref so every
+# agent/process on this DB shares one structured space. The store is the source
+# of truth; Clam::Rules::Engine keeps an in-memory working set over it.
+
+sub assert_fact {
+    my ($self, $type, $attributes, $meta) = @_;
+    $attributes //= {};
+    $meta       //= {};
+    my $id = uuid4();
+    $self->{dbh}->prepare(
+        'INSERT INTO facts (id,type,attributes,asserted_by,created_at) VALUES (?,?,?,?,?)'
+    )->execute($id, $type, jencode($attributes),
+               $meta->{asserted_by} // 'external', now_ms());
+    return $id;
+}
+
+sub retract_fact {
+    my ($self, $fact_id) = @_;
+    $self->{dbh}->do('DELETE FROM facts WHERE id=?', undef, $fact_id);
+    return 1;
+}
+
+# Query facts by type (all types if omitted). Returns decoded rows (arrayref of
+# {id,type,attributes,asserted_by,created_at}).
+sub query_facts {
+    my ($self, $type) = @_;
+    my ($sql, @b);
+    if (defined $type) {
+        $sql = 'SELECT * FROM facts WHERE type=? ORDER BY created_at';
+        @b   = ($type);
+    } else {
+        $sql = 'SELECT * FROM facts ORDER BY created_at';
+    }
+    my $st = $self->{dbh}->prepare($sql);
+    $st->execute(@b);
+    return [ map { _decode_fact($_) } @{ $st->fetchall_arrayref({}) } ];
+}
+
+sub all_facts { $_[0]->query_facts() }
+
+sub fact_count {
+    my ($self, $type) = @_;
+    my ($sql, @b);
+    if (defined $type) {
+        $sql = 'SELECT COUNT(*) FROM facts WHERE type=?';
+        @b   = ($type);
+    } else {
+        $sql = 'SELECT COUNT(*) FROM facts';
+    }
+    my $st = $self->{dbh}->prepare($sql);
+    $st->execute(@b);
+    return $st->fetchrow_array;
+}
+
+sub clear_facts {
+    my ($self) = @_;
+    $self->{dbh}->do('DELETE FROM facts');
+    return 1;
+}
+
+sub _decode_fact {
+    my ($row) = @_;
+    my %h = %$row;
+    $h{attributes} = (defined $row->{attributes} && length $row->{attributes})
+        ? jdecode($row->{attributes}) : {};
+    return \%h;
 }
 
 # --- rag -------------------------------------------------------------------

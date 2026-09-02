@@ -64,6 +64,11 @@ first, so a crash mid-task can be inspected/resumed from the log.
     lib/Clam/Compaction.pm    threshold compaction (Pi semantics, §7)
     lib/Clam/REPL.pm          interactive loop, slash commands, streaming print
     lib/Clam/Logic/*.pm       Datalog engine (§8)
+    lib/Clam/Rules.pm         rule-engine facade (parse DSL, build engines)
+    lib/Clam/Rules/{Rule,Engine}.pm   pattern/fuzzy/production rules + strategies;
+                                      facts in the shared SQLite store (blackboard)
+    lib/Clam/Rules/{DSL,Parser}.pm    "when/then" rule syntax; Janet-style parsing
+    lib/Clam/Rules/{DecisionTree,FSM,BehaviorTree}.pm  rule composition structures
 
 ## 4. Agent Loop (port of pi agent-loop.ts runLoop)
 
@@ -166,6 +171,21 @@ Pure Perl, no deps. One concern per module:
   Clam::Logic               facade: parse($text)->kb; query($kb,$goal)
 Wit layer (separate tree): wit `datalog` exposes tool `logic_query`
 and bus agent on task.query_logic -> result.query_logic.
+
+Sister subsystem — Clam::Rules (heuristic rules, ported from clam-old):
+  Rule      pattern/fuzzy/fact/inference/production; weight + priority + guard
+  Engine    strategies first|random|probabilistic|all + forward chaining;
+            facts live in the shared SQLite `facts` table — the blackboard
+            every agent on this DB reads/writes (in-memory working set over it)
+  DSL       "rule X / when <pat> / then ..." -> Rule objects (/.../ = regex,
+            bare string = literal); Parser: Janet-style parse/classify/transform
+  DecisionTree / FSM / BehaviorTree — rule composition structures
+
+Division of labor: Clam::Logic answers "what follows necessarily" (formal),
+Clam::Rules answers "what matches, and how confidently" (heuristic). They
+compose at the wit layer. Rule DEFINITIONS persist as wits (the existing
+.wit/deck system); only FACTS live in SQLite. Closures are session-scoped;
+a DB-stored rule-definition table is a possible later extension.
 
 ## 9. Wits Ecosystem (optional installs, separate tree)
 
