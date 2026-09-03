@@ -28,8 +28,10 @@ sub write_file {
 
 sub deck_fixture {
     my ($dir, %o) = @_;
+    (my $base = $dir) =~ s{.*/}{};
+    my $ver = $o{version} // '0.1.0';
     write_file("$dir/deck.toml",
-        "name=\"$dir\"\nversion=\"0.1.0\"\nabout=\"fixture: $dir\"\nusage=\"Test fixture.\"\n"
+        "name=\"$base\"\nversion=\"$ver\"\nabout=\"fixture: $base\"\nusage=\"Test fixture.\"\n"
       . (defined $o{requires_bin} ? "requires_bin=[\"$o{requires_bin}\"]\n" : '')
       . "wits=[\"g.one\"]\n");
     write_file("$dir/g/one.wit", "name=one\ndescription=x\nsource = <<'PERL'\nreturn { ok => 1 };\nPERL\n");
@@ -61,5 +63,52 @@ deck_fixture("depbin", requires_bin => "definitely-not-a-real-bin-clamtest15");
 isnt($? >> 8, 0, 'missing binary aborts install');
 like(join('', @out), qr/missing binary definitely-not-a-real-bin-clamtest15 \(fix: install/, 'actionable fix message');
 ok(!-d "$ENV{CLAM_HOME}/wits/depbin", 'unit NOT copied when a dep is missing');
+
+# --- manifest name must match directory basename (unit identity) -------------
+write_file("mismatch/deck.toml", "name=\"other\"\nversion=\"0.1.0\"\nabout=\"x\"\nusage=\"y\"\nwits=[\"g.one\"]\n");
+write_file("mismatch/g/one.wit", "name=one\ndescription=x\nsource = <<'PERL'\nreturn { ok => 1 };\nPERL\n");
+@out = `"$^X" "$bin" wits install "mismatch" 2>&1`;
+isnt($? >> 8, 0, 'manifest name != directory basename refused');
+like(join('', @out), qr/does not match directory name/, 'identity mismatch named clearly');
+
+# --- lockfile (docs/Wits.md §6) ----------------------------------------------
+require Clam::WitLock;
+my $lock = Clam::WitLock->load();
+ok(exists $lock->{good}, 'install recorded a lock entry');
+is($lock->{good}{version}, '0.1.0', 'lock records the version');
+is($lock->{good}{tested}, 1, 'lock records that tests ran and passed');
+
+# --- upgrade: higher version from a differently-located source ---------------
+deck_fixture("$tmp/up/good", version => "0.2.0");
+@out = `"$^X" "$bin" wits upgrade "$tmp/up/good" 2>&1`;
+is($? >> 8, 0, "upgrade to higher version exits 0: " . join('', @out));
+like(join('', @out), qr/upgraded 'good' v0\.1\.0 -> v0\.2\.0/, 'upgrade reports old -> new');
+$lock = Clam::WitLock->load();
+is($lock->{good}{version}, '0.2.0', 'lock updated after upgrade');
+
+# --- downgrade refused without --force, allowed with it -----------------------
+deck_fixture("$tmp/dn/good", version => "0.1.5");
+@out = `"$^X" "$bin" wits upgrade "$tmp/dn/good" 2>&1`;
+isnt($? >> 8, 0, 'downgrade refused without --force');
+like(join('', @out), qr/refusing downgrade: installed v0\.2\.0 > new v0\.1\.5/, 'refusal names both versions');
+$lock = Clam::WitLock->load();
+is($lock->{good}{version}, '0.2.0', 'installed version untouched by refused downgrade');
+
+@out = `"$^X" "$bin" wits upgrade "$tmp/dn/good" --force 2>&1`;
+is($? >> 8, 0, "downgrade with --force exits 0: " . join('', @out));
+$lock = Clam::WitLock->load();
+is($lock->{good}{version}, '0.1.5', 'forced downgrade recorded');
+
+# --- upgrade of a unit that was never installed --------------------------------
+deck_fixture("$tmp/ghost/good2", version => "1.0.0");
+@out = `"$^X" "$bin" wits upgrade "$tmp/ghost/good2" 2>&1`;
+isnt($? >> 8, 0, 'upgrade of uninstalled unit fails');
+like(join('', @out), qr/not installed: good2/, 'tells the user to install first');
+
+# --- uninstall removes the lock entry ------------------------------------------
+@out = `"$^X" "$bin" wits uninstall "good" 2>&1`;
+is($? >> 8, 0, "uninstall exits 0: " . join('', @out));
+$lock = Clam::WitLock->load();
+ok(!exists $lock->{good}, 'lock entry removed on uninstall');
 
 done_testing();
