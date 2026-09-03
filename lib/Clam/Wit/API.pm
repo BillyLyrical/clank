@@ -13,6 +13,7 @@ sub new {
         wit_name  => $o{wit_name} // 'anon',
         tools     => [],
         commands  => {},
+        subs      => [],    # tracked bus subscriptions: [{id, event}] (docs/Wits.md §5.2)
     }, $class;
 }
 
@@ -26,14 +27,41 @@ sub wit_name   { $_[0]->{wit_name} }
 # Handler receives the full event hashref {id, correlation_id, topic, sender, payload}.
 # Return a result hashref (per-topic reducer rules apply) or undef.
 # Throwing handlers are caught by Bus and journaled under wit.error.
+# The subscription id is tracked so disable can run its reverse operation.
 sub on {
     my ($self, $event, $handler) = @_;
     die "api->on: handler must be a coderef" unless ref $handler eq 'CODE';
-    $self->{bus}->subscribe($event, sub {
+    my $id = $self->{bus}->subscribe($event, sub {
         my ($ev) = @_;
         return $handler->({ %$ev });
     }, name => "wit:" . $self->{wit_name});
+    push @{ $self->{subs} }, { id => $id, event => $event };
+    return $id;
 }
+
+# Track a subscription made outside on() — the declarative loader subscribes
+# directly to the bus for its bus-agent wits and reports each id here.
+sub track_sub {
+    my ($self, $id, $event) = @_;
+    push @{ $self->{subs} }, { id => $id, event => $event // '' };
+    return $id;
+}
+
+# Run every reverse operation: unsubscribe all tracked subscriptions and clear
+# the list.  Returns how many were removed.  Tools/commands are not touched —
+# they live on this api object and die with it (enable re-registers fresh).
+sub unsubscribe_all {
+    my ($self) = @_;
+    my $n = 0;
+    for my $s (@{ $self->{subs} }) {
+        $self->{bus}->unsubscribe($s->{id}) if $self->{bus};
+        $n++;
+    }
+    @{ $self->{subs} } = ();
+    return $n;
+}
+
+sub subs { $_[0]->{subs} }
 
 # Register a tool callable by the LLM (Pi: api.registerTool).
 sub register_tool {

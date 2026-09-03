@@ -127,7 +127,7 @@ sub _load_one {
     my $bus = $pm->{bus};
     if ($bus) {
         for my $topic (@{ $meta->{subscribes} // [] }) {
-            $bus->subscribe($topic, sub {
+            my $id = $bus->subscribe($topic, sub {
                 my ($ev) = @_;
                 # Recursion cap: a result topic can match the subscription
                 # pattern (e.g. search.* vs search.results).  The old Bus
@@ -146,6 +146,8 @@ sub _load_one {
                 # see e.g. { action => 'transform', ... } from declarative wits.
                 return $result;
             }, name => "wit.$name.$topic");
+            # Revertible effect (docs/Wits.md §5.2): disable runs the reverse.
+            $api->track_sub($id, $topic);
         }
     }
     return $rec;

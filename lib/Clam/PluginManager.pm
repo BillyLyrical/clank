@@ -205,7 +205,7 @@ sub load_dir {
             ui => $self->{ui}, wit_name => $name,
         );
         my @records = @{ Clam::Wit::Loader->load_dir($self, $api, $dir) };
-        push @{ $self->{wits} }, { name => $name, pkg => 'Clam::Wit::File', dir => $dir, wit => undef, api => $api, meta => $meta };
+        push @{ $self->{wits} }, { name => $name, pkg => 'Clam::Wit::File', dir => $dir, wit => undef, api => $api, meta => $meta, state => 'active' };
         $self->{apis}{$name} = $api;
         warn "[wits] deck $name: ", scalar(@records), " wits loaded from $dir\n" if @records && $ENV{CLAM_DEBUG};
         return;
@@ -283,7 +283,7 @@ sub load_dir {
         }
     }
 
-    my $rec = { name => $name, pkg => $pkg, dir => $dir, wit => $wit, api => $api, meta => $meta };
+    my $rec = { name => $name, pkg => $pkg, dir => $dir, wit => $wit, api => $api, meta => $meta, state => 'active' };
     push @{ $self->{wits} }, $rec;
     $self->{apis}{$name} = $api;
     return $rec;
@@ -302,23 +302,87 @@ sub dwits     { $_[0]->{dwits} }            # name/trigger -> declarative wit re
 sub dispatch  { $_[0]->{dispatch} }         # Clam::Wit::Dispatch (the $ctx{wits} object)
 sub api_for   { $_[0]->{apis}{ $_[1] } }
 
-# All wit-registered tools as Clam::Tool objects.
+# All wit-registered tools as Clam::Tool objects (disabled wits excluded).
 sub all_tools {
     my ($self) = @_;
     require Clam::Tool;
-    return map { Clam::Tool->new(%$_) } map { @{ $_->{api}->registered_tools } } @{ $self->{wits} };
+    return map { Clam::Tool->new(%$_) }
+           map { @{ $_->{api}->registered_tools } }
+           grep { ($_->{state} // 'active') eq 'active' }
+           @{ $self->{wits} };
 }
 
-# Merged slash commands: name -> {description, handler, wit}.
+# Merged slash commands: name -> {description, handler, wit} (disabled wits excluded).
 sub all_commands {
     my ($self) = @_;
     my %cmds;
     for my $rec (@{ $self->{wits} }) {
+        next unless ($rec->{state} // 'active') eq 'active';
         for my $name (keys %{ $rec->{api}->registered_commands }) {
             $cmds{$name} = { %{ $rec->{api}->registered_commands->{$name} }, wit => $rec->{name} };
         }
     }
     return \%cmds;
+}
+
+# ---------------------------------------------------------------------------
+# Lifecycle: disable / enable (docs/Wits.md §5).  Disable runs every reverse
+# operation the wit registered (bus subscriptions) and hides its tools and
+# commands.  Enable re-registers into a FRESH api — for module wits that is
+# register() on the still-compiled object; for declarative decks it replays
+# every .wit in the deck.  Tools of the CURRENT session are snapshotted at
+# start_session, so tool changes take effect from the next session (/new);
+# hooks stop and restart immediately.
+# ---------------------------------------------------------------------------
+sub wit_state {
+    my ($self, $name) = @_;
+    for my $r (@{ $self->{wits} }) { return $r->{state} // 'active' if $r->{name} eq $name }
+    return undef;
+}
+
+sub _find_rec {
+    my ($self, $name) = @_;
+    for my $r (@{ $self->{wits} }) { return $r if $r->{name} eq $name }
+    return undef;
+}
+
+sub disable_wit {
+    my ($self, $name) = @_;
+    my $rec = _find_rec($self, $name);
+    return "no such wit: $name" unless $rec;
+    return "$name is already disabled" if ($rec->{state} // 'active') eq 'disabled';
+    my $n = $rec->{api}->unsubscribe_all();
+    $rec->{state} = 'disabled';
+    return "disabled $name — $n hook subscription(s) removed; tools/commands drop from new sessions";
+}
+
+sub enable_wit {
+    my ($self, $name) = @_;
+    my $rec = _find_rec($self, $name);
+    return "no such wit: $name" unless $rec;
+    return "$name is already active" if ($rec->{state} // 'active') eq 'active';
+
+    # Fresh api: the old one's subscriptions were removed at disable time and
+    # reusing it would double-push tools.  register() must be idempotent —
+    # that is part of the wit contract (see wits.example/hello).
+    my $api = Clam::Wit::API->new(
+        bus => $self->{bus}, store => $self->{store}, session => $self->{session},
+        ui => $self->{ui}, wit_name => $name,
+    );
+    if ($rec->{pkg} eq 'Clam::Wit::File') {
+        require Clam::Wit::Loader;
+        my @records = @{ Clam::Wit::Loader->load_dir($self, $api, $rec->{dir}) };
+        return "enable failed: no wits reloaded for deck $name" unless @records;
+    } else {
+        eval { $rec->{wit}->register($api); 1 } or do {
+            my $err = "$@";
+            push @{ $self->{errors} }, "$rec->{dir}: re-register failed: $err";
+            return "enable failed for $name: $err";
+        };
+    }
+    $rec->{api}   = $api;
+    $rec->{state} = 'active';
+    return "enabled $name — tools/commands drop into new sessions";
 }
 
 1;

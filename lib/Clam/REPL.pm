@@ -72,7 +72,7 @@ sub run {
         }
         elsif ($line eq '/wits')     {
             my @ws = $app->wits;
-            printf "%-20s %s  (%s)\n", $_->{name}, $_->{pkg}, $_->{dir} for @ws;
+            printf "%-20s %-9s %s  (%s)\n", $_->{name}, $_->{state} // 'active', $_->{dir}, $_->{pkg} for @ws;
             print "(none loaded)\n" unless @ws;
         }
         elsif ($line eq '/tools')    {
@@ -90,6 +90,10 @@ sub run {
                 printf "%s  %-28s  %s\n", scalar localtime(($e->{created_at} // 0) / 1000),
                     $e->{topic}, substr(jencode($e->{payload}), 0, 80);
             }
+        }
+        elsif ($line =~ m{^/wit\s+(disable|enable)\s+(\S+)$}) {
+            my $m = $1 eq 'disable' ? 'disable_wit' : 'enable_wit';
+            print $app->pm->$m($2), "\n";
         }
         elsif (my $cmd = $self->_wit_command($app, $line)) {
             my ($name, $args) = ($cmd->{name}, $cmd->{args});
@@ -150,7 +154,9 @@ commands:
   /sessions          list recent sessions
   /resume <id>       resume a session
   /compact [text]    compact the conversation now (optional instructions)
-  /wits              list loaded wits
+  /wits              list loaded wits (with state)
+  /wit disable NAME  stop a wit's hooks now; tools drop from new sessions
+  /wit enable NAME   re-register a disabled wit
   /tools             list available tools
   /model             show active provider/model + known providers
   /events [topic]    peek at the blackboard journal (last 20)
