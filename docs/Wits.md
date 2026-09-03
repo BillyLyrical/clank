@@ -56,6 +56,61 @@ understands Perl stops working on it.
 Rule: if your wit needs more than one subroutine or any helper module, it is a .pm
 wit. Decks keep `deck.toml` as their manifest; standalone wits use `wit.toml`.
 
+### 2.3 Stdio wits (external processes)
+
+A third layout for units whose code we do not want in our process space — the answer
+for untrusted or volatile user code (§7.1). The unit ships an executable script
+instead of a module; any language with a shebang works:
+
+    <wit-dir>/
+      wit.toml               # manifest, plus handler/exec/timeout (below)
+      bin/tool.pl            # or .sh/.py/... — anything the kernel will run
+      t/                     # same install-time test gate as every other unit
+
+    # wit.toml additions
+    handler = "stdio"        # default: module (in-process); stdio spawns a process
+    exec    = "bin/tool.pl"  # relative to the unit dir; cwd is set there at spawn
+    timeout = 30             # seconds, hard kill deadline. Default 30.
+
+The protocol — this is the entire contract:
+
+1. clam spawns `exec` with env inherited (CLAM_HOME etc.) and cwd = unit dir
+2. writes exactly one JSON object to its stdin: `{ "args": {...} }`, then closes it
+3. reads exactly one JSON object from stdout:
+     `{ "ok": true, ...result fields }`  → success; fields become the tool result
+     `{ "error": "message" }`            → failure; message goes to the LLM as a tool error
+4. stderr is captured as a log; on any failure its tail (last ~20 lines) rides along
+   in the error message
+
+Protocol rules: stdout carries exactly one JSON object — logs go to stderr, always.
+Scripts must ignore unknown input keys (forward compatibility). Anything else on
+stdout (multiple objects, non-JSON prefix) is a protocol violation → tool error with
+the captured output attached.
+
+Timeouts and reaping port the pattern from `~/arc/suck` (GPL — adapt with attribution,
+do not copy verbatim): IO::Select polling against a deadline rather than alarm() — we
+buffer all output instead of streaming it live, so no signal acrobatics are needed; on
+expiry kill TERM, wait ≤5s, escalate to KILL. Internal exit-code semantics follow GNU
+timeout (124 = hard timeout); the LLM only ever sees the composed error string.
+
+What a stdio wit is NOT:
+
+- **Not a hook channel.** It can be called by the loop, never subscribe to it — hooks
+  and bus agents stay in-process (§5). A tool that fires per call is exactly the right
+  shape for a process; an event listener is not.
+- **Not a daemon (v1).** One-shot request/response. A long-lived stdio mode with a
+  persistent pipe is possible later; nothing here forces it out.
+
+Implementation: `Clam::Wit::Stdio` (~60 lines, core deps only — IO::Select + JSON::PP)
+plus one loader branch that builds an ordinary Clam::Tool around the spawn. Above the
+tool boundary the loop, prompt assembly, `/tools`, and disable/enable cannot tell the
+difference; that invisibility is the design.
+
+What we take from suck: hard timeout, TERM→KILL escalation, separate stderr pipe.
+What we drop: silence timeout (a well-behaved one-shot either outputs or exits — defer
+as an optional per-unit field), quiet/ring mode (we always buffer; the ring becomes a
+cap on captured stderr for error messages), panic-on-stderr (stderr is normal logging).
+
 ## 3. Metadata: about / usage (required)
 
 Every installable unit declares, in its manifest:
@@ -146,6 +201,13 @@ the loader checks before load and reports:
 
     [wits] git-guardrails: missing perl deps: PPI  (fix: cpanm PPI)
 
+**Fix 3 — the manifest is the unit test.** `_wit_dirs` currently sniffs for `.pm`,
+`.wit`, or `lib/`; a stdio unit (§2.3) has none of those and would be invisible to
+discovery. Rule: a directory carrying a manifest (`deck.toml`/`wit.toml`) is a unit,
+full stop — the manifest becomes the single source of truth for "is this a wit". The
+sniff stays only as a fallback for bare manifest-less dirs (a lone .pm dropped on
+CLAM_WITS_PATH, the §3.1 self-describing case).
+
 ## 5. Lifecycle: Load, Disable, Unload
 
 The stated goal is "plugins loaded (and unloaded as required)". Be honest about what
@@ -187,7 +249,9 @@ possible and fragile (END blocks, circular refs, global state in helpers). We do
 do it for module wits. The honest Unix answer: **disable now, restart clamd to fully
 unload.** clamd is a long-lived daemon with clean signal handling; restarting it is a
 feature, not an apology. Declarative wits get full unload because they are just
-closures in a hash — that is where the design leans.
+closures in a hash — that is where the design leans. Stdio wits sidestep this entirely:
+their code *is* a process, and disable stops spawning it — true unload without touching
+Perl's limits (§2.3).
 
 ### 5.4 Dependency-aware loading (Cordis `inject`, ported)
 
@@ -219,14 +283,15 @@ CPAN's most valuable property is not the mirror network or PAUSE — it is that
 `cpanm Foo::Bar` resolves dependencies and **runs the code's tests on your machine
 before installing**. We replicate exactly that, in about twenty lines of shell logic:
 
-    clam wits install <dir | git-url>
-      1. fetch     copy dir, or git clone --depth 1 to a temp dir
+    clam wits install <dir>            # name/catalog resolution arrives with P2-4
+      1. fetch     copy dir (git clone --depth 1 for catalog sources — P2-4)
       2. validate  manifest present; name/version/about/usage all set; namespace rule
                    holds (§4 fix 1); no files outside the wit's own directories
       3. deps      requires_perl/requires_bin checked → actionable message on miss
                    (cpanm PPI / apt install git) — or --assume-deps to skip
-      4. test      prove -l <wit>/t   (refuse on failure; --force overrides and is
-                   recorded in the lockfile as "installed-untested")
+      4. test      run each t/*.t with plain perl, no prove dependency (refuse on
+                   failure; a unit without t/ installs untested — the lockfile's
+                   tested=false says so honestly)
       5. place     copy into ~/.clam/wits/<name>  (or ./.clam/wits with --project)
       6. record    write lockfile entry + rebuild wits.index.json
 
@@ -258,6 +323,25 @@ v1 has no sandboxing of wit code (the old docs say so too). The planned `perl_ev
 wit will use a Safe compartment for *LLM-generated* code; that is a different threat
 model and stays in the wit layer, not the loader.
 
+### 7.1 Curation: provenance tiers, not self-declaration
+
+Trust comes from where a unit came from — never from fields it writes about itself
+(a user can put `curated = true` in their own wit.toml; we do not parse lies):
+
+- **Curated**: ships in-tree (`decks/`) or is listed in the curation catalog — a small
+  JSON file of index-shaped rows (name/version/source/about/usage) that maintainers
+  edit. Curated units may use any layout, including in-process module wits with full
+  bus access.
+- **User**: everything else. The mechanical gate floor (§6: manifest fields, tests at
+  install, deps, namespace rule) applies to everyone — curated included; curation adds
+  review on top of the gates, it does not replace them. Recommended template for user
+  units with real logic is stdio (§2.3): the process boundary buys crash containment
+  and true unload, which in-process code cannot give.
+
+Optional strict mode (P2-4): a config flag that refuses non-curated in-process module
+wits at load time ("user units: stdio or declarative only"). Off by default — the
+recommendation does most of the work; the flag is for people who want the wall.
+
 ## 8. Build List (priority order)
 
 | # | Item | § | Effort | Status |
@@ -269,13 +353,17 @@ model and stays in the wit layer, not the loader.
 | P1-3 | Namespace rule enforced at load time (refuse non-Clam::Wit::<Name> files) | 4 | small | ✅ cfe3f2e (t/13 §4) |
 | P2-1 | requires_wit dependency graph: PENDING state, ordered load, auto-disable dependents | 5.4 | ~2 days |
 | P2-2 | Full in-process unload for declarative wits (`/wit unload`) | 5.3 | medium — bookkeeping only |
+| P2-3 | stdio handler type: `Clam::Wit::Stdio` (spawn, JSON contract, hard timeout + TERM→KILL per the suck pattern) + manifest-based discovery (§4 fix 3) | 2.3, 4 | ~1 day |
+| P2-4 | curation catalog + `wits install <name>` resolution; optional strict mode for non-curated in-process wits | 6, 7.1 | half a day |
 | P3-1 | FTS5 index of about/usage → retrieval-based tool/wit selection (RATS) | 3.1 | later |
 | P3-2 | Per-session wit loading (agent presets); mid-session auto-load of PENDING deps | 5.4–5.5 | later |
 | P3-3 | Graduation path: publish a mature wit to PAUSE as Clam-Wit-<Name> (layout already compatible) | 2.1 | when one earns it |
 
 Sequencing note: P0-2 before P2-2 — disable is the 80% of unload, and effect tracking
-is what makes both safe. Every item keeps `prove -l t/` green; each gets its own test
-file (t/13_wit_meta.t, t/14_wit_lifecycle.t, ...).
+is what makes both safe. P2-3 is independent of P2-1/P2-2 and unblocks the user-code
+story (§7.1); P2-4 builds on it only for the strict-mode check. Every item keeps
+`prove -l t/` green; each gets its own test file (t/13_wit_meta.t,
+t/14_wit_lifecycle.t, ...).
 
 ## 9. What This Doc Deliberately Does Not Change
 
