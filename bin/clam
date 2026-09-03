@@ -128,6 +128,36 @@ sub _cmd_wits {
             die "nested .pm files not allowed in a single-file wit: @bad\n" if @bad;
         }
 
+        # Dependency pre-check (docs/Wits.md §6): fail loudly at install time
+        # with an actionable message — the load-time gate is for units already
+        # installed whose environment later changes.
+        for my $mod (@{ $m->{requires_perl} // [] }) {
+            eval { (my $f = $mod) =~ s{::}{/}g; require "$f.pm"; 1 }
+                or die "missing Perl module $mod (fix: cpanm $mod)\n";
+        }
+        for my $b (@{ $m->{requires_bin} // [] }) {
+            my $found = grep { -x "$_/$b" } split /:/, ($ENV{PATH} // '');
+            die "missing binary $b (fix: install '$b')\n" unless $found;
+        }
+
+        # Test gate (docs/Wits.md §6): run the unit's t/*.t from its SOURCE
+        # location before anything is copied — CPAN discipline, no prove
+        # dependency (plain perl per file works on minimal systems).  A red
+        # test aborts the install; nothing reaches ~/.clam/wits untested.
+        if (-d "$src/t") {
+            opendir(my $tdh, "$src/t");
+            my @tests = sort grep { /\.t$/ && -f "$src/t/$_" } readdir($tdh);
+            closedir $tdh;
+            for my $t (@tests) {
+                print "  testing: $t\n";
+                my @tout = `$^X -I"$src/lib" "$src/t/$t" 2>&1`;
+                if ($? != 0) {
+                    print @tout;
+                    die "tests failed for ", ($m->{name} // $name), " ($t) — install aborted (docs/Wits.md §6)\n";
+                }
+            }
+        }
+
         # Deck awareness: validate the wit list against the files present.
         if (-f "$src/deck.toml") {
             require Clam::Wit::Loader;
@@ -138,7 +168,8 @@ sub _cmd_wits {
             }
         }
 
-        my $dest_dir = "$ENV{HOME}/.clam/wits";
+        require Clam::Util;
+        my $dest_dir = Clam::Util::clam_home() . '/wits';
         make_path($dest_dir);
         my $dest = "$dest_dir/$name";
         die "already installed: $dest\n" if -d $dest;
@@ -151,7 +182,8 @@ sub _cmd_wits {
 
     if ($action eq 'uninstall') {
         my $name = shift @args or die "usage: clam wits uninstall <name>\n";
-        my $dir  = "$ENV{HOME}/.clam/wits/$name";
+        require Clam::Util;
+        my $dir  = Clam::Util::clam_home() . "/wits/$name";
         -d $dir or die "not installed: $name\n";
         remove_tree($dir);
         require Clam::WitIndex;
