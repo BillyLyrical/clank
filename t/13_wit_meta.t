@@ -183,4 +183,42 @@ is($? >> 8, 0, 'list exits 0');
 like($out, qr/alpha\s+Alpha deck does alpha things/m, 'list shows about text');
 like($out, qr/delta\s+Delta deck lives in the project root/m, 'list covers project root too');
 
+# ---------------------------------------------------------------------------
+# 4. Namespace discipline (docs/Wits.md §4) — isolated root via CLAM_WITS_PATH
+# ---------------------------------------------------------------------------
+{
+    local $ENV{CLAM_WITS_PATH} = "$tmp/nsroot";
+
+    # nsbad — deck with lib/ but no namespace declaration
+    write_file("$tmp/nsroot/nsbad/deck.toml", "name=\"nsbad\"\nversion=\"0.1.0\"\nabout=\"x\"\nusage=\"y\"\nwits=[\"b.one\"]\n");
+    write_file("$tmp/nsroot/nsbad/b/one.wit", "name=one\ndescription=x\nsource = <<'PERL'\nreturn { ok => 1 };\nPERL\n");
+    write_file("$tmp/nsroot/nsbad/lib/Clam/Stray.pm", "package Clam::Stray;\n1;\n");
+
+    # nsgood — deck declaring its namespace; lib/ fully compliant
+    write_file("$tmp/nsroot/nsgood/deck.toml", "name=\"nsgood\"\nversion=\"0.1.0\"\nabout=\"x\"\nusage=\"y\"\nnamespace=[\"Clam::NsGood\"]\nwits=[\"g.one\"]\n");
+    write_file("$tmp/nsroot/nsgood/g/one.wit", "name=one\ndescription=x\nsource = <<'PERL'\nreturn { ok => 1 };\nPERL\n");
+    write_file("$tmp/nsroot/nsgood/lib/Clam/NsGood.pm", "package Clam::NsGood;\n1;\n");
+    write_file("$tmp/nsroot/nsgood/lib/Clam/NsGood/Sub.pm", "package Clam::NsGood::Sub;\n1;\n");
+
+    # modbad — module wit shipping a module outside its own package
+    write_file("$tmp/nsroot/modbad/wit.toml", "name=\"modbad\"\nversion=\"0.1.0\"\nabout=\"x\"\nusage=\"y\"\n");
+    write_file("$tmp/nsroot/modbad/lib/Clam/Wit/Modbad.pm", "package Clam::Wit::Modbad;\nsub register { }\n1;\n");
+    write_file("$tmp/nsroot/modbad/lib/Clam/Stray2.pm", "package Clam::Stray2;\n1;\n");
+
+    my $pm3 = Clam::PluginManager->new;
+    $pm3->bind(bus => undef, store => undef, session => undef);
+    my @w3 = $pm3->load_all();
+    # load_all sees every root: the section-2 fixtures (alpha/beta/gamma/
+    # mismatch + project-root delta) plus this isolated root.  nsbad and
+    # modbad must be refused; deps was already skipped for its missing dep.
+    my %names3 = map { $_->{name} => 1 } @w3;
+    is(scalar(@w3), 6, 'compliant unit + section-2 fixtures load (nsbad/modbad refused)');
+    ok($names3{nsgood}, 'compliant deck loaded');
+    ok(!$names3{nsbad} && !$names3{modbad}, 'non-compliant units not loaded');
+    like(join("\n", @{ $pm3->errors }), qr/nsbad: modules outside declared namespace: lib\/Clam\/Stray\.pm/,
+        'undeclared deck module refused and named');
+    like(join("\n", @{ $pm3->errors }), qr/modbad: modules outside declared namespace: lib\/Clam\/Stray2\.pm/,
+        'module wit shipping a foreign module refused');
+}
+
 done_testing();

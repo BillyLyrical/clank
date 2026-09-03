@@ -76,6 +76,51 @@ sub _check_manifest_deps {
     return 1;
 }
 
+# Namespace discipline (docs/Wits.md §4): every .pm a unit ships must live under
+# one of its allowed namespaces — otherwise two units whose lib/ dirs land on
+# @INC could shadow each other's modules.  Returns offending paths relative to
+# $dir (empty list = compliant).
+#   namespaces => [ 'Clam::Logic', ... ]  package prefixes the unit may ship
+#   top_level_only => 1                   single-file module wits: .pm files
+#                                         only at the unit root, never nested
+sub check_namespaces {
+    my ($class_or_self, $dir, %o) = @_;
+    require File::Find;
+    my @allowed = @{ $o{namespaces} // [] };
+    my $top_level_only = $o{top_level_only};
+    my %ok;
+    for my $ns (@allowed) { (my $p = $ns) =~ s{::}{/}g; $ok{$p} = 1; }   # path prefixes
+    my @bad;
+    for my $base (grep { -d "$dir/$_" } ($top_level_only ? ('.') : ('lib'))) {
+        File::Find::find({ no_chdir => 1, wanted => sub {
+            return unless /\.pm$/ && -f $_;
+            (my $rel = $File::Find::name) =~ s{^\Q$dir/$base\E/?}{};
+            if ($top_level_only) {
+                push @bad, $rel if index($rel, '/') >= 0;   # nested .pm in a single-file wit
+                return;
+            }
+            my $fine = grep { $rel eq "$_.pm" || index($rel, "$_/") == 0 } keys %ok;
+            push @bad, "lib/$rel" unless $fine;
+        }}, "$dir/$base");
+    }
+    return sort @bad;
+}
+
+# Refuse to load a unit whose lib/ ships modules outside its declared
+# namespaces.  Returns 1 when compliant (or nothing to check), 0 after
+# recording the error.  Must run BEFORE the unit's lib/ hits @INC.
+sub _enforce_namespaces {
+    my ($self, $name, $dir, %o) = @_;
+    return 1 unless -d "$dir/lib" || $o{top_level_only};
+    my @bad = check_namespaces($self, $dir, %o);
+    if (@bad) {
+        push @{ $self->{errors} }, "$name: modules outside declared namespace: @bad";
+        warn "[wits] $name: refusing to load — undeclared modules: @bad (declare namespace=[...] in the manifest)\n";
+        return 0;
+    }
+    return 1;
+}
+
 # Discovery roots in priority order:
 #   1. CLAM_WITS_PATH (colon list)   2. ./.clam/wits (project)
 #   3. <clam home>/wits (user; CLAM_HOME or ~/.clam — Clam::Util::clam_home)
@@ -190,7 +235,6 @@ sub load_dir {
     # time — see docs/Wits.md).  Wit sources compile at load time, so lib/ must
     # be on @INC before any .wit in the deck compiles.
     if (_has_wit($dir)) {
-        unshift @INC, "$dir/lib" if -d "$dir/lib";
         # Discoverability check (docs/Wits.md §3): decks must declare about +
         # usage.  Missing fields don't block loading — they flag the deck as
         # undocumented so `wits list` and install can call it out.
@@ -199,6 +243,11 @@ sub load_dir {
             push @{ $self->{undocumented} }, $name;
             warn "[wits] deck $name: manifest missing about/usage (docs/Wits.md §3)\n";
         }
+        # Namespace discipline BEFORE lib/ hits @INC.  A deck declares which
+        # namespaces its engine modules may occupy (deck.toml namespace=[...]).
+        my @ns = ref($meta->{namespace} // undef) eq 'ARRAY' ? @{ $meta->{namespace} } : ();
+        return unless _enforce_namespaces($self, $name, $dir, namespaces => \@ns);
+        unshift @INC, "$dir/lib" if -d "$dir/lib";
         require Clam::Wit::Loader;
         my $api = Clam::Wit::API->new(
             bus => $self->{bus}, store => $self->{store}, session => $self->{session},
@@ -213,7 +262,6 @@ sub load_dir {
 
     my ($pkg, $file);
     if (-d "$dir/lib") {
-        unshift @INC, "$dir/lib";
         my $wits_dir = "$dir/lib/Clam/Wit";
         my @mods;
         if (-d $wits_dir) {
@@ -228,9 +276,15 @@ sub load_dir {
         }
         (my $mod = shift @mods) =~ s{\.pm$}{};
         ($pkg, $file) = ("Clam::Wit::$mod", "$wits_dir/$mod.pm");
+        # Namespace discipline BEFORE lib/ hits @INC: a module wit may only
+        # ship its own package (the wit + helpers under it).
+        return unless _enforce_namespaces($self, $name, $dir, namespaces => [$pkg]);
+        unshift @INC, "$dir/lib";
     } elsif (my @pms = _list_pm($dir)) {
-        unshift @INC, $dir;
         ($file, $pkg) = ("$dir/$pms[0]", _pkg_from_file("$dir/$pms[0]") // "Clam::Wit::$name");
+        # Single-file wit: the root .pm is fine; nested .pm would pollute @INC.
+        return unless _enforce_namespaces($self, $name, $dir, top_level_only => 1);
+        unshift @INC, $dir;
     } else {
         push @{ $self->{errors} }, "$dir: no wit modules, .pm files, or .wit files";
         return;

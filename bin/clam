@@ -109,6 +109,25 @@ sub _cmd_wits {
         my @missing = grep { !length( $m->{$_} // '' ) } qw(name version about usage);
         die "manifest missing required fields: @missing (docs/Wits.md §3)\n" if @missing;
 
+        # Namespace discipline (docs/Wits.md §4): refuse to install modules a
+        # unit ships outside its declared namespaces.
+        require Clam::PluginManager;
+        if (-f "$src/deck.toml") {
+            my @ns = ref($m->{namespace} // undef) eq 'ARRAY' ? @{ $m->{namespace} } : ();
+            my @bad = Clam::PluginManager->check_namespaces($src, namespaces => \@ns);
+            die "undeclared modules in lib/: @bad (declare namespace=[...] in deck.toml)\n" if @bad;
+        } elsif (-d "$src/lib") {
+            my $wits_dir = "$src/lib/Clam/Wit";
+            my @mods = -d $wits_dir ? do { opendir(my $dh, $wits_dir); grep { /\.pm$/ && !-d "$wits_dir/$_" } readdir($dh); closedir $dh; } : ();
+            die "no lib/Clam/Wit/*.pm in module wit\n" unless @mods;
+            (my $mod = shift @mods) =~ s{\.pm$}{};
+            my @bad = Clam::PluginManager->check_namespaces($src, namespaces => ["Clam::Wit::$mod"]);
+            die "undeclared modules in lib/: @bad\n" if @bad;
+        } else {
+            my @bad = Clam::PluginManager->check_namespaces($src, top_level_only => 1);
+            die "nested .pm files not allowed in a single-file wit: @bad\n" if @bad;
+        }
+
         # Deck awareness: validate the wit list against the files present.
         if (-f "$src/deck.toml") {
             require Clam::Wit::Loader;
