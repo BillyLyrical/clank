@@ -63,7 +63,7 @@ sub _usage {
 clam — AI coding harness (Perl port of Pi)
 
 usage: clam [options] [prompt...]
-       clam wits install|list|uninstall|info <name>
+       clam wits install|list|search|uninstall|info <name>
        clam providers [test]
 
 options:
@@ -84,10 +84,11 @@ EOF
 
 # --- wits subcommand --------------------------------------------------------
 sub _wits_roots {
+    require Clam::Util;
     my @roots;
     push @roots, split /:/, $ENV{CLAM_WITS_PATH} if defined $ENV{CLAM_WITS_PATH} && length $ENV{CLAM_WITS_PATH};
     push @roots, '.clam/wits';
-    push @roots, "$ENV{HOME}/.clam/wits" if defined $ENV{HOME};
+    push @roots, Clam::Util::clam_home() . '/wits';
     return grep { length } @roots;
 }
 
@@ -100,21 +101,21 @@ sub _cmd_wits {
         -d $src or die "not a directory: $src\n";
         (my $name = $src) =~ s{.*/}{};
 
-        # Deck awareness: validate the manifest against the files present.
+        # Manifest is required and must carry the discoverability fields
+        # (docs/Wits.md §3): name, version, about, usage.  Install refuses to
+        # place a unit it cannot describe.
+        my $m = _manifest($src);
+        die "no manifest found in $src (need deck.toml or wit.toml)\n" unless $m;
+        my @missing = grep { !length( $m->{$_} // '' ) } qw(name version about usage);
+        die "manifest missing required fields: @missing (docs/Wits.md §3)\n" if @missing;
+
+        # Deck awareness: validate the wit list against the files present.
         if (-f "$src/deck.toml") {
-            require Clam::Wit::File;
             require Clam::Wit::Loader;
-            open my $fh, '<', "$src/deck.toml" or die "cannot read deck.toml: $!\n";
-            my $c = do { local $/; <$fh> }; close $fh;
-            my $d = eval { Clam::Wit::File::parse_toml($c) };
-            if ($@) {
-                warn "warning: unparseable deck.toml in $src: $@";
-            } else {
-                print "deck: ", ($d->{name} // $name), " — ", ($d->{description} // ''), "\n";
-                my %have = map { $_ => 1 } @{ Clam::Wit::Loader->list_wits($src) };
-                for my $w (@{ $d->{wits} // [] }) {
-                    warn "warning: deck lists missing wit: $w\n" unless $have{$w};
-                }
+            print "deck: ", ($m->{name} // $name), " — ", ($m->{description} // ''), "\n";
+            my %have = map { $_ => 1 } @{ Clam::Wit::Loader->list_wits($src) };
+            for my $w (@{ $m->{wits} // [] }) {
+                warn "warning: deck lists missing wit: $w\n" unless $have{$w};
             }
         }
 
@@ -123,6 +124,8 @@ sub _cmd_wits {
         my $dest = "$dest_dir/$name";
         die "already installed: $dest\n" if -d $dest;
         _copy_tree($src, $dest);
+        require Clam::WitIndex;
+        Clam::WitIndex->rebuild();
         print "installed ", (-f "$src/deck.toml" ? "deck" : "wit"), " '$name' -> $dest\n";
         return 1;
     }
@@ -132,6 +135,8 @@ sub _cmd_wits {
         my $dir  = "$ENV{HOME}/.clam/wits/$name";
         -d $dir or die "not installed: $name\n";
         remove_tree($dir);
+        require Clam::WitIndex;
+        Clam::WitIndex->rebuild();
         print "uninstalled '$name'\n";
         return 1;
     }
@@ -144,18 +149,39 @@ sub _cmd_wits {
             next unless -d $d;
             $found = 1;
             print "$name:\n  dir: $d\n";
-            if (-f "$d/README.md") {
-                open my $fh, '<', "$d/README.md" or next;
-                my $first = <$fh>; close $fh;
-                chomp $first;
-                print "  ", $first, "\n" if length $first;
+            if (my $m = _manifest($d)) {
+                printf "  %s: %s\n", $_, $m->{$_}
+                    for grep { defined $m->{$_} && !ref $m->{$_} } qw(name version about usage author license description);
+            } else {
+                print "  (no manifest)\n";
             }
         }
         die "wit not found: $name\n" unless $found;
         return 1;
     }
 
+    if ($action eq 'search') {
+        my $q = shift @args or die "usage: clam wits search <text>\n";
+        require Clam::WitIndex;
+        my $idx = Clam::WitIndex->rebuild();
+        my $hits = 0;
+        for my $name (sort keys %$idx) {
+            my $e = $idx->{$name};
+            for my $field (qw(about usage)) {
+                next unless length($e->{$field} // '');
+                if (index(lc $e->{$field}, lc $q) >= 0) {
+                    printf "%-20s [%s] %s\n", $name, $field, $e->{$field};
+                    $hits++;
+                    last;   # one line per unit
+                }
+            }
+        }
+        print "no wits match '$q'\n" unless $hits;
+        return $hits ? 1 : 0;    # grep convention: no match = non-zero exit
+    }
+
     # list (default)
+    require Clam::WitIndex;
     my $any = 0;
     for my $root (_wits_roots()) {
         next unless -d $root;
@@ -164,11 +190,30 @@ sub _cmd_wits {
         closedir $dh;
         next unless @entries;
         print "$root:\n";
-        printf "  %-20s %s\n", $_, _describe_wit_dir("$root/$_") for @entries;
+        for my $e (@entries) {
+            my $entry = Clam::WitIndex->scan_dir("$root/$e");
+            printf "  %-20s %s\n", $e, ($entry ? $entry->{about} : _describe_wit_dir("$root/$e"));
+        }
         $any = 1;
     }
     print "(no wits found)\n" unless $any;
+    Clam::WitIndex->rebuild();   # keep the index file fresh as a side effect
     return 1;
+}
+
+# Parse a unit's manifest (deck.toml or wit.toml); dies on parse failure,
+# returns undef when no manifest exists.
+sub _manifest {
+    my ($dir) = @_;
+    for my $mf (qw(deck.toml wit.toml)) {
+        next unless -f "$dir/$mf";
+        require Clam::Wit::File;
+        open my $fh, '<', "$dir/$mf" or die "cannot read $dir/$mf: $!\n";
+        my $c = do { local $/; <$fh> };
+        close $fh;
+        return eval { Clam::Wit::File::parse_toml($c) } // die "unparseable $dir/$mf: $@\n";
+    }
+    return undef;
 }
 
 sub _describe_wit_dir {

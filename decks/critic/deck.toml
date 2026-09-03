@@ -1,6 +1,8 @@
+about="Code critique heuristics across style, quality, security, performance, and architecture"
 author="CLAM (ported from clam-old)"
 description="Code critique heuristics: style, quality, security, performance, architecture and more"
 name="critic"
+usage="Load when you want the model to review code against explicit criteria; each wit is one lens (style, security, ...) that scores or flags what it reads."
 version="1.0.0"
 wits=[
   "critic.accessibility",

@@ -1,6 +1,8 @@
+about="Filesystem tools beyond the core four: search, copy, move, diff, exec, snapshots"
 author="CLAM (ported from clam-old)"
 description="Filesystem operations: read, write, edit, list, search, copy, move, diff, exec, snapshots"
 name="fs"
+usage="Load for bulk or structured filesystem work (find/copy/diff/snapshot) where the built-in read/write/edit/bash are too blunt."
 version="1.0.0"
 wits=[
   "fs.capture",

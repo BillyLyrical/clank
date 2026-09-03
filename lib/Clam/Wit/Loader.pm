@@ -195,8 +195,8 @@ sub _with_timeout {
 sub _truthy { defined $_[0] && $_[0] ? 1 : 0 }
 
 sub _clam_home {
-    my $home = $ENV{CLAM_HOME} // (defined $ENV{HOME} ? "$ENV{HOME}/.clam" : '.');
-    return $home;
+    require Clam::Util;
+    return Clam::Util::clam_home();
 }
 
 sub _make_workdir {

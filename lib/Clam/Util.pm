@@ -6,7 +6,7 @@ use Exporter 'import';
 use Digest::SHA qw(sha256_hex);
 use JSON::PP ();
 
-our @EXPORT_OK = qw(uuid4 now_ms jencode jdecode truncate_head truncate_tail format_size estimate_tokens ensure_dir);
+our @EXPORT_OK = qw(uuid4 now_ms jencode jdecode truncate_head truncate_tail format_size estimate_tokens ensure_dir clam_home);
 
 my $JSON = JSON::PP->new->utf8->canonical->allow_nonref;
 
@@ -101,6 +101,12 @@ sub ensure_dir {
     require File::Path;
     File::Path::make_path($dir);
     return 1;
+}
+
+# The clam home directory: state, workdirs, installed wits, index, lockfile.
+# CLAM_HOME overrides; defaults to ~/.clam (or '.' when HOME is unset).
+sub clam_home {
+    return $ENV{CLAM_HOME} // (defined $ENV{HOME} ? "$ENV{HOME}/.clam" : '.');
 }
 
 1;

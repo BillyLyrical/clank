@@ -19,33 +19,95 @@ use Clam::Wit::Dispatch;
 
 sub new {
     my ($class, %o) = @_;
-    my $self = bless { wits => [], apis => {}, errors => [], skipped => [], dwits => {} }, $class;
+    my $self = bless { wits => [], apis => {}, errors => [], skipped => [], undocumented => [], dwits => {} }, $class;
     # The dispatcher shares the dwits hash so late registrations are visible.
     $self->{dispatch} = Clam::Wit::Dispatch->new(wits => $self->{dwits});
     return $self;
 }
 
+# Read a unit's manifest (deck.toml or wit.toml). Returns ($meta, $path);
+# $meta is undef when the dir has no manifest. Parse failures are recorded as
+# errors and also yield undef — a broken manifest must not kill the load.
+sub _read_manifest {
+    my ($self, $dir) = @_;
+    for my $mf (qw(deck.toml wit.toml)) {
+        next unless -f "$dir/$mf";
+        open my $fh, '<', "$dir/$mf" or do { push @{ $self->{errors} }, "$dir: cannot read $mf: $!"; return (undef, undef) };
+        my $content = do { local $/; <$fh> };
+        close $fh;
+        require Clam::Wit::File;
+        my $meta = eval { Clam::Wit::File::parse_toml($content) };
+        if ($@) { push @{ $self->{errors} }, "$dir: unparseable $mf: $@"; return (undef, undef); }
+        return ($meta, "$dir/$mf");
+    }
+    return (undef, undef);
+}
+
+# PATH lookup for requires_bin — same rule as Clam::Wit::Loader::_have_bin.
+sub _have_bin {
+    my ($bin) = @_;
+    return 1 if -x $bin && $bin =~ m{[/\\]};   # absolute path
+    for my $dir (split /:/, ($ENV{PATH} // '')) {
+        next unless length $dir;
+        return 1 if -x "$dir/$bin";
+    }
+    return 0;
+}
+
+# Dependency gate from a manifest's requires_perl/requires_bin. Returns 1 when
+# the unit may load, 0 when it was recorded in ->skipped with an actionable note.
+sub _check_manifest_deps {
+    my ($self, $name, $meta) = @_;
+    return 1 unless $meta;
+    for my $mod (@{ $meta->{requires_perl} // [] }) {
+        eval { (my $f = $mod) =~ s{::}{/}g; require "$f.pm"; 1 } or do {
+            push @{ $self->{skipped} }, "$name: missing Perl module $mod (fix: cpanm $mod)";
+            warn "[wits] $name: skipped — missing Perl module $mod (fix: cpanm $mod)\n";
+            return 0;
+        };
+    }
+    for my $bin (@{ $meta->{requires_bin} // [] }) {
+        unless (_have_bin($bin)) {
+            push @{ $self->{skipped} }, "$name: missing binary $bin (fix: install '$bin')";
+            warn "[wits] $name: skipped — missing binary $bin\n";
+            return 0;
+        }
+    }
+    return 1;
+}
+
 # Discovery roots in priority order:
 #   1. CLAM_WITS_PATH (colon list)   2. ./.clam/wits (project)
-#   3. ~/.clam/wits (user)           4. explicit -w/--wit paths
+#   3. <clam home>/wits (user; CLAM_HOME or ~/.clam — Clam::Util::clam_home)
+#   4. explicit -w/--wit paths
 sub discover_roots {
     my ($self, %o) = @_;
+    require Clam::Util;
     my @roots;
     push @roots, split /:/, $ENV{CLAM_WITS_PATH} if defined $ENV{CLAM_WITS_PATH} && length $ENV{CLAM_WITS_PATH};
     push @roots, '.clam/wits';
-    push @roots, "$ENV{HOME}/.clam/wits" if defined $ENV{HOME};
+    push @roots, Clam::Util::clam_home() . '/wits';
     push @roots, @{ $o{extra_paths} // [] };
     return grep { length } @roots;
 }
 
-# A root yields wit dirs: the root itself (if it has lib/ or .wit files), else
-# each subdir that contains lib/, a .pm file, or .wit files. Always returns an
-# arrayref (possibly empty).
+# A root yields wit dirs: the root itself (if it is a unit), else each subdir
+# that contains lib/, a .pm file, or .wit files. Always returns an arrayref
+# (possibly empty).
 # NOTE: called as a method ($self->_wit_dirs($root)) — $self must be consumed.
 sub _wit_dirs {
     my ($self, $root) = @_;
     return [] unless -d $root;
-    return [$root] if -d "$root/lib" || _has_wit($root);
+    # The root is itself a unit when it carries its own manifest, lib/, or flat
+    # .wit files (e.g. `clam -w decks/logic`).  Deliberately NOT the one-level-
+    # down grouping check: at a discovery root, subdirs are units — a deck with
+    # a flat .wit file must not make its whole parent root look like one deck.
+    if (-f "$root/deck.toml" || -f "$root/wit.toml" || -d "$root/lib") { return [$root] }
+    opendir(my $dh0, $root) or return [];
+    my @flat = grep { !-d "$root/$_" && $_ =~ /\.wit$/ } readdir($dh0);
+    closedir $dh0;
+    return [$root] if @flat;
+
     opendir(my $dh, $root) or return [];
     my @dirs = grep { !/^\./ && -d "$root/$_" } readdir($dh);
     closedir $dh;
@@ -129,13 +191,21 @@ sub load_dir {
     # be on @INC before any .wit in the deck compiles.
     if (_has_wit($dir)) {
         unshift @INC, "$dir/lib" if -d "$dir/lib";
+        # Discoverability check (docs/Wits.md §3): decks must declare about +
+        # usage.  Missing fields don't block loading — they flag the deck as
+        # undocumented so `wits list` and install can call it out.
+        my ($meta) = _read_manifest($self, $dir);
+        unless ($meta && length($meta->{about} // '') && length($meta->{usage} // '')) {
+            push @{ $self->{undocumented} }, $name;
+            warn "[wits] deck $name: manifest missing about/usage (docs/Wits.md §3)\n";
+        }
         require Clam::Wit::Loader;
         my $api = Clam::Wit::API->new(
             bus => $self->{bus}, store => $self->{store}, session => $self->{session},
             ui => $self->{ui}, wit_name => $name,
         );
         my @records = @{ Clam::Wit::Loader->load_dir($self, $api, $dir) };
-        push @{ $self->{wits} }, { name => $name, pkg => 'Clam::Wit::File', dir => $dir, wit => undef, api => $api };
+        push @{ $self->{wits} }, { name => $name, pkg => 'Clam::Wit::File', dir => $dir, wit => undef, api => $api, meta => $meta };
         $self->{apis}{$name} = $api;
         warn "[wits] deck $name: ", scalar(@records), " wits loaded from $dir\n" if @records && $ENV{CLAM_DEBUG};
         return;
@@ -166,6 +236,12 @@ sub load_dir {
         return;
     }
 
+    # wit.toml (docs/Wits.md §3): metadata + dependency gate for module wits.
+    # Checked BEFORE require so a missing dep is an actionable skip note, not a
+    # raw "Can't locate Foo.pm" compile die from inside the eval below.
+    my ($meta) = _read_manifest($self, $dir);
+    return unless _check_manifest_deps($self, $name, $meta);
+
     my $wit;
     eval {
         require $file;
@@ -195,7 +271,19 @@ sub load_dir {
         return;
     };
 
-    my $rec = { name => $name, pkg => $pkg, dir => $dir, wit => $wit, api => $api };
+    # Cross-check the in-module `our $WIT = {...}` against wit.toml
+    # (docs/Wits.md §3): the manifest is truth for humans, the package var keeps
+    # a bare .pm self-describing.  Mismatch is a warning, not an error.
+    if ($meta) {
+        my $wmeta;
+        { no strict 'refs'; $wmeta = ${ "$pkg\::WIT" } if defined ${ "$pkg\::WIT" } && ref( ${ "$pkg\::WIT" } ) eq 'HASH'; }
+        for my $k (qw(about usage)) {
+            next unless defined($wmeta->{$k} // undef) && defined($meta->{$k} // undef);
+            warn "[wits] $name: \$WIT{$k} differs from wit.toml\n" if $wmeta->{$k} ne $meta->{$k};
+        }
+    }
+
+    my $rec = { name => $name, pkg => $pkg, dir => $dir, wit => $wit, api => $api, meta => $meta };
     push @{ $self->{wits} }, $rec;
     $self->{apis}{$name} = $api;
     return $rec;
@@ -209,6 +297,7 @@ sub bind { my ($self, %o) = @_; $self->{$_} = $o{$_} for qw(bus store session ui
 sub wits      { $_[0]->{wits} }
 sub errors    { $_[0]->{errors} }
 sub skipped   { $_[0]->{skipped} }          # declarative wits skipped for missing deps
+sub undocumented { $_[0]->{undocumented} }  # units whose manifest lacks about/usage
 sub dwits     { $_[0]->{dwits} }            # name/trigger -> declarative wit record
 sub dispatch  { $_[0]->{dispatch} }         # Clam::Wit::Dispatch (the $ctx{wits} object)
 sub api_for   { $_[0]->{apis}{ $_[1] } }

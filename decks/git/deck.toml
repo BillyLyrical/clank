@@ -1,6 +1,8 @@
+about="Git operations as LLM-callable tools: status, log, diff, blame, branch, commit, stash, bisect"
 author="CLAM (ported from clam-old)"
 description="Git operations as wits: status, log, diff, blame, branch, commit, stash, bisect, grep, ignore"
 name="git"
+usage="Load in any git checkout you want the model to inspect directly instead of guessing from file contents; needs the git binary."
 version="1.0.0"
 wits=[
   "git.bisect",

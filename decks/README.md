@@ -5,9 +5,16 @@ after the initial clam install. Each deck directory is self-contained:
 
 ```
 decks/<deck>/
-  deck.toml            # manifest: name, description, version, wit list
+  deck.toml            # manifest: name, version, about, usage, namespace, wit list
+  lib/                 # optional — the deck's own library modules (on @INC at load)
   <group>/<wit>.wit    # declarative wits (clam-old format)
 ```
+
+`about` and `usage` are required manifest fields (docs/Wits.md §3): one line on
+what the deck does, a few lines on when to load it. `namespace` declares which
+top-level namespaces the deck's lib/ may ship; install enforces uniqueness across
+installed decks so two decks can't shadow each other's modules. The logic deck is
+the reference example: it ships Clam::Logic and Clam::Rules under its own lib/.
 
 A `.wit` file is TOML metadata with an embedded Perl source heredoc — the
 format from `~/dev/clam-old`, kept unchanged. The handler contract:
