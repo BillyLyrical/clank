@@ -211,11 +211,20 @@ a DB-stored rule-definition table is a possible later extension.
 Repo: ~/dev/clam-wits — NOT part of this tree. Layout per wit:
     <wit>/lib/Clam/Wit/<Name>.pm   (or single .pm for tiny wits)
     <wit>/README.md  [t/]
-Install: `clam wits install <dir|git-url>` -> ~/.clam/wits/<name>
-(uninstall/list/info subcommands). Discovery at startup:
+Install: `clam wits install <dir>` -> <clam home>/wits/<name>
+(subcommands: upgrade [--force], uninstall, list, search, info).
+<clam home> = $CLAM_HOME // ~/.clam. Install is gated (docs/Wits.md §6): the
+manifest must carry name/version/about/usage and match the directory name;
+declared deps are pre-checked with actionable messages; every t/*.t runs from
+the source location before anything is copied; lib/ modules must stay inside
+the unit's declared namespaces.  A lockfile (<clam home>/wits.lock.json)
+records version/source/tested per unit, and upgrade refuses downgrades without
+--force.  Discovery at startup:
   1. CLAM_WITS_PATH (colon list)   2. .clam/wits/ (project)
-  3. ~/.clam/wits/ (user)          4. -w/--wit CLI flags
+  3. <clam home>/wits/ (user)      4. -w/--wit CLI flags
 A broken wit fails to load with a warning; the harness still runs.
+Loaded wits can be stopped at runtime: /wit disable|enable NAME removes or
+re-registers their hooks immediately (session tool lists update on /new).
 
 Planned wits (separate tree): rag (FTS5 index+search+context injection),
 git_guardrails (tool_call blocker for dangerous commands),

@@ -260,13 +260,13 @@ model and stays in the wit layer, not the loader.
 
 ## 8. Build List (priority order)
 
-| # | Item | § | Effort |
-|---|------|---|--------|
-| P0-1 | about/usage manifest fields + `wits.index.json` + `list/search/info` output | 3 | ~1 day |
-| P0-2 | Effect tracking in Wit::API (bus sub ids, tool/command removal) + `/wit disable\|enable` | 5.2 | 1–2 days |
-| P1-1 | Install-time test run + dep check with actionable messages | 6 | ~half day |
-| P1-2 | `~/.clam/wits.lock` + `wits upgrade` | 6 | hours |
-| P1-3 | Namespace rule enforced at load time (refuse non-Clam::Wit::<Name> files) | 4 | small |
+| # | Item | § | Effort | Status |
+|---|------|---|--------|--------|
+| P0-1 | about/usage manifest fields + `wits.index.json` + `list/search/info` output | 3 | ~1 day | ✅ cb71b16 (t/13) |
+| P0-2 | Effect tracking in Wit::API (bus sub ids, tool/command removal) + `/wit disable\|enable` | 5.2 | 1–2 days | ✅ f732c24 (t/14) |
+| P1-1 | Install-time test run + dep check with actionable messages | 6 | ~half day | ✅ 885a9eb (t/15) |
+| P1-2 | `~/.clam/wits.lock` + `wits upgrade` | 6 | hours | ✅ 5834c02 (t/15) |
+| P1-3 | Namespace rule enforced at load time (refuse non-Clam::Wit::<Name> files) | 4 | small | ✅ cfe3f2e (t/13 §4) |
 | P2-1 | requires_wit dependency graph: PENDING state, ordered load, auto-disable dependents | 5.4 | ~2 days |
 | P2-2 | Full in-process unload for declarative wits (`/wit unload`) | 5.3 | medium — bookkeeping only |
 | P3-1 | FTS5 index of about/usage → retrieval-based tool/wit selection (RATS) | 3.1 | later |
