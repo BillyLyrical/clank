@@ -1,5 +1,5 @@
 # The agent loop. Every Pi extension event is a bus topic; wits subscribe and
-# influence the run via per-topic reducer rules (see docs/DESIGN.md section 5).
+# influence the run via per-topic reducer rules (see docs/ROADMAP.md §5).
 package Clam::Loop;
 use strict;
 use warnings;

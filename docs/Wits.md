@@ -1,8 +1,8 @@
 # Wits — Planning Document
 
-Status: plan (v0.2 era). Supersedes the plugin section of `docs/DESIGN.md` §9;
-the old design lives in `~/dev/clam-old/docs/concepts/wits.md`. The Wits-vs-CPAN
-review that motivated this doc is archived at `_tmp/verdict`.
+Status: implementation spec. Vision and architecture live in `docs/ROADMAP.md`.
+This document covers the detailed wit system design: protocols, manifests,
+install flow, and build items.
 
 ## 1. What a Wit Is
 
@@ -167,8 +167,8 @@ mismatch → warning. The manifest is the source of truth for humans; the in-mod
 copy exists so a bare .pm dropped on `CLAM_WITS_PATH` is still self-describing.
 
 Later step (P3-1): index rows feed an FTS5 table, and wit/tool selection becomes
-retrieval-based instead of "dump every schema into the prompt" — the RATS pattern
-from `docs/plan.txt`. The about/usage fields are exactly the text that makes that
+retrieval-based instead of "dump every schema into the prompt" — the RATS
+pattern. The about/usage fields are exactly the text that makes that
 work; writing them now is what buys us that option later.
 
 ## 4. Discovery and Loading (current behavior, two fixes)

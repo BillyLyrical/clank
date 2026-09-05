@@ -1,4 +1,4 @@
-# Wit discovery and loading (docs/DESIGN.md section 9).
+# Wit discovery and loading (docs/ROADMAP.md §5).
 # A broken wit warns and is skipped; the harness always runs.
 #
 # Two wit layouts are supported:

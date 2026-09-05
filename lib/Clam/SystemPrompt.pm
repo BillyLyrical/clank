@@ -81,9 +81,10 @@ Guidelines:
 $guidelines
 
 Clam documentation (read only when the user asks about clam itself, its SDK, wits, skills, or providers):
-- Main documentation: $docs_dir/DESIGN.md
+- Main documentation: $docs_dir/ROADMAP.md
 - Wits examples: $examples_dir
-- When asked about: wits (docs/DESIGN.md section 5), skills (section 4), providers (section 6), datalog (section 8)
+- When asked about: wits (docs/ROADMAP.md §5), skills (docs/Wits.md), providers (§2.1), logic (§7)
+- Also read: docs/Wits.md (wit implementation spec), docs/DRIVER.md (daemon/SDK docs)
 - Always read clam .md files completely and follow links to related docs
 EOT
 

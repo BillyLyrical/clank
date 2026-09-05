@@ -7,3 +7,7 @@
 _work/
 _tmp/
 .clam/
+
+# analysis artifacts
+.tmp-analysis/
+.wit-analysis/

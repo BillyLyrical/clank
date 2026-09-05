@@ -1,6 +1,6 @@
 # Clam::Wit::Loader — loads declarative .wit files (clam-old format) into a
 # WitAPI as LLM-callable tools, with inter-wit dispatch, bus subscriptions,
-# state persistence, and timeouts.  See docs/DESIGN.md section 9 and
+# state persistence, and timeouts.  See docs/ROADMAP.md §5 and
 # decks/README.md for the deck model.
 package Clam::Wit::Loader;
 use strict;

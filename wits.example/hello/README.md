@@ -2,7 +2,7 @@
 
 The smallest useful clam wit. Use it as a template for your own wits.
 
-Demonstrates all three registration surfaces (see `docs/DESIGN.md` §5):
+Demonstrates all three registration surfaces (see `docs/ROADMAP.md` §5):
 
 - **tool** — `greet`: callable by the LLM via function calling
 - **command** — `/hello [text]`: a REPL slash command
