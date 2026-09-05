@@ -5,6 +5,11 @@ use strict; use warnings;
 my %KNOWN = (
     lmstudio        => 'Clam::Provider::LMStudio',
     'openai-compat' => 'Clam::Provider::OpenAICompat',
+    ollama          => 'Clam::Provider::Ollama',
+    openai          => 'Clam::Provider::OpenAI',
+    anthropic       => 'Clam::Provider::Anthropic',
+    gemini          => 'Clam::Provider::Gemini',
+    azure           => 'Clam::Provider::Azure',
     mock            => 'Clam::Provider::Mock',
 );
 
