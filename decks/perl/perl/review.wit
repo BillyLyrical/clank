@@ -1,0 +1,97 @@
+#!wit/toml
+author="CLAM"
+description="Code review Perl code with suggestions"
+enabled=true
+license="Artistic-2.0"
+name="perl_review"
+notes="Checks for common issues: security, style, best practices.\nProvides actionable suggestions.\n"
+priority=10
+timeout=10
+type="rule"
+usage="Input: { code: \"sub foo { system('rm -rf /'); }\" }\nOutput: { issues: [{ type: \"security\", severity: \"high\", msg: \"Dangerous system() call\" }] }\n"
+version="1.0.0"
+requires_perl=[
+  "PPI",
+]
+triggers=[
+  "perl_review",
+]
+
+[metadata]
+category="perl"
+complexity="simple"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $code = ref $input eq 'HASH' ? ($input->{code} // '') : $input;
+
+return { issues => [] } unless $code;
+
+my @issues;
+
+# Security checks
+if ($code =~ /\bsystem\s*\(/) {
+    push @issues, {
+        type     => 'security',
+        severity => 'high',
+        msg      => 'system() call — use IPC::Run or capture for safety',
+    };
+}
+if ($code =~ /\beval\s*\{[^}]*\beval\b/) {
+    push @issues, {
+        type     => 'security',
+        severity => 'medium',
+        msg      => 'Nested eval — consider error handling strategy',
+    };
+}
+if ($code =~ /\bexec\s*\(/) {
+    push @issues, {
+        type     => 'security',
+        severity => 'high',
+        msg      => 'exec() replaces process — ensure intentional',
+    };
+}
+
+# Style checks
+if ($code !~ /^use strict;/m) {
+    push @issues, {
+        type     => 'style',
+        severity => 'medium',
+        msg      => 'Missing "use strict"',
+    };
+}
+if ($code !~ /^use warnings;/m) {
+    push @issues, {
+        type     => 'style',
+        severity => 'low',
+        msg      => 'Missing "use warnings"',
+    };
+}
+
+# Best practices
+if ($code =~ /\bmy\s+\(\s*\)/) {
+    push @issues, {
+        type     => 'style',
+        severity => 'low',
+        msg      => 'Empty my() — remove or add variables',
+    };
+}
+if ($code =~ /\$result\s*=\s*\$/) {
+    push @issues, {
+        type     => 'style',
+        severity => 'low',
+        msg      => 'Direct assignment — consider clarity',
+    };
+}
+
+# Bug patterns
+if ($code =~ /\$hash\{key\}/ && $code !~ /exists\s+\$hash\{key\}/) {
+    push @issues, {
+        type     => 'bug',
+        severity => 'medium',
+        msg      => 'Hash access without exists check — may warn on missing keys',
+    };
+}
+
+return { issues => \@issues };
+
+PERL

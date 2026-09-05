@@ -1,0 +1,71 @@
+#!wit/toml
+author="CLAM"
+description="Suggest refactoring improvements for Perl code"
+enabled=true
+license="Artistic-2.0"
+name="perl_refactor"
+notes="Identifies common refactoring opportunities.\nProvides before/after examples.\n"
+priority=10
+timeout=10
+type="rule"
+usage="Input: { code: \"sub foo { if ($x) { return 1; } else { return 0; } }\" }\nOutput: { suggestions: [{ type: \"simplify\", before: \"if ($x) { return 1; } else { return 0; }\", after: \"return $x ? 1 : 0;\" }] }\n"
+version="1.0.0"
+requires_perl=[
+  "PPI",
+]
+triggers=[
+  "perl_refactor",
+]
+
+[metadata]
+category="perl"
+complexity="simple"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $code = ref $input eq 'HASH' ? ($input->{code} // '') : $input;
+
+return { suggestions => [] } unless $code;
+
+my @suggestions;
+
+# Simplify if/else returns
+if ($code =~ /if\s*\((.+?)\)\s*\{\s*return\s+(\d+)\s*;\s*\}\s*else\s*\{\s*return\s+(\d+)\s*;\s*\}/) {
+    my ($cond, $true, $false) = ($1, $2, $3);
+    push @suggestions, {
+        type   => 'simplify',
+        before => "if ($cond) { return $true; } else { return $false; }",
+        after  => "return $cond ? $true : $false;",
+    };
+}
+
+# Replace map { $_ } with [@array]
+if ($code =~ /\bmap\s*\{\s*\$_\s*\}\s*(\@[\w]+)/) {
+    push @suggestions, {
+        type   => 'simplify',
+        before => "map { \$_ } $1",
+        after  => "[\@$1[0 .. \$#$1]]",
+    };
+}
+
+# Replace for loop with map
+if ($code =~ /my\s+\@result;\s*for\s+my\s+\\\$(\w+)\s+\((\@[\w]+)\)\s*\{\s*push\s+\@result,\s*(.+?)\s*;\s*\}/s) {
+    my ($var, $array, $expr) = ($1, $2, $3);
+    push @suggestions, {
+        type   => 'modernize',
+        before => "my \@result;\nfor my \$$var (\$array) {\n    push \@result, $expr;\n}",
+        after  => "my \@result = map { my \$$var = \$_; $expr } \$$array;",
+    };
+}
+
+# Use List::Util for common operations
+if ($code =~ /\bmy\s+\\\$(?:max|min)\s*=.*for.*\@/) {
+    push @suggestions, {
+        type   => 'modernize',
+        before => 'Manual max/min calculation',
+        after  => 'use List::Util qw(max min); my $max = max @array;',
+    };
+}
+
+return { suggestions => \@suggestions };
+
+PERL

@@ -313,6 +313,7 @@ lib/Clam/Rules/{DecisionTree,FSM,BehaviorTree}.pm
 | `git` | 10 | Git operations | ✅ Ported, tested |
 | `fs` | 18 | Filesystem operations | ✅ Ported, tested |
 | `db` | 8 | DB connect/query/execute/schema/shell (core wits) | ✅ Ported, tested |
+| `perl` | 16 | Perl development tools (syntax, review, POD, testing, debugging) | ✅ Ported, tested |
 | `search` | 9 | Local + web search | ✅ Ported, tested (install-on-demand) |
 
 ### 6.2 Planned Decks (from clam-old, prioritized)
@@ -346,7 +347,7 @@ These are the decks worth porting. Not all 77 old decks — just the ones that s
 
 Not all wits ship with a default install. A manifest (e.g., `decks/core.wits`) lists the wits that are in the core bundle. Everything else stays in the repo and is installable on demand.
 
-Core bundle: logic (sans SAT) + git + fs + db = 69 wits. search, SAT, critic, and DB admin (sqlite/postgres/mysql CLI) wits exist in the repo but are opt-in installs. The principle: if a wit has zero external dependencies and serves the coding workflow, it's a core candidate. If it needs vendor CLIs, API keys, or non-core binaries, it's install-on-demand.
+Core bundle: logic (sans SAT) + git + fs + db + perl = 85 wits. search, SAT, critic, OS, and DB admin (sqlite/postgres/mysql CLI) wits exist in the repo but are opt-in installs. The principle: if a wit has zero external dependencies and serves the coding workflow, it's a core candidate. If it needs vendor CLIs, API keys, or non-core binaries, it's install-on-demand.
 
 ---
 
@@ -409,7 +410,7 @@ The core harness is done and working (527 tests). MVP adds providers + README so
 | README | ~half day | What it is, how to install, how to run, provider config examples |
 | cpanfile | ~10 min | Declare DBI + DBD::SQLite as the only non-core deps |
 
-**MVP bundle: 69 core wits (logic-sans-SAT + git + fs + db), 5 providers, deps = Perl + SQLite + DBI + git.** All 99 wits in the repo; search, SAT, critic, and DB admin (sqlite/postgres/mysql CLI) are install-on-demand via `clam wits install`.
+**MVP bundle: 85 core wits (logic-sans-SAT + git + fs + db + perl), 5 providers, deps = Perl + SQLite + DBI + git.** All 115 wits in the repo; search, SAT, critic, OS, and DB admin (sqlite/postgres/mysql CLI) are install-on-demand via `clam wits install`.
 
 ### Phase 2: Ecosystem
 
@@ -457,7 +458,8 @@ This is the vision from minsky.txt. The harness gets us in the door; the Minsky 
 Clam v2 is what you show to Perl greybeards:
 
 > "Here's a Perl AI environment. SQLite backend, pub/sub bus, Pi-parity agent loop.
-> Four tools, 99 curated wits, Datalog engine, rules DSL, database shell.
+> Four tools, 115 curated wits, Datalog engine, rules DSL, database shell,
+> Perl development suite (syntax check, code review, POD, test generation).
 > 527 tests, all offline. `prove -l t/` green.
 > A wit is a .pm file with a register() method.
 > Drop it in ~/.clam/wits/ and it works.
@@ -505,8 +507,8 @@ Deleted (consolidated into ROADMAP):
 | Problem | v1 Count | v2 Approach |
 |---------|----------|-------------|
 | Perl modules | 68 | ~25 core + wit libraries |
-| .wit files | 654 | 99 (port selectively) |
-| Deck directories | 77 | 6 (grow on demand) |
+| .wit files | 654 | 115 (port selectively) |
+| Deck directories | 77 | 7 (grow on demand) |
 | Extension mechanisms | 5 (Wits, Plugins, Skills, Rules, Recipes) | 1 (Wits) |
 | Reasoning engines | 6 | 2 (Logic + Rules) |
 | Agent coordination | 5 (Band, Society, Debate, Swarm, Federation) | Bus topics |

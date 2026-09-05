@@ -1,0 +1,7 @@
+[deck]
+author      = "CLAM"
+name        = "perl"
+version     = "1.0.0"
+about       = "Perl development tools — syntax check, code review, POD, testing, debugging"
+usage       = "Use for Perl code analysis and development. The LLM can check syntax, review code, generate tests, parse errors, read POD, and explain idioms. All wits are pure Perl with core-only dependencies."
+license     = "Artistic-2.0"

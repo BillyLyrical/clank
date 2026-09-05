@@ -1,0 +1,73 @@
+#!wit/toml
+author="CLAM"
+description="Verify POD validity, find missing documentation"
+enabled=true
+license="Artistic-2.0"
+name="perl_doc_check"
+notes="Checks for valid POD structure.\nFinds undocumented functions.\n"
+priority=10
+timeout=10
+type="rule"
+usage="Input: { code: \"=head1 NAME\\n\\nMy module\\n\\n=cut\\n\\nsub foo { }\" }\nOutput: { valid: 1, missing: [\"foo undocumented\"], sections: [\"NAME\"] }\n"
+version="1.0.0"
+triggers=[
+  "perl_doc_check",
+]
+
+[metadata]
+category="perl"
+complexity="simple"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $code = ref $input eq 'HASH' ? ($input->{code} // '') : $input;
+
+return { valid => 0, error => "No code provided" } unless $code;
+
+my @sections;
+my $in_pod = 0;
+my @pod_lines;
+
+for my $line (split /\n/, $code) {
+    if ($line =~ /^=(\w+)/) {
+        $in_pod = 1;
+        push @sections, $1;
+    } elsif ($line =~ /^=cut/) {
+        $in_pod = 0;
+    } elsif ($in_pod) {
+        push @pod_lines, $line;
+    }
+}
+
+# Find undocumented subs
+my @subs;
+while ($code =~ /^sub\s+(\w+)/gm) {
+    push @subs, $1;
+}
+
+my @missing;
+for my $sub (@subs) {
+    my $found = 0;
+    for my $line (@pod_lines) {
+        if ($line =~ /\Q$sub\E/) {
+            $found = 1;
+            last;
+        }
+    }
+    push @missing, $sub unless $found;
+}
+
+# Validate required sections
+my @required = qw(NAME DESCRIPTION SYNOPSIS);
+my @missing_sections;
+for my $req (@required) {
+    push @missing_sections, $req unless grep { /^$req$/i } @sections;
+}
+
+return {
+    valid           => scalar(@missing_sections) == 0,
+    missing         => \@missing,
+    missing_sections => \@missing_sections,
+    sections        => \@sections,
+};
+
+PERL

@@ -1,0 +1,95 @@
+#!wit/toml
+author="CLAM"
+description="Find unsafe Perl patterns (system, eval, no taint)"
+enabled=true
+license="Artistic-2.0"
+name="perl_security"
+notes="Checks for taint mode violations, unsafe patterns.\nSuggests safer alternatives.\n"
+priority=10
+timeout=10
+type="rule"
+usage="Input: { code: \"system($user_input); eval $code;\" }\nOutput: { issues: [{ type: \"taint\", msg: \"Untainted data in system()\", severity: \"critical\" }] }\n"
+version="1.0.0"
+requires_perl=[
+  "PPI",
+]
+triggers=[
+  "perl_security",
+]
+
+[metadata]
+category="perl"
+complexity="simple"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $code = ref $input eq 'HASH' ? ($input->{code} // '') : $input;
+
+return { issues => [] } unless $code;
+
+my @issues;
+
+# Critical: Taint violations
+if ($code =~ /\bsystem\s*\((?:\$[^)]+)\)/) {
+    push @issues, {
+        type       => 'taint',
+        severity   => 'critical',
+        msg        => 'Untainted data in system() — use list form or IPC::Run',
+        suggestion => 'IPC::Run::run("cmd", \$input)',
+    };
+}
+
+if ($code =~ /\bexec\s*\((?:\$[^)]+)\)/) {
+    push @issues, {
+        type       => 'taint',
+        severity   => 'critical',
+        msg        => 'Untainted data in exec() — use list form',
+        suggestion => 'exec("cmd", @args)',
+    };
+}
+
+if ($code =~ /\beval\s+(?:\$[^{])/) {
+    push @issues, {
+        type       => 'taint',
+        severity   => 'critical',
+        msg        => 'Eval of untainted data — use Safe compartment',
+        suggestion => 'Safe->new->reval($code)',
+    };
+}
+
+# High: Unsafe patterns
+if ($code =~ /\bdo\s+['"]/) {
+    push @issues, {
+        type     => 'unsafe',
+        severity => 'high',
+        msg      => 'do with filename — potential code injection',
+    };
+}
+
+if ($code =~ /\brequire\s+\$/) {
+    push @issues, {
+        type     => 'unsafe',
+        severity => 'high',
+        msg      => 'require with variable — potential code injection',
+    };
+}
+
+# Medium: Best practices
+if ($code =~ /\bopen\s*\(\s*\w+\s*,[^>]*\$\w+/) {
+    push @issues, {
+        type     => 'unsafe',
+        severity => 'medium',
+        msg      => 'open with variable — check file permissions',
+    };
+}
+
+if ($code =~ /\bchmod\b.*\$\w+/) {
+    push @issues, {
+        type     => 'unsafe',
+        severity => 'medium',
+        msg      => 'chmod with variable — verify permissions',
+    };
+}
+
+return { issues => \@issues };
+
+PERL

@@ -1,0 +1,47 @@
+#!wit/toml
+author="CLAM"
+description="Add Data::Dumper output to variables"
+enabled=true
+license="Artistic-2.0"
+name="perl_dump"
+notes="Injects Data::Dumper warnings for specified variables.\nUseful for debugging.\n"
+priority=10
+timeout=10
+type="rule"
+usage="Input: { code: \"my $x = { foo => 1 };\", vars: [\"$x\"] }\nOutput: { code: \"use Data::Dumper;\\nmy $x = { foo => 1 };\\nwarn Dumper($x);\" }\n"
+version="1.0.0"
+requires_perl=[
+  "Devel::Peek",
+]
+triggers=[
+  "perl_dump",
+]
+
+[metadata]
+category="perl"
+complexity="simple"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $code = ref $input eq 'HASH' ? ($input->{code} // '') : $input;
+my $vars = ref $input eq 'HASH' ? ($input->{vars} // []) : [];
+
+return { code => $code, error => "No code provided" } unless $code;
+
+my $dumper_code = $code;
+
+# Add Data::Dumper import if not present
+if ($dumper_code !~ /use\s+Data::Dumper/) {
+    $dumper_code = "use Data::Dumper;\n" . $dumper_code;
+}
+
+# Add dump for each variable
+for my $var (@$vars) {
+    my $escaped = quotemeta($var);
+    if ($dumper_code !~ /warn.*Dumper.*\Q$var\E/) {
+        $dumper_code .= "\nwarn Dumper($var);  # DEBUG\n";
+    }
+}
+
+return { code => $dumper_code };
+
+PERL

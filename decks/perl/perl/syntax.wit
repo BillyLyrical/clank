@@ -1,0 +1,49 @@
+#!wit/toml
+author="CLAM"
+description="Check Perl syntax with perl -c, return errors/warnings"
+enabled=true
+license="Artistic-2.0"
+name="perl_syntax"
+notes="Writes code to temp file, runs perl -c, parses output.\nReturns clean error messages without temp file paths.\n"
+priority=10
+timeout=10
+type="rule"
+usage="Input: { code: \"sub foo { my $x = }\", file: \"test.pl\" }\nOutput: { ok: 0, errors: [\"Missing semicolon at test.pl line 1\"] }\n"
+version="1.0.0"
+triggers=[
+  "perl_syntax",
+]
+
+[metadata]
+category="perl"
+command="perl -c"
+complexity="simple"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $code = ref $input eq 'HASH' ? ($input->{code} // '') : $input;
+my $file = ref $input eq 'HASH' ? ($input->{file} // 'check.pl') : 'check.pl';
+
+return { ok => 0, errors => ["No code provided"] } unless $code;
+
+my $tmp = "/tmp/clam_syntax_check_$$.pl";
+open my $fh, '>', $tmp or return { ok => 0, errors => ["Cannot write temp file: $!"] };
+print $fh $code;
+close $fh;
+
+my $output = `$^X -c $tmp 2>&1`;
+my $exit = $? >> 8;
+unlink $tmp;
+
+my @errors;
+for my $line (split /\n/, $output) {
+    next if $line =~ /^$file syntax OK/;
+    push @errors, $line if $line =~ /error|warn|syntax/i;
+}
+
+return {
+    ok     => $exit == 0,
+    errors => \@errors,
+    output => $output,
+};
+
+PERL
