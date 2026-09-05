@@ -35,7 +35,7 @@ my $action = ref $input eq 'HASH' ? ($input->{action} // 'exec') : 'exec';
 if ($action eq 'start') {
   my $db = $input->{db} // '';
   if ($db) {
-    my $result = $ctx{wits}->execute('db_connect', { database => $db, driver => 'sqlite' }) if $ctx{wits};
+    my $result = $ctx{wits}->execute('db.connect', { database => $db, driver => 'sqlite' }) if $ctx{wits};
     return $result // { ok => 0, error => "No wits available" };
   }
   return { ok => 1, message => "dbshell ready. Use .connect <file> or provide db on start.", prompt => $state->{prompt} };
@@ -58,30 +58,30 @@ if ($action eq 'exec') {
     my $arg = $parts[0] // '';
 
     if ($verb eq 'tables' || $verb eq 't') {
-      return $ctx{wits}->execute('db_schema', { action => 'tables' }) if $ctx{wits};
+      return $ctx{wits}->execute('db.schema', { action => 'tables' }) if $ctx{wits};
     }
     if ($verb eq 'describe' || $verb eq 'd' || $verb eq 'desc') {
       return { ok => 0, error => "Usage: .describe <table>" } unless $arg;
-      return $ctx{wits}->execute('db_schema', { action => 'columns', table => $arg }) if $ctx{wits};
+      return $ctx{wits}->execute('db.schema', { action => 'columns', table => $arg }) if $ctx{wits};
     }
     if ($verb eq 'indexes' || $verb eq 'i') {
       return { ok => 0, error => "Usage: .indexes <table>" } unless $arg;
-      return $ctx{wits}->execute('db_schema', { action => 'indexes', table => $arg }) if $ctx{wits};
+      return $ctx{wits}->execute('db.schema', { action => 'indexes', table => $arg }) if $ctx{wits};
     }
     if ($verb eq 'fkeys' || $verb eq 'fk') {
       return { ok => 0, error => "Usage: .fkeys <table>" } unless $arg;
-      return $ctx{wits}->execute('db_schema', { action => 'foreign_keys', table => $arg }) if $ctx{wits};
+      return $ctx{wits}->execute('db.schema', { action => 'foreign_keys', table => $arg }) if $ctx{wits};
     }
     if ($verb eq 'stats' || $verb eq 's') {
       return { ok => 0, error => "Usage: .stats <table>" } unless $arg;
-      return $ctx{wits}->execute('db_schema', { action => 'stats', table => $arg }) if $ctx{wits};
+      return $ctx{wits}->execute('db.schema', { action => 'stats', table => $arg }) if $ctx{wits};
     }
     if ($verb eq 'history' || $verb eq 'h') {
-      return $ctx{wits}->execute('dbshell_history', { action => 'list' }) if $ctx{wits};
+      return $ctx{wits}->execute('db.history', { action => 'list' }) if $ctx{wits};
     }
     if ($verb eq 'export' || $verb eq 'e') {
       return { ok => 0, error => "Usage: .export <table>" } unless $arg;
-      return $ctx{wits}->execute('dbshell_export', { action => 'table', table => $arg, format => $state->{format} }) if $ctx{wits};
+      return $ctx{wits}->execute('db.export', { action => 'table', table => $arg, format => $state->{format} }) if $ctx{wits};
     }
     if ($verb eq 'format' || $verb eq 'f') {
       my $fmt = lc($arg);
@@ -94,7 +94,7 @@ if ($action eq 'exec') {
     }
     if ($verb eq 'connect' || $verb eq 'c') {
       return { ok => 0, error => "Usage: .connect <file>" } unless $arg;
-      return $ctx{wits}->execute('db_connect', { database => $arg, driver => 'sqlite' }) if $ctx{wits};
+      return $ctx{wits}->execute('db.connect', { database => $arg, driver => 'sqlite' }) if $ctx{wits};
     }
     if ($verb eq 'disconnect') {
       if ($state->{dbh}) {
@@ -149,7 +149,7 @@ if ($action eq 'exec') {
   }
 
   if ($state->{dbh}) {
-    my $result = $ctx{wits}->execute('db_query', {
+    my $result = $ctx{wits}->execute('db.query', {
       conn_id => $state->{conn_id} // '',
       sql => $line,
     }) if $ctx{wits};

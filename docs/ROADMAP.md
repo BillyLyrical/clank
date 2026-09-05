@@ -199,6 +199,26 @@ The curation catalog is a small JSON file that maintainers edit. It is NOT a sel
 
 3. **Stdio wits** (untrusted code): External process, JSON stdin/stdout protocol. Process boundary buys crash containment and true unload.
 
+### 5.4 Deck Format
+
+A deck is a directory with this structure:
+
+```
+decks/<name>/
+  deck.toml          # manifest (name, version, about, usage, requires_perl, requires_bin)
+  lib/               # optional — deck's own library modules (on @INC at load)
+  <group>/
+    <wit>.wit        # declarative wits grouped by category
+```
+
+The group subdirectory determines the wit namespace: `decks/db/db/connect.wit` → wit name `db.connect`. The loader derives names from path relative to the deck root (`Loader.pm:44-50`).
+
+Why groups: wits need unique names. `connect.wit` in a flat deck gives the bare name `connect`; `db/db/connect.wit` gives `db.connect`. When two decks both have a `connect` wit, the group prefix prevents collision.
+
+The deck.toml declares `namespace = [...]` to enforce that the deck's `lib/` modules stay in their own namespace — no shadowing across decks.
+
+Distribution: git clone → `decks/<name>/` is self-contained. `clam wits install <path>` copies to `~/.clam/wits/<name>/`. A mature wit can graduate to PAUSE as `Clam-Wit-<Name>` (layout already compatible).
+
 ### 5.4 Lifecycle
 
 ```
@@ -326,7 +346,7 @@ These are the decks worth porting. Not all 77 old decks — just the ones that s
 
 Not all wits ship with a default install. A manifest (e.g., `decks/core.wits`) lists the wits that are in the core bundle. Everything else stays in the repo and is installable on demand.
 
-Core bundle: logic (sans SAT) + critic + git + fs + db = 81 wits. search, SAT, and DB admin (sqlite/postgres/mysql CLI) wits exist in the repo but are opt-in installs. The principle: if a wit has zero external dependencies and serves the coding workflow, it's a core candidate. If it needs vendor CLIs, API keys, or non-core binaries, it's install-on-demand.
+Core bundle: logic (sans SAT) + git + fs + db = 69 wits. search, SAT, critic, and DB admin (sqlite/postgres/mysql CLI) wits exist in the repo but are opt-in installs. The principle: if a wit has zero external dependencies and serves the coding workflow, it's a core candidate. If it needs vendor CLIs, API keys, or non-core binaries, it's install-on-demand.
 
 ---
 
@@ -389,7 +409,7 @@ The core harness is done and working (527 tests). MVP adds providers + README so
 | README | ~half day | What it is, how to install, how to run, provider config examples |
 | cpanfile | ~10 min | Declare DBI + DBD::SQLite as the only non-core deps |
 
-**MVP bundle: 81 core wits (logic-sans-SAT + critic + git + fs + db), 5 providers, deps = Perl + SQLite + DBI + git.** All 99 wits in the repo; search, SAT, and DB admin (sqlite/postgres/mysql CLI) are install-on-demand via `clam wits install`.
+**MVP bundle: 69 core wits (logic-sans-SAT + git + fs + db), 5 providers, deps = Perl + SQLite + DBI + git.** All 99 wits in the repo; search, SAT, critic, and DB admin (sqlite/postgres/mysql CLI) are install-on-demand via `clam wits install`.
 
 ### Phase 2: Ecosystem
 
