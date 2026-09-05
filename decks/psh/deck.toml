@@ -1,0 +1,7 @@
+[deck]
+author      = "CLAM"
+name        = "psh"
+version     = "1.0.0"
+about       = "Psh — Perl Shell REPL inside CLAM"
+usage       = "Use for interactive Perl execution inside the harness. The LLM can eval Perl code (syntax-checked first), run shell commands (!cmd), and persist variables between evals. Zero external deps."
+license     = "Artistic-2.0"

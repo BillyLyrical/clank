@@ -1,0 +1,113 @@
+#!wit/toml
+author="CLAM"
+description="Manage psh variables — list, get, set, clear, export"
+enabled=1
+license="Artistic-2.0"
+name="psh_vars"
+notes="Manages persisted variables between psh evals.\nVariables declared with 'our' in psh auto-persist.\nThis wit provides explicit control over the variable store.\n"
+priority=50
+stateful=true
+timeout=5
+type="agent"
+usage="Input: { action: \"list\" }\nInput: { action: \"get\", name: \"auth\" }\nInput: { action: \"set\", name: \"x\", value: \"42\" }\nInput: { action: \"clear\" }\nOutput: { vars: { x: \"42\", auth: \"...\" } }\n"
+version="1.0.0"
+triggers=[
+  "psh_vars",
+]
+
+[metadata]
+category="psh"
+complexity="simple"
+output_format="{ vars: {...}, count: N }"
+requires_context="{ action: 'list'|'get'|'set'|'delete'|'clear'|'history'|'result', name?: '...', value?: '...' }"
+safety="write"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $action = ref $input eq 'HASH' ? ($input->{action} // 'list') : 'list';
+my $name = ref $input eq 'HASH' ? ($input->{name} // '') : '';
+my $value = ref $input eq 'HASH' ? ($input->{value} // '') : '';
+
+my $state = $ctx{state} // {};
+$state->{psh} //= { vars => {}, history => [], result => '' };
+my $vars = $state->{psh}{vars};
+
+if ($action eq 'list') {
+    my %display;
+    for my $k (sort keys %$vars) {
+        my $v = $vars->{$k};
+        $display{$k} = ref($v) ? ref($v) : "$v";
+    }
+    return {
+        topic => 'psh.vars',
+        vars  => \%display,
+        count => scalar keys %$vars,
+    };
+}
+
+if ($action eq 'get') {
+    return { error => "No variable name" } unless $name;
+    my $val = $vars->{$name};
+    return { error => "Variable not found: $name" } unless defined $val;
+
+    return {
+        topic => 'psh.vars',
+        name  => $name,
+        value => ref($val) ? ref($val) : "$val",
+        ref   => ref($val),
+    };
+}
+
+if ($action eq 'set') {
+    return { error => "No variable name" } unless $name;
+    $vars->{$name} = $value;
+
+    return {
+        topic => 'psh.vars',
+        name  => $name,
+        value => "$value",
+        set   => 1,
+    };
+}
+
+if ($action eq 'delete' || $action eq 'unset') {
+    return { error => "No variable name" } unless $name;
+    return { error => "Variable not found: $name" } unless exists $vars->{$name};
+
+    delete $vars->{$name};
+
+    return {
+        topic   => 'psh.vars',
+        name    => $name,
+        deleted => 1,
+    };
+}
+
+if ($action eq 'clear') {
+    my $count = scalar keys %$vars;
+    $state->{psh}{vars} = {};
+
+    return {
+        topic => 'psh.vars',
+        cleared => $count,
+    };
+}
+
+if ($action eq 'history') {
+    my $history = $state->{psh}{history} // [];
+    return {
+        topic   => 'psh.vars',
+        history => [@$history[-20..-1]],  # last 20
+        count   => scalar @$history,
+    };
+}
+
+if ($action eq 'result') {
+    return {
+        topic  => 'psh.vars',
+        result => $state->{psh}{result} // '',
+    };
+}
+
+return { error => "Unknown action: $action" };
+
+PERL
