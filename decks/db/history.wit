@@ -1,0 +1,86 @@
+#!wit/toml
+author="CLAM"
+description="Query history — browse, search, and re-execute previous queries"
+enabled=true
+license="Artistic-2.0"
+name="dbshell_history"
+notes="Maintains history of executed queries with timestamps and\nrow counts. Search by SQL content, re-execute by index.\n"
+priority=10
+stateful=true
+timeout=5
+type="rule"
+usage="Input: { action: \"list\" }\nInput: { action: \"search\", query: \"users\" }\nInput: { action: \"rerun\", index: 5 }\nInput: { action: \"clear\" }\nOutput: depends on action\n"
+version="1.0.0"
+triggers=[
+  "dbshell_history",
+]
+
+[metadata]
+category="dbshell"
+complexity="simple"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $state = $ctx{state}{dbshell} // { history => [] };
+my $action = ref $input eq 'HASH' ? ($input->{action} // 'list') : 'list';
+
+if ($action eq 'list') {
+  my $limit = $input->{limit} // 20;
+  my @recent = @{$state->{history}}[-($limit) .. $#{$state->{history}}];
+  @recent = reverse @recent;
+
+  my @output;
+  for my $i (0 .. $#recent) {
+    my $h = $recent[$i];
+    my $sql_preview = $h->{sql};
+    $sql_preview = substr($sql_preview, 0, 60) . '...' if length($sql_preview) > 60;
+    push @output, {
+      index => $#$state->{history} - $#recent + $i,
+      sql => $sql_preview,
+      rows => $h->{rows},
+      duration_ms => $h->{duration_ms} // 0,
+      time => $h->{time},
+    };
+  }
+
+  return { ok => 1, history => \@output, count => scalar @{$state->{history}} };
+}
+
+if ($action eq 'search') {
+  my $query = ref $input eq 'HASH' ? ($input->{query} // '') : $input;
+  return { ok => 0, error => "No search query" } unless $query;
+
+  my @matches;
+  for my $i (0 .. $#{$state->{history}}) {
+    my $h = $state->{history}[$i];
+    if ($h->{sql} =~ /\Q$query\E/i) {
+      push @matches, {
+        index => $i,
+        sql => $h->{sql},
+        rows => $h->{rows},
+        duration_ms => $h->{duration_ms} // 0,
+        time => $h->{time},
+      };
+    }
+  }
+
+  return { ok => 1, matches => \@matches, count => scalar @matches, query => $query };
+}
+
+if ($action eq 'rerun') {
+  my $index = ref $input eq 'HASH' ? ($input->{index} // -1) : $input;
+  return { ok => 0, error => "Invalid index" } unless $index >= 0 && $index <= $#$state->{history};
+
+  my $sql = $state->{history}[$index]{sql};
+  return { ok => 1, sql => $sql, message => "Re-executing query #$index" };
+}
+
+if ($action eq 'clear') {
+  my $count = scalar @{$state->{history}};
+  $state->{history} = [];
+  $ctx{state}{dbshell} = $state;
+  return { ok => 1, cleared => $count };
+}
+
+return { ok => 0, error => "Unknown action: $action" };
+
+PERL

@@ -1,0 +1,187 @@
+#!wit/toml
+author="CLAM"
+description="Inspect database schema — tables, columns, indexes, constraints"
+enabled=true
+license="Artistic-2.0"
+name="db_schema"
+notes="Introspects database schema without executing queries.\nSupports SQLite, MySQL, PostgreSQL.\n"
+priority=10
+stateful=true
+timeout=10
+type="rule"
+usage="Input: { conn_id: \"sqlite:./data.db\", action: \"tables\" }\nInput: { conn_id: \"sqlite:./data.db\", action: \"columns\", table: \"users\" }\nInput: { conn_id: \"sqlite:./data.db\", action: \"indexes\", table: \"users\" }\nOutput: { tables: [\"users\", \"posts\"], columns: [{name: \"id\", type: \"INTEGER\", pk: 1}] }\n"
+version="1.0.0"
+triggers=[
+  "db_schema",
+]
+
+[metadata]
+category="database"
+complexity="simple"
+output_format="{ tables: [...] } or { columns: [...] } or { indexes: [...] }"
+requires_context="{ conn_id: '...', action: 'tables'|'columns'|'indexes'|'info', table?: '...' }"
+safety="read_only"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $conn_id = ref $input eq 'HASH' ? ($input->{conn_id} // '') : '';
+my $action = ref $input eq 'HASH' ? ($input->{action} // 'tables') : 'tables';
+my $table = ref $input eq 'HASH' ? ($input->{table} // '') : '';
+
+my $dbh = _get_dbh($conn_id, \%ctx);
+return { error => "No database connection" } unless $dbh;
+
+my $driver = $dbh->{Driver}{Name} // 'sqlite';
+
+if ($action eq 'tables') {
+    my @tables;
+    if ($driver eq 'SQLite') {
+        my $sth = $dbh->prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name");
+        $sth->execute;
+        while (my $row = $sth->fetchrow_arrayref) {
+            push @tables, $row->[0];
+        }
+        $sth->finish;
+    }
+    elsif ($driver eq 'mysql') {
+        my $sth = $dbh->prepare("SHOW TABLES");
+        $sth->execute;
+        while (my $row = $sth->fetchrow_arrayref) {
+            push @tables, $row->[0];
+        }
+        $sth->finish;
+    }
+    elsif ($driver eq 'Pg') {
+        my $sth = $dbh->prepare("SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename");
+        $sth->execute;
+        while (my $row = $sth->fetchrow_arrayref) {
+            push @tables, $row->[0];
+        }
+        $sth->finish;
+    }
+
+    return {
+        topic  => 'schema.tables',
+        tables => \@tables,
+        count  => scalar @tables,
+        driver => $driver,
+    };
+}
+
+if ($action eq 'columns') {
+    return { error => "No table specified" } unless $table;
+
+    my @columns;
+    if ($driver eq 'SQLite') {
+        my $sth = $dbh->prepare("PRAGMA table_info($table)");
+        $sth->execute;
+        while (my $row = $sth->fetchrow_hashref) {
+            push @columns, {
+                name     => $row->{name},
+                type     => $row->{type},
+                notnull  => $row->{notnull},
+                pk       => $row->{pk},
+                default  => $row->{dflt_value},
+            };
+        }
+        $sth->finish;
+    }
+    elsif ($driver eq 'mysql') {
+        my $sth = $dbh->prepare("DESCRIBE $table");
+        $sth->execute;
+        while (my $row = $sth->fetchrow_hashref) {
+            push @columns, {
+                name    => $row->{Field},
+                type    => $row->{Type},
+                notnull => $row->{Null} eq 'NO' ? 1 : 0,
+                pk      => $row->{Key} eq 'PRI' ? 1 : 0,
+                default => $row->{Default},
+            };
+        }
+        $sth->finish;
+    }
+    elsif ($driver eq 'Pg') {
+        my $sth = $dbh->prepare("
+            SELECT column_name, data_type, is_nullable, column_default
+            FROM information_schema.columns
+            WHERE table_name = ? AND table_schema = 'public'
+            ORDER BY ordinal_position
+        ");
+        $sth->execute($table);
+        while (my $row = $sth->fetchrow_hashref) {
+            push @columns, {
+                name    => $row->{column_name},
+                type    => $row->{data_type},
+                notnull => $row->{is_nullable} eq 'NO' ? 1 : 0,
+                default => $row->{column_default},
+            };
+        }
+        $sth->finish;
+    }
+
+    return {
+        topic   => 'schema.columns',
+        table   => $table,
+        columns => \@columns,
+        count   => scalar @columns,
+    };
+}
+
+if ($action eq 'indexes') {
+    return { error => "No table specified" } unless $table;
+
+    my @indexes;
+    if ($driver eq 'SQLite') {
+        my $sth = $dbh->prepare("PRAGMA index_list($table)");
+        $sth->execute;
+        while (my $row = $sth->fetchrow_hashref) {
+            push @indexes, {
+                name    => $row->{name},
+                unique  => $row->{unique},
+            };
+        }
+        $sth->finish;
+    }
+    elsif ($driver eq 'mysql') {
+        my $sth = $dbh->prepare("SHOW INDEX FROM $table");
+        $sth->execute;
+        while (my $row = $sth->fetchrow_hashref) {
+            push @indexes, {
+                name    => $row->{Key_name},
+                column  => $row->{Column_name},
+                unique  => !$row->{Non_unique},
+            };
+        }
+        $sth->finish;
+    }
+
+    return {
+        topic   => 'schema.indexes',
+        table   => $table,
+        indexes => \@indexes,
+        count   => scalar @indexes,
+    };
+}
+
+if ($action eq 'info') {
+    my $driver_info = {
+        name    => $driver,
+        version => $dbh->{pg_server_version} // $dbh->get_info(18) // 'unknown',
+    };
+    return {
+        topic  => 'schema.info',
+        driver => $driver_info,
+    };
+}
+
+return { error => "Unknown action: $action" };
+
+sub _get_dbh {
+    my ($conn_id, $ctx) = @_;
+    my $handles = $ctx->{state}{db_handles} // {};
+    return $handles->{$conn_id} if $handles->{$conn_id};
+    my @ids = keys %$handles;
+    return $handles->{$ids[0]} if @ids;
+    return undef;
+}
+
+PERL

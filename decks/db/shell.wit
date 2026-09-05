@@ -1,0 +1,183 @@
+#!wit/toml
+author="CLAM"
+description="Interactive database shell — REPL for exploring and managing databases"
+enabled=true
+license="Artistic-2.0"
+name="db_shell"
+notes="The database shell REPL. Like psh for databases.\nMeta-commands start with . — dot-commands for exploration.\nSQL executes directly. History maintained automatically.\n\nMeta-commands:\n  .tables              List all tables\n  .describe <table>    Describe table structure\n  .indexes <table>     Show table indexes\n  .fkeys <table>       Show foreign keys\n  .stats <table>       Table row count and size\n  .history             Show query history\n  .export <table>      Export table to CSV\n  .format <fmt>        Set output format (table/csv/json/vertical)\n  .connect <file>      Connect to database\n  .disconnect          Disconnect\n  .help                Show available commands\n"
+priority=50
+stateful=true
+timeout=30
+type="rule"
+usage="Input: { action: \"start\", db: \"my.db\" }\nInput: { action: \"exec\", input: \".tables\" }\nInput: { action: \"exec\", input: \"SELECT * FROM users LIMIT 5\" }\nInput: { action: \"status\" }\nOutput: depends on action\n"
+version="1.0.0"
+requires_perl=[
+  "DBI",
+]
+triggers=[
+  "db_shell",
+]
+
+[metadata]
+category="dbshell"
+complexity="moderate"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $state = $ctx{state}{dbshell} // {
+  connected => 0,
+  format => 'table',
+  prompt => 'db> ',
+  history => [],
+  aliases => {},
+};
+my $action = ref $input eq 'HASH' ? ($input->{action} // 'exec') : 'exec';
+
+if ($action eq 'start') {
+  my $db = $input->{db} // '';
+  if ($db) {
+    my $result = $ctx{wits}->execute('db_connect', { database => $db, driver => 'sqlite' }) if $ctx{wits};
+    return $result // { ok => 0, error => "No wits available" };
+  }
+  return { ok => 1, message => "dbshell ready. Use .connect <file> or provide db on start.", prompt => $state->{prompt} };
+}
+
+if ($action eq 'exec') {
+  my $line = ref $input eq 'HASH' ? ($input->{input} // '') : $input;
+  $line =~ s/^\s+|\s+$//g;
+  return { ok => 0, error => "Empty input" } unless $line;
+
+  push @{$state->{history}}, { input => $line, time => time() };
+  if (scalar @{$state->{history}} > 200) {
+    shift @{$state->{history}};
+  }
+
+  if ($line =~ /^\.(.*)$/) {
+    my $cmd = $1;
+    my @parts = split /\s+/, $cmd, 2;
+    my $verb = lc(shift @parts);
+    my $arg = $parts[0] // '';
+
+    if ($verb eq 'tables' || $verb eq 't') {
+      return $ctx{wits}->execute('db_schema', { action => 'tables' }) if $ctx{wits};
+    }
+    if ($verb eq 'describe' || $verb eq 'd' || $verb eq 'desc') {
+      return { ok => 0, error => "Usage: .describe <table>" } unless $arg;
+      return $ctx{wits}->execute('db_schema', { action => 'columns', table => $arg }) if $ctx{wits};
+    }
+    if ($verb eq 'indexes' || $verb eq 'i') {
+      return { ok => 0, error => "Usage: .indexes <table>" } unless $arg;
+      return $ctx{wits}->execute('db_schema', { action => 'indexes', table => $arg }) if $ctx{wits};
+    }
+    if ($verb eq 'fkeys' || $verb eq 'fk') {
+      return { ok => 0, error => "Usage: .fkeys <table>" } unless $arg;
+      return $ctx{wits}->execute('db_schema', { action => 'foreign_keys', table => $arg }) if $ctx{wits};
+    }
+    if ($verb eq 'stats' || $verb eq 's') {
+      return { ok => 0, error => "Usage: .stats <table>" } unless $arg;
+      return $ctx{wits}->execute('db_schema', { action => 'stats', table => $arg }) if $ctx{wits};
+    }
+    if ($verb eq 'history' || $verb eq 'h') {
+      return $ctx{wits}->execute('dbshell_history', { action => 'list' }) if $ctx{wits};
+    }
+    if ($verb eq 'export' || $verb eq 'e') {
+      return { ok => 0, error => "Usage: .export <table>" } unless $arg;
+      return $ctx{wits}->execute('dbshell_export', { action => 'table', table => $arg, format => $state->{format} }) if $ctx{wits};
+    }
+    if ($verb eq 'format' || $verb eq 'f') {
+      my $fmt = lc($arg);
+      if ($fmt =~ /^(table|csv|json|vertical)$/) {
+        $state->{format} = $fmt;
+        $ctx{state}{dbshell} = $state;
+        return { ok => 1, format => $fmt, message => "Output format set to $fmt" };
+      }
+      return { ok => 0, error => "Unknown format: $arg (use table, csv, json, vertical)" };
+    }
+    if ($verb eq 'connect' || $verb eq 'c') {
+      return { ok => 0, error => "Usage: .connect <file>" } unless $arg;
+      return $ctx{wits}->execute('db_connect', { database => $arg, driver => 'sqlite' }) if $ctx{wits};
+    }
+    if ($verb eq 'disconnect') {
+      if ($state->{dbh}) {
+        eval { $state->{dbh}->disconnect };
+        $state->{dbh} = undef;
+        $state->{connected} = 0;
+        $ctx{state}{dbshell} = $state;
+      }
+      return { ok => 1, message => "Disconnected" };
+    }
+    if ($verb eq 'help' || $verb eq '?') {
+      return {
+        ok => 1,
+        commands => [
+          { cmd => '.tables', alias => '.t', desc => 'List all tables' },
+          { cmd => '.describe <table>', alias => '.d', desc => 'Describe table structure' },
+          { cmd => '.indexes <table>', alias => '.i', desc => 'Show table indexes' },
+          { cmd => '.fkeys <table>', alias => '.fk', desc => 'Show foreign keys' },
+          { cmd => '.stats <table>', alias => '.s', desc => 'Table row count and size' },
+          { cmd => '.history', alias => '.h', desc => 'Show query history' },
+          { cmd => '.export <table>', alias => '.e', desc => 'Export table to CSV' },
+          { cmd => '.format <fmt>', alias => '.f', desc => 'Set output format' },
+          { cmd => '.connect <file>', alias => '.c', desc => 'Connect to database' },
+          { cmd => '.disconnect', desc => 'Disconnect from database' },
+          { cmd => '.help', alias => '.?', desc => 'Show this help' },
+          { cmd => 'SQL...', desc => 'Execute any SQL query' },
+        ],
+      };
+    }
+    if ($verb eq 'alias') {
+      my ($from, $to) = split /\s+/, $arg, 2;
+      if ($from && $to) {
+        $state->{aliases}{$from} = $to;
+        $ctx{state}{dbshell} = $state;
+        return { ok => 1, alias => "$from => $to" };
+      }
+      return { ok => 1, aliases => $state->{aliases} };
+    }
+    return { ok => 0, error => "Unknown command: .$verb (try .help)" };
+  }
+
+  if ($line =~ /^quit$/i || $line =~ /^exit$/i) {
+    if ($state->{dbh}) {
+      eval { $state->{dbh}->disconnect };
+      $state->{dbh} = undef;
+    }
+    return { ok => 1, action => 'quit' };
+  }
+
+  if ($state->{aliases}{$line}) {
+    $line = $state->{aliases}{$line};
+  }
+
+  if ($state->{dbh}) {
+    my $result = $ctx{wits}->execute('db_query', {
+      conn_id => $state->{conn_id} // '',
+      sql => $line,
+    }) if $ctx{wits};
+    return $result // { ok => 0, error => "No wits available" };
+  }
+
+  return { ok => 0, error => "No database connected. Use .connect <file> first." };
+}
+
+if ($action eq 'status') {
+  return {
+    ok => 1,
+    connected => $state->{connected} // 0,
+    db => $state->{current_db} // '',
+    type => $state->{type} // '',
+    format => $state->{format} // 'table',
+    history_count => scalar @{$state->{history}},
+    prompt => $state->{prompt},
+  };
+}
+
+if ($action eq 'prompt') {
+  my $new_prompt = $input->{prompt} // '';
+  $state->{prompt} = $new_prompt;
+  $ctx{state}{dbshell} = $state;
+  return { ok => 1, prompt => $new_prompt };
+}
+
+return { ok => 0, error => "Unknown action: $action" };
+
+PERL

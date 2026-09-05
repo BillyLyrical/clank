@@ -1,0 +1,8 @@
+[deck]
+author      = "CLAM"
+name        = "db"
+version     = "1.0.0"
+about       = "Database operations — connect, query, execute, schema, shell"
+usage       = "Use for SQLite/MySQL/PostgreSQL access. db_connect establishes connections, db_query/db_execute run SQL, db_shell provides interactive exploration. Requires DBI + DBD::SQLite for SQLite; DBD::mysql/DBD::Pg for other drivers."
+license     = "Artistic-2.0"
+requires_perl = ["DBI"]

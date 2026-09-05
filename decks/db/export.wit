@@ -1,0 +1,156 @@
+#!wit/toml
+author="CLAM"
+description="Export data — dump tables to CSV, JSON, SQL, or Markdown"
+enabled=true
+license="Artistic-2.0"
+name="dbshell_export"
+notes="Exports query results or entire tables to files.\nSupports CSV, JSON, SQL (INSERT statements), and Markdown formats.\n"
+priority=10
+stateful=true
+timeout=30
+type="rule"
+usage="Input: { action: \"table\", table: \"users\", format: \"csv\", file: \"users.csv\" }\nInput: { action: \"query\", sql: \"SELECT * FROM users\", format: \"json\", file: \"users.json\" }\nInput: { action: \"dump\", format: \"sql\", file: \"backup.sql\" }\nOutput: depends on action\n"
+version="1.0.0"
+requires_perl=[
+  "DBI",
+]
+triggers=[
+  "dbshell_export",
+]
+
+[metadata]
+category="dbshell"
+complexity="moderate"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $state = $ctx{state}{dbshell} // {};
+my $dbh = $state->{dbh};
+my $action = ref $input eq 'HASH' ? ($input->{action} // 'table') : 'table';
+
+return { ok => 0, error => "No database connected" } unless $dbh;
+
+my $format = $input->{format} // 'csv';
+my $file = $input->{file} // '';
+
+if ($action eq 'table') {
+  my $table = $input->{table} // '';
+  return { ok => 0, error => "No table specified" } unless $table;
+
+  eval {
+    my $sth = $dbh->prepare("SELECT * FROM \"$table\"");
+    $sth->execute();
+
+    my @columns = @{$sth->{NAME}};
+    my @rows;
+    while (my $row = $sth->fetchrow_hashref) {
+      push @rows, $row;
+    }
+
+    my $output = _export(\@rows, \@columns, $format, $table);
+
+    if ($file) {
+      open my $fh, '>', $file or die "Cannot write: $!";
+      print $fh $output;
+      close $fh;
+      return { ok => 1, file => $file, rows => scalar @rows, format => $format, size => -s $file };
+    }
+
+    return { ok => 1, output => $output, rows => scalar @rows, format => $format };
+  };
+
+  return { ok => 0, error => "Export failed: $@" };
+}
+
+if ($action eq 'query') {
+  my $sql = $input->{sql} // '';
+  return { ok => 0, error => "No SQL" } unless $sql;
+
+  eval {
+    my $sth = $dbh->prepare($sql);
+    $sth->execute();
+
+    my @columns = @{$sth->{NAME}};
+    my @rows;
+    while (my $row = $sth->fetchrow_hashref) {
+      push @rows, $row;
+    }
+
+    my $output = _export(\@rows, \@columns, $format, 'query_result');
+
+    if ($file) {
+      open my $fh, '>', $file or die "Cannot write: $!";
+      print $fh $output;
+      close $fh;
+      return { ok => 1, file => $file, rows => scalar @rows, format => $format };
+    }
+
+    return { ok => 1, output => $output, rows => scalar @rows, format => $format };
+  };
+
+  return { ok => 0, error => "Export failed: $@" };
+}
+
+if ($action eq 'dump') {
+  my $type = $state->{type} // 'sqlite';
+
+  if ($type eq 'sqlite' && $file) {
+    my $db_file = $state->{current_db} // '';
+    return { ok => 0, error => "No source database" } unless $db_file && -f $db_file;
+
+    if ($format eq 'sql') {
+      my $output = `.dump "$db_file" 2>/dev/null`;
+      if ($? == 0) {
+        open my $fh, '>', $file or die "Cannot write: $!";
+        print $fh $output;
+        close $fh;
+        return { ok => 1, file => $file, format => 'sql', size => -s $file };
+      }
+    }
+
+    if ($format eq 'binary' || $format eq 'copy') {
+      my $output = `cp "$db_file" "$file" 2>&1`;
+      return { ok => $? == 0, file => $file, format => 'copy' };
+    }
+  }
+
+  return { ok => 0, error => "Dump not supported for this database type" };
+}
+
+sub _export {
+  my ($rows, $columns, $format, $name) = @_;
+
+  if ($format eq 'json') {
+    eval { require JSON::PP; return JSON::PP::encode_json($rows) };
+    return '[]';
+  }
+
+  if ($format eq 'csv') {
+    my $csv = join(',', @$columns) . "\n";
+    for my $row (@$rows) {
+      $csv .= join(',', map { defined $_ ? "\"$_\"" : 'NULL' } @$row{@$columns}) . "\n";
+    }
+    return $csv;
+  }
+
+  if ($format eq 'sql') {
+    my $sql = "-- Export of $name\n\n";
+    for my $row (@$rows) {
+      my @vals = map { defined $_ ? "'$_'" : 'NULL' } @$row{@$columns};
+      $sql .= "INSERT INTO $name (" . join(',', @$columns) . ") VALUES (" . join(',', @vals) . ");\n";
+    }
+    return $sql;
+  }
+
+  if ($format eq 'markdown') {
+    my $md = "| " . join(' | ', @$columns) . " |\n";
+    $md .= "| " . join(' | ', map { '---' } @$columns) . " |\n";
+    for my $row (@$rows) {
+      $md .= "| " . join(' | ', map { defined $_ ? "$_" : 'NULL' } @$row{@$columns}) . " |\n";
+    }
+    return $md;
+  }
+
+  return '';
+}
+
+PERL

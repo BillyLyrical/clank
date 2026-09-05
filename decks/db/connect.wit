@@ -1,0 +1,95 @@
+#!wit/toml
+author="CLAM"
+description="Connect to databases — SQLite, MySQL, PostgreSQL"
+enabled=true
+license="Artistic-2.0"
+name="db_connect"
+notes="Establishes database connection via DBI.\nReturns database handle for use by other db wits.\nSupports SQLite (file-based), MySQL, PostgreSQL.\n"
+priority=10
+stateful=true
+timeout=10
+type="rule"
+usage="Input: { driver: \"sqlite\", database: \"./data.db\" }\nInput: { driver: \"mysql\", host: \"localhost\", port: 3306, database: \"mydb\", user: \"root\", password: \"...\" }\nInput: { driver: \"pgsql\", host: \"localhost\", database: \"mydb\", user: \"postgres\" }\nOutput: { ok: true, driver: \"sqlite\", dbh: <dbh> }\n"
+version="1.0.0"
+triggers=[
+  "db_connect",
+]
+
+[metadata]
+category="database"
+complexity="simple"
+output_format="{ ok: bool, conn_id: '...', ping: bool }"
+requires_context="{ driver: 'sqlite'|'mysql'|'pgsql', database: '...', host?: '...', user?: '...', password?: '...' }"
+safety="write"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $driver = ref $input eq 'HASH' ? ($input->{driver} // 'sqlite') : 'sqlite';
+my $database = ref $input eq 'HASH' ? ($input->{database} // '') : '';
+my $host = ref $input eq 'HASH' ? ($input->{host} // 'localhost') : 'localhost';
+my $port = ref $input eq 'HASH' ? ($input->{port} // '') : '';
+my $user = ref $input eq 'HASH' ? ($input->{user} // '') : '';
+my $password = ref $input eq 'HASH' ? ($input->{password} // '') : '';
+
+eval { require DBI; 1 } or return { error => "DBI not installed" };
+
+my $dsn;
+my @args;
+
+if ($driver eq 'sqlite') {
+    return { error => "No database file specified" } unless $database;
+    $dsn = "dbi:SQLite:dbname=$database";
+    @args = ($dsn, '', '', { RaiseError => 1, PrintError => 0, AutoCommit => 1 });
+}
+elsif ($driver eq 'mysql') {
+    eval { require DBD::mysql; 1 } or return { error => "DBD::mysql not installed" };
+    $port //= 3306;
+    $dsn = "dbi:mysql:database=$database;host=$host;port=$port";
+    @args = ($dsn, $user, $password, { RaiseError => 1, PrintError => 0, AutoCommit => 1 });
+}
+elsif ($driver eq 'pgsql' || $driver eq 'postgresql') {
+    eval { require DBD::Pg; 1 } or return { error => "DBD::Pg not installed" };
+    $driver = 'pgsql';
+    $port //= 5432;
+    $dsn = "dbi:Pg:dbname=$database;host=$host;port=$port";
+    @args = ($dsn, $user, $password, { RaiseError => 1, PrintError => 0, AutoCommit => 1 });
+}
+else {
+    return { error => "Unknown driver: $driver" };
+}
+
+my $dbh = eval { DBI->connect(@args) };
+return { error => "Connection failed: $@" } unless $dbh;
+
+if ($driver eq 'sqlite') {
+    $dbh->do("PRAGMA journal_mode=WAL");
+    $dbh->do("PRAGMA foreign_keys=ON");
+    $dbh->do("PRAGMA busy_timeout=5000");
+    $dbh->do("PRAGMA synchronous=NORMAL");
+}
+
+# Store handle in context for other db wits
+$ctx{state}{db_handles} //= {};
+my $conn_id = "$driver:$database";
+$ctx{state}{db_handles}{$conn_id} = $dbh;
+
+# Also update dbshell state if it exists
+if ($ctx{state}{dbshell}) {
+    $ctx{state}{dbshell}{dbh} = $dbh;
+    $ctx{state}{dbshell}{connected} = 1;
+    $ctx{state}{dbshell}{current_db} = $database;
+    $ctx{state}{dbshell}{type} = $driver;
+    $ctx{state}{dbshell}{conn_id} = $conn_id;
+    $ctx{state}{dbshell}{prompt} = "$driver:$database> ";
+}
+
+return {
+    topic    => 'db.connected',
+    ok       => 1,
+    driver   => $driver,
+    database => $database,
+    host     => $host,
+    conn_id  => $conn_id,
+    ping     => $dbh->ping,
+};
+
+PERL

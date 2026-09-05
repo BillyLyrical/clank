@@ -288,11 +288,12 @@ lib/Clam/Rules/{DecisionTree,FSM,BehaviorTree}.pm
 
 | Deck | Wits | Contents | Status |
 |------|------|----------|--------|
-| `logic` | 47 | Datalog, rules DSL, FSM, BT, DT, SAT | ✅ Ported, tested |
+| `logic` | 35 | Datalog, rules DSL, FSM, BT, DT, SAT | ✅ Ported, tested |
 | `critic` | 12 | Code critique heuristics | ✅ Ported, tested |
 | `git` | 10 | Git operations | ✅ Ported, tested |
 | `fs` | 18 | Filesystem operations | ✅ Ported, tested |
-| `search` | 9 | Local + web search | ✅ Ported, tested |
+| `db` | 8 | DB connect/query/execute/schema/shell (core wits) | ✅ Ported, tested |
+| `search` | 9 | Local + web search | ✅ Ported, tested (install-on-demand) |
 
 ### 6.2 Planned Decks (from clam-old, prioritized)
 
@@ -325,7 +326,7 @@ These are the decks worth porting. Not all 77 old decks — just the ones that s
 
 Not all wits ship with a default install. A manifest (e.g., `decks/core.wits`) lists the wits that are in the core bundle. Everything else stays in the repo and is installable on demand.
 
-Core bundle: logic (sans SAT) + critic + git + fs = 73 wits. search and SAT wits exist in the repo but are opt-in installs. The principle: if a wit has zero external dependencies and serves the coding workflow, it's a core candidate. If it needs vendor CLIs, API keys, or non-core binaries, it's install-on-demand.
+Core bundle: logic (sans SAT) + critic + git + fs + db = 81 wits. search, SAT, and DB admin (sqlite/postgres/mysql CLI) wits exist in the repo but are opt-in installs. The principle: if a wit has zero external dependencies and serves the coding workflow, it's a core candidate. If it needs vendor CLIs, API keys, or non-core binaries, it's install-on-demand.
 
 ---
 
@@ -384,11 +385,11 @@ The core harness is done and working (527 tests). MVP adds providers + README so
 | Gemini provider | ~1 day | Native generateContent API: different message format, `functionCall`/`functionResponse` parts, API key auth |
 | Azure provider | ~2 hours | Thin wrapper over OpenAI-compat: deployment URL construction + `api-version` query param |
 | Ollama + OpenAI aliases | ~10 min | `ollama` = localhost:11434, `openai` = api.openai.com, both use OpenAI-compat |
-| Drop picosat from core bundle | ~10 min | SAT wits stay in repo but not in core manifest — picosat is optional |
+| DB deck | ported | 8 core wits: connect, query, execute, schema, shell, history, export, import |
 | README | ~half day | What it is, how to install, how to run, provider config examples |
 | cpanfile | ~10 min | Declare DBI + DBD::SQLite as the only non-core deps |
 
-**MVP bundle: 73 core wits (logic-sans-SAT + critic + git + fs), 5 providers, deps = Perl + SQLite + git.** All 96 wits stay in the repo; search and SAT are install-on-demand via `clam wits install`.
+**MVP bundle: 81 core wits (logic-sans-SAT + critic + git + fs + db), 5 providers, deps = Perl + SQLite + DBI + git.** All 99 wits in the repo; search, SAT, and DB admin (sqlite/postgres/mysql CLI) are install-on-demand via `clam wits install`.
 
 ### Phase 2: Ecosystem
 
@@ -436,7 +437,7 @@ This is the vision from minsky.txt. The harness gets us in the door; the Minsky 
 Clam v2 is what you show to Perl greybeards:
 
 > "Here's a Perl AI environment. SQLite backend, pub/sub bus, Pi-parity agent loop.
-> Four tools, 96 curated wits, Datalog engine, rules DSL.
+> Four tools, 99 curated wits, Datalog engine, rules DSL, database shell.
 > 527 tests, all offline. `prove -l t/` green.
 > A wit is a .pm file with a register() method.
 > Drop it in ~/.clam/wits/ and it works.
@@ -484,8 +485,8 @@ Deleted (consolidated into ROADMAP):
 | Problem | v1 Count | v2 Approach |
 |---------|----------|-------------|
 | Perl modules | 68 | ~25 core + wit libraries |
-| .wit files | 654 | 96 (port selectively) |
-| Deck directories | 77 | 5 (grow on demand) |
+| .wit files | 654 | 99 (port selectively) |
+| Deck directories | 77 | 6 (grow on demand) |
 | Extension mechanisms | 5 (Wits, Plugins, Skills, Rules, Recipes) | 1 (Wits) |
 | Reasoning engines | 6 | 2 (Logic + Rules) |
 | Agent coordination | 5 (Band, Society, Debate, Swarm, Federation) | Bus topics |

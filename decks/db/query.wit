@@ -1,0 +1,96 @@
+#!wit/toml
+author="CLAM"
+description="Execute SELECT queries — fetch rows, columns, single value"
+enabled=true
+license="Artistic-2.0"
+name="db_query"
+notes="Executes read-only SELECT queries.\nSupports parameterized queries for safety.\nFetch modes: all (default), single, column, arrayref.\n"
+priority=10
+stateful=true
+timeout=30
+type="rule"
+usage="Input: { conn_id: \"sqlite:./data.db\", sql: \"SELECT * FROM users WHERE id = ?\", params: [1] }\nInput: { conn_id: \"sqlite:./data.db\", sql: \"SELECT COUNT(*) FROM users\", fetch: \"single\" }\nOutput: { rows: [{id: 1, name: \"Alice\"}], count: 1, columns: [\"id\", \"name\"] }\n"
+version="1.0.0"
+triggers=[
+  "db_query",
+]
+
+[metadata]
+category="database"
+complexity="simple"
+output_format="{ rows: [...], count: N, columns: [...] }"
+requires_context="{ conn_id: '...', sql: 'SELECT ...', params?: [...], fetch?: 'all'|'single'|'column' }"
+safety="read_only"
+source = <<'PERL'
+my ($self, $input, %ctx) = @_;
+my $conn_id = ref $input eq 'HASH' ? ($input->{conn_id} // '') : '';
+my $sql = ref $input eq 'HASH' ? ($input->{sql} // '') : $input;
+my $params = ref $input eq 'HASH' ? ($input->{params} // []) : [];
+my $fetch = ref $input eq 'HASH' ? ($input->{fetch} // 'all') : 'all';
+my $max_rows = ref $input eq 'HASH' ? ($input->{max_rows} // 1000) : 1000;
+
+return { error => "No SQL specified" } unless $sql;
+
+# Get connection
+my $dbh = _get_dbh($conn_id, \%ctx);
+return { error => "No database connection" } unless $dbh;
+
+# Safety check — only SELECT allowed
+unless ($sql =~ /^\s*SELECT/i) {
+    return { error => "Only SELECT queries allowed in db_query. Use db_execute for writes." };
+}
+
+my $sth = eval { $dbh->prepare($sql) };
+return { error => "Prepare failed: $@" } unless $sth;
+
+my $ok = eval { $sth->execute(@$params) };
+return { error => "Execute failed: $@" } unless $ok;
+
+my @columns = @{$sth->{NAME} || []};
+my @rows;
+my $count = 0;
+
+if ($fetch eq 'single') {
+    my $row = $sth->fetchrow_hashref;
+    @rows = $row ? ($row) : ();
+}
+elsif ($fetch eq 'column') {
+    my $col = $sth->fetchcol_arrayref;
+    @rows = $col ? @$col : ();
+}
+elsif ($fetch eq 'arrayref') {
+    my $all = $sth->fetchall_arrayref({}, { MaxRows => $max_rows });
+    @rows = $all ? @$all : ();
+}
+else {
+    # fetch all as hashes
+    while (my $row = $sth->fetchrow_hashref) {
+        last if $count >= $max_rows;
+        push @rows, $row;
+        $count++;
+    }
+}
+
+$sth->finish;
+
+return {
+    topic   => 'db.query',
+    rows    => \@rows,
+    count   => scalar @rows,
+    columns => \@columns,
+    sql     => $sql,
+};
+
+sub _get_dbh {
+    my ($conn_id, $ctx) = @_;
+    my $handles = $ctx->{state}{db_handles} // {};
+    return $handles->{$conn_id} if $handles->{$conn_id};
+
+    # Try to find any connection
+    my @ids = keys %$handles;
+    return $handles->{$ids[0]} if @ids;
+
+    return undef;
+}
+
+PERL
