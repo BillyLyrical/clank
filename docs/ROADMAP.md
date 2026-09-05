@@ -7,7 +7,7 @@
 
 ## 1. What Clam Is
 
-Clam is a complete Perl shell/environment for AI-assisted development. It is:
+Clam is a complete Perl environment for AI-assisted development and reasoning. It is:
 
 - **An AI harness** — agent loop, tools, LLM providers, session management (ported from Pi)
 - **A blackboard system** — Minsky's Society of Mind via SQLite pub/sub bus
@@ -15,7 +15,7 @@ Clam is a complete Perl shell/environment for AI-assisted development. It is:
 - **A plugin ecosystem** — curated Wits (tools, commands, bus hooks) with CPAN discipline
 - **A unix tool** — CLI REPL, NDJSON daemon, programmatic driver, zero mandatory deps beyond SQLite
 
-The thesis: LLMs are fat-fingered geniuses; logic engines are idiot savants; the harness bridges them. Perl is the backbone because Larry Wall designed it to fit human language instincts, and LLMs are trained on that text.
+The MVP is a coding harness. The vision is a complete neuro-symbolic execution environment — a Perl shell where LLMs, logic engines, and user code collaborate on the blackboard. We build the harness first because it's useful today; we keep the architecture clean so the Minsky Mind remains reachable.
 
 ### What This Is Not
 
@@ -321,11 +321,11 @@ These are the decks worth porting. Not all 77 old decks — just the ones that s
 - `federation/`, `swarm/`, `band/` — multi-agent coordination
 - `c/` — C toolchain (needs Inline::C/FFI)
 
-### 6.3 The Core Bundle Question
+### 6.3 The Core Bundle
 
-What should ship with a default Clam install? This is discovered, not decided upfront. The current 5 decks (logic, critic, git, fs, search) are a good starting point. Deckhand enables on-demand import, so the core bundle can grow organically.
+Not all wits ship with a default install. A manifest (e.g., `decks/core.wits`) lists the wits that are in the core bundle. Everything else stays in the repo and is installable on demand.
 
-The principle: if a deck has zero external dependencies and serves the coding workflow, it's a candidate for the core bundle. If it needs vendor CLIs, API keys, or non-core Perl modules, it's an install-on-demand deck.
+Core bundle: logic (sans SAT) + critic + git + fs = 73 wits. search and SAT wits exist in the repo but are opt-in installs. The principle: if a wit has zero external dependencies and serves the coding workflow, it's a core candidate. If it needs vendor CLIs, API keys, or non-core binaries, it's install-on-demand.
 
 ---
 
@@ -362,34 +362,48 @@ Try the cheapest correct tool first. Escalate only when needed.
 
 ## 8. Build Roadmap
 
-### Phase 1: Working Harness (NOW)
+### Phase 1: MVP (now)
 
-The core is done and working. 527 tests passing. This is what we show to recruits.
+The core harness is done and working (527 tests). MVP adds providers + README so someone can actually use it.
 
-**What's working:**
-- Agent loop (Pi parity)
-- 4 core tools (read, bash, edit, write)
+**What's working today:**
+- Agent loop (Pi parity), 4 core tools (read, bash, edit, write)
 - SQLite store + pub/sub bus
-- LLM providers (LMStudio, OpenAI-compat, Mock)
+- LLM providers: LMStudio, OpenAI-compat, Mock
 - REPL with streaming, slash commands
 - Clam::Driver + clamd daemon (NDJSON)
 - Wit system (two layouts, 4 discovery roots, error isolation)
 - P0/P1 Wits features (metadata, lifecycle, install gates, lockfile, namespace)
-- 5 decks ported (96 wits total)
-- Full test suite (527 tests, offline)
+- 5 decks ported (96 wits total), 527 tests offline
 
-### Phase 2: Ecosystem (next)
+**MVP deliverables:**
 
-Make the curated plugin system real. These are the P2 items from Wits.md.
+| Item | Effort | What |
+|------|--------|------|
+| Anthropic provider | ~1 day | Native Messages API: `system` top-level, `tool_use`/`tool_result` content blocks, `x-api-key` auth, different streaming format |
+| Gemini provider | ~1 day | Native generateContent API: different message format, `functionCall`/`functionResponse` parts, API key auth |
+| Azure provider | ~2 hours | Thin wrapper over OpenAI-compat: deployment URL construction + `api-version` query param |
+| Ollama + OpenAI aliases | ~10 min | `ollama` = localhost:11434, `openai` = api.openai.com, both use OpenAI-compat |
+| Drop picosat from core bundle | ~10 min | SAT wits stay in repo but not in core manifest — picosat is optional |
+| README | ~half day | What it is, how to install, how to run, provider config examples |
+| cpanfile | ~10 min | Declare DBI + DBD::SQLite as the only non-core deps |
+
+**MVP bundle: 73 core wits (logic-sans-SAT + critic + git + fs), 5 providers, deps = Perl + SQLite + git.** All 96 wits stay in the repo; search and SAT are install-on-demand via `clam wits install`.
+
+### Phase 2: Ecosystem
+
+Make the curated plugin system real + expand provider coverage.
 
 | Item | Effort | Why |
 |------|--------|-----|
-| P2-3: stdio handler type | ~1 day | Enables untrusted/user code safely. Self-contained. |
+| P2-3: stdio handler type | ~1 day | Enables untrusted/user code safely. Process boundary. |
 | P2-4: curation catalog + `wits install <name>` | half day | Makes curation real. Users install from known catalog. |
-| P2-1: requires_wit dependency graph | ~2 days | Wits that depend on other wits (e.g., logic depends on nothing; classify_input depends on rules). |
+| P2-1: requires_wit dependency graph | ~2 days | Wits that depend on other wits. |
 | P2-2: Full unload for declarative wits | medium | True cleanup, not just disable. |
+| Bedrock provider | ~1 day | AWS SigV4 signing (deferred from MVP). |
+| More decks (db, web, build, perl) | ongoing | Grow the curated catalog based on real needs. |
 
-### Phase 3: Capabilities (later)
+### Phase 3: Capabilities
 
 Features that make Clam more than a harness — a complete environment.
 
@@ -402,17 +416,18 @@ Features that make Clam more than a harness — a complete environment.
 | Director pattern (plan/goal/force-tool) | Bus hooks | Multi-turn autonomous behaviors |
 | Code crystallization (LLM → deterministic rules) | Logic deck | The system gets faster with use |
 
-### Phase 4: Grand Vision (aspirational)
+### Phase 4: The Minsky Mind (aspirational)
 
-The Minsky Mind — a complete neuro-symbolic execution environment.
+The long-term direction. Not a priority — a horizon.
 
 - Composable societies of wits that invoke each other
 - SQLite as the "operating system kernel" (call stack, process queue, instruction memory, IPC)
 - Crystallization pipeline: LLM outputs compiled into saved subroutines
 - Computational escalation: cheapest correct tool first, automatically
 - Agent-to-agent communication across sessions
+- Clam as a complete Perl execution environment, not just a coding tool
 
-This is the long-term vision from minsky.txt and plan.txt. Not a priority — a direction.
+This is the vision from minsky.txt. The harness gets us in the door; the Minsky Mind is what we're building toward.
 
 ---
 
@@ -420,14 +435,15 @@ This is the long-term vision from minsky.txt and plan.txt. Not a priority — a 
 
 Clam v2 is what you show to Perl greybeards:
 
-> "Here's a Perl AI harness. SQLite backend, pub/sub bus, Pi-parity agent loop.
-> Four tools, 96 curated wits across 5 decks, Datalog engine, rules DSL.
+> "Here's a Perl AI environment. SQLite backend, pub/sub bus, Pi-parity agent loop.
+> Four tools, 96 curated wits, Datalog engine, rules DSL.
 > 527 tests, all offline. `prove -l t/` green.
 > A wit is a .pm file with a register() method.
 > Drop it in ~/.clam/wits/ and it works.
 > `clam wits install <git-url>` runs the tests before installing.
 >
-> We're building a complete Perl shell for AI-assisted development.
+> Supports Ollama, OpenAI, Anthropic, Gemini, Azure out of the box.
+> Not just a coding harness — a complete Perl shell for AI-assisted reasoning.
 > Not a toy. Not a framework. A tool."
 
 The hook: Perl is uniquely suited for this because LLMs can read, write, and extend Perl code natively. The harness can modify itself. That's the thesis, and the working codebase proves it.
