@@ -1,20 +1,147 @@
 
-Clam is a Perl AI coding harness modeled on Pi,
-with a SQLite backend, and a pub/sub bus
-modeled on Marvin Minsky's "Society of Mind".
+Clam — A Perl AI Environment
+============================
 
-I want to try a hybrid cognitive architecture...
-LLMs for pattern recognition and intuition,
-and logic engines for deliberate reasoning,
-with a Minsky-style blackboard for coordination.
+LLMs are fat-fingered geniuses. Logic engines are idiot savants.
+Clam bridges them — in Perl.
 
-Why use expensive (and slow) LLMs for those tasks
-that could be automated to perl scripts and Logic systems.
+Clam is an AI harness built over a SQLite blackboard and a
+pub/sub bus inspired by Minsky's Society of Mind. LLMs handle
+pattern recognition and intuition. Datalog, rules engines, FSMs,
+and SAT solvers handle deliberate reasoning. The blackboard
+coordinates everything.
 
-It has the beginnings of a plugin system, called Wits.
+Perl is the backbone because Larry Wall designed it to fit human
+language instincts, and LLMs are trained on that text. The harness
+can read, write, and extend its own infrastructure. That's the
+thesis, and the working codebase proves it.
 
-It's very new and I dunno if it's a good idea,
-but it's an AI harness in PERL!
+
+What's in the box
+------------------
+
+Core harness:
+  - Agent loop (ported from Pi)
+  - 4 tools: read, bash, edit, write
+  - SQLite store + pub/sub bus
+  - LLM providers: Ollama, OpenAI, Anthropic, Gemini, Azure
+
+88 curated wits across 6 decks:
+
+  logic   33 wits   Datalog engine, rules DSL, FSM, behavior trees
+  git     10 wits   Git operations (status, log, diff, blame, ...)
+  fs      18 wits   Filesystem operations (read, write, edit, ...)
+  db       8 wits   Database shell (connect, query, execute, ...)
+  perl    16 wits   Perl development (syntax, review, POD, tests)
+  psh      3 wits   Perl Shell REPL (eval, vars, help)
+
+30 more wits available: search, critic, SAT solver, OS primitives,
+remote SSH. Install on demand.
+
+  527 tests, all offline. prove -l t/ green.
 
 
+Quick start
+-----------
 
+  # with LM Studio running locally:
+  clam
+
+  # with Ollama:
+  CLAM_PROVIDER=ollama CLAM_MODEL=codellama clam
+
+  # with OpenAI:
+  CLAM_PROVIDER=openai CLAM_MODEL=gpt-4o clam
+
+  # programmatic:
+  perl -Ilib -e '
+    use Clam::Driver;
+    my $d = Clam::Driver->new(provider=>"ollama", model=>"codellama");
+    $d->start;
+    my $r = $d->ask("list the files in the current directory");
+    print $r->{response};
+    $d->close;
+  '
+
+
+The Perl thesis
+---------------
+
+Perl is not just the implementation language. It's the foundation
+of a new kind of execution environment.
+
+In a standard AI harness, the LLM generates code and the harness
+runs it. In Clam, the LLM generates Perl, and Perl IS the
+environment. The harness can modify itself. The LLM can extend
+the harness by writing wits. Logic engines can collapse expensive
+LLM calls into fast deterministic rules. The system gets cheaper
+and faster the more it's used.
+
+This is not a coding assistant. It's a Perl shell for the
+age of AI.
+
+
+Questions for testers
+---------------------
+
+Clam is new and we're figuring things out. We need your help
+thinking through these:
+
+Wits vs CPAN — We built a custom plugin system (Wits) with
+deck manifests, install-time testing, and a lockfile. But CPAN
+already solves distribution, dependency resolution, and testing.
+Should we replace Wits with CPAN? Or is a custom runtime layer
+the right call, with CPAN as the distribution backend?
+
+perlbrew — Should Clam manage Perl versions via perlbrew? A
+harness that can switch between Perl 5.36 and 5.40 for different
+projects has real value. But it adds a dependency. Is it worth it?
+
+The UI — What does a great AI harness UI look like? We have a
+REPL (Term::ReadLine) and an NDJSON daemon. Is that enough? Should
+we build a TUI? A web interface? What would make you actually use
+this daily?
+
+Tools — We ship read, bash, edit, write (Pi parity) plus 88 wits.
+What tools are missing? What would make Clam indispensable for your
+workflow? Database migrations? Docker management? CPAN module
+authoring? CPANTEST reporting?
+
+The blackboard — Minsky's Society of Mind says intelligence
+emerges from many simple agents communicating via a shared memory.
+Our bus is the blackboard. The logic engines, the LLM, and the
+user all publish and subscribe. Does this architecture hold up in
+practice? Or is it over-engineered for what people actually need?
+
+Crystallization — When the LLM solves a problem, can we capture
+the solution as a deterministic Perl rule that runs faster and
+cheaper forever? The logic deck makes this possible. Is it
+actually useful? What would you crystallize?
+
+The Perl hook — LLMs can read and write Perl natively. This means
+Clam can modify its own wits, rewrite its own tools, and evolve
+during a session. Is this a feature or a footgun? How do we make
+it safe?
+
+What can Clam unlock — We think a Perl AI environment enables
+things no other harness can: self-modifying code, deterministic
+reasoning over probabilistic generation, a complete unix shell
+experience with AI assistance. What possibilities do you see that
+we haven't thought of?
+
+
+Get involved
+------------
+
+Clam is open source. The repo is at git@psycho:~/clam.git.
+
+  git clone git@psycho:~/clam.git
+  cd clam
+  prove -l t/
+
+Read docs/ROADMAP.md for the full architecture and vision.
+Read docs/Wits.md for the wit system design.
+Read docs/DRIVER.md for the programmatic API.
+
+If you're a Perl developer who wants to build the future of
+AI-assisted development, we want to hear from you.
