@@ -9,6 +9,24 @@ use Clam::App;
 
 sub new { my ($class, %o) = @_; return bless { %o }, $class }
 
+# Open $EDITOR with a temp file containing optional initial text.
+# Returns the edited text, or undef if the user cancelled.
+sub _edit_in_editor {
+    my ($initial) = @_;
+    require File::Temp;
+    my ($fh, $tmpfile) = File::Temp::tempfile(SUFFIX => '.pl', UNLINK => 0);
+    print $fh $initial if defined $initial && length $initial;
+    close $fh;
+    my $editor = $ENV{EDITOR} || $ENV{VISUAL} || 'vi';
+    system($editor, $tmpfile);
+    open my $in, '<', $tmpfile or do { unlink $tmpfile; return undef };
+    local $/;
+    my $text = <$in>;
+    close $in;
+    unlink $tmpfile;
+    return defined $text ? $text : '';
+}
+
 sub run {
     my ($self) = @_;
     my $app     = Clam::App->new(%$self);
@@ -41,6 +59,20 @@ sub run {
     while (1) {
         my $line = $term->read('clam> ');
         last unless defined $line;
+
+        # Ctrl+X Ctrl+E or Alt+E: open $EDITOR for multi-line input
+        if ($line eq "\x18\x05" || $line eq "\x1b\x65") {
+            my $edited = _edit_in_editor();
+            if (defined $edited) {
+                $edited =~ s/^\n+|\n+$//g;
+                next unless length $edited;
+                $term->addhistory($edited);
+                $line = $edited;
+            } else {
+                next;
+            }
+        }
+
         chomp $line;
         $line =~ s/^\s+|\s+$//g;
         next unless length $line;
