@@ -43,9 +43,9 @@ sub chat_payload {
         model       => $self->{model},
         messages    => $a{messages},          # arrayref of {role, content} or pi-style blocks
         stream      => 0 + ($a{stream} // 0),
-        tools       => $a{tools},             # optional: OpenAI tool schema arrayref
-        tool_choice => $a{tool_choice},
     );
+    $p{tools} = $a{tools} if ref $a{tools} eq 'ARRAY' && @{$a{tools}};
+    $p{tool_choice} = $a{tool_choice} if defined $a{tool_choice};
     $p{temperature} = $self->{temperature} if defined $self->{temperature};
     $p{max_tokens}  = $a{max_tokens} // $self->{max_tokens} if defined ($a{max_tokens} // $self->{max_tokens});
     %p = grep { defined $_[1] } %p;
