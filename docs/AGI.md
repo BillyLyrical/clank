@@ -410,6 +410,7 @@ tasks, real knowledge bases, and real reasoning challenges. Measuring:
 
 - Marcus, G. (2020). *The Next Decade in AI: Four Steps Towards Robust Artificial Intelligence*
 - Minsky, M. (1986). *The Society of Mind*
+- Kim, J., et al. (2026). *Reasoning Models Generate Societies of Thought*
 - Garcez, A. d'A., et al. (2019). *Neural-Symbolic Computing: An Effective Methodology for Principled Integration of Machine Learning and Reasoning*
 - Hamilton, W. L. (2020). *Logical Entailment and Neural-Symbolic AI*
 - Lake, B. M., et al. (2017). *Building machines that learn and think like people*

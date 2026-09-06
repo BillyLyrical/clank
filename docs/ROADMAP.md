@@ -156,7 +156,7 @@ Python harness built on Pi. Validates the "harness as programming language" thes
 - Persistent goals and heartbeats
 - Automatic compaction
 
-Clam already has Driver/clamd for programmatic sessions. The gap is background persistence and subagents — both are P3 items.
+Clam already has Driver/clamd for programmatic sessions. Background persistence was the last gap — now solved with clamd --daemon.
 
 ### 4.3 DeepSeek Harness / Cordis
 
@@ -542,7 +542,7 @@ Features that make Clam more than a harness — a complete environment.
 | Item | Status | Depends on | Why |
 |------|--------|-----------|-----|
 | Subagents (fork Loop for parallel work) | ✅ Done | Core stable | Multi-file editing, research tasks |
-| Background persistence (clamd sessions survive disconnect) | ⬜ TODO | clamd stable | Long-running tasks |
+| Background persistence (clamd sessions survive disconnect) | ✅ Done | clamd stable | Long-running tasks |
 | RAG/FTS5 retrieval-based tool selection (RATS) | ✅ Done | Wit registry DB | Hundreds of wits without prompt bloat |
 | Per-session wit loading | ✅ Done | Wit lifecycle | Different wits for different tasks |
 | Director pattern (plan/goal/force-tool) | ✅ Done | Bus hooks | Multi-turn autonomous behaviors |
