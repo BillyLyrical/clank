@@ -1,6 +1,14 @@
 # Clam::Rules::Engine — pluggable inference over rules. Strategies: first,
 # random, probabilistic, all; plus forward chaining (production rules).
 #
+# Features:
+#   1. Forward chaining — production rules fire until fixpoint
+#   2. Backward chaining — goal-directed reasoning ("Why is X true?")
+#   3. Negation as failure — not_exists(type => X) conditions
+#   4. Conflict resolution — priority enforcement during chaining
+#   5. Rule composition — rules can call other rules' outputs
+#   6. Incremental re-evaluation — only re-evaluate dependent rules
+#
 # Facts live in the shared SQLite store (Clam::Store) — the blackboard every
 # agent on this DB reads and writes. The engine keeps an in-memory working set
 # over it so chain() doesn't re-query per condition check; assert/retract keep
@@ -20,6 +28,8 @@ sub new {
         strategy        => $args{strategy} // 'first',   # first|random|probabilistic|all
         max_chain_depth => $args{max_chain_depth} // 50,
         chain_log       => [],                 # trace of last chain() run
+        rule_deps       => {},                 # rule_name => [fact_types it depends on]
+        goal_cache      => {},                 # goal => { proven => bool, proof => [...] }
     }, $class;
     $self->_load_facts;
     return $self;
@@ -228,7 +238,7 @@ sub _match_production {
     my %bindings;
     my @matched_facts;
     for my $cond (@$conditions) {
-        my $matched_fact = $self->_match_condition($cond);
+        my $matched_fact = $self->_match_condition_with_negation($cond);
         return undef unless $matched_fact;
         push @matched_facts, $matched_fact;
         if ($cond->{bind}) {
@@ -391,5 +401,440 @@ sub set_strategy { $_[0]->{strategy} = $_[1] }
 sub strategy     { return $_[0]->{strategy} }
 sub chain_log    { return $_[0]->{chain_log} }
 sub store        { return $_[0]->{store} }
+sub clear_cache  { $_[0]->{goal_cache} = {} }
+
+# === BACKWARD CHAINING ===
+
+# Prove a goal is true by working backward through rules.
+# Returns { proven => bool, proof => [...], steps => [...] }
+sub prove {
+    my ($self, $goal_type, $goal_attrs) = @_;
+    $goal_attrs //= {};
+    
+    # Check cache first.
+    my $cache_key = "$goal_type:" . join(',', sort keys %$goal_attrs);
+    return $self->{goal_cache}{$cache_key} if exists $self->{goal_cache}{$cache_key};
+    
+    my @proof_steps;
+    my $result = $self->_prove_goal($goal_type, $goal_attrs, \@proof_steps, 0);
+    
+    my $proof = {
+        proven => $result,
+        proof  => \@proof_steps,
+        steps  => scalar @proof_steps,
+    };
+    
+    $self->{goal_cache}{$cache_key} = $proof;
+    return $proof;
+}
+
+sub _prove_goal {
+    my ($self, $goal_type, $goal_attrs, $steps, $depth) = @_;
+    
+    # Prevent infinite recursion.
+    return 0 if $depth > $self->{max_chain_depth};
+    
+    # Check if fact already exists.
+    if ($self->_fact_exists($goal_type, $goal_attrs)) {
+        push @$steps, {
+            step    => scalar @$steps + 1,
+            action  => 'fact_exists',
+            type    => $goal_type,
+            attrs   => $goal_attrs,
+            success => 1,
+        };
+        return 1;
+    }
+    
+    # Try to prove via production rules.
+    for my $rule ($self->{rules}->@*) {
+        next unless $rule->enabled;
+        next unless $rule->type eq 'production';
+        
+        # Try to prove the rule's conditions first.
+        my $conditions = $rule->{conditions} // [];
+        my $all_conditions_proven = 1;
+        my @condition_proofs;
+        
+        for my $cond (@$conditions) {
+            my $cond_type = $cond->{type} // next;
+            
+            # Handle negation as failure.
+            if ($cond->{not_exists}) {
+                my $exists = $self->_fact_exists($cond_type, { %$cond, not_exists => 1, type => 1, bind => 1, op => 1 });
+                push @condition_proofs, {
+                    condition => $cond,
+                    proven    => !$exists,
+                    negation  => 1,
+                };
+                unless ($exists) {
+                    $all_conditions_proven = 0;
+                    last;
+                }
+                next;
+            }
+            
+            # Regular condition - prove recursively.
+            my %cond_attrs;
+            for my $k (keys %$cond) {
+                next if $k eq 'type';
+                next if $k eq 'bind';
+                next if $k eq 'op';
+                $cond_attrs{$k} = $cond->{$k};
+            }
+            
+            my $cond_proven = $self->_prove_goal($cond_type, \%cond_attrs, $steps, $depth + 1);
+            push @condition_proofs, {
+                condition => $cond,
+                proven    => $cond_proven,
+            };
+            
+            unless ($cond_proven) {
+                $all_conditions_proven = 0;
+                last;
+            }
+        }
+        
+        next unless $all_conditions_proven;
+        
+        # All conditions proven - check if this rule can produce the goal type.
+        my $action = $rule->{action};
+        next unless ref $action eq 'CODE';
+        
+        # Build a match from the proven conditions.
+        my $match_data = {};
+        for my $proof (@condition_proofs) {
+            my $cond = $proof->{condition};
+            if ($cond->{bind}) {
+                $match_data->{$cond->{bind}} = $proof->{matched_fact} // {};
+            }
+        }
+        
+        my $test_context = { facts => $self->{facts}, match => $match_data };
+        my $result = eval { $action->($test_context) };
+        next unless defined $result;
+        
+        # Check if result matches goal.
+        my @results = ref $result eq 'ARRAY' ? @$result : ($result);
+        my $matched = 0;
+        
+        for my $r (@results) {
+            next unless ref $r eq 'HASH' && $r->{type};
+            if ($r->{type} eq $goal_type) {
+                my $attrs_match = 1;
+                for my $k (keys %$goal_attrs) {
+                    unless (defined $r->{attributes}{$k} && "$r->{attributes}{$k}" eq "$goal_attrs->{$k}") {
+                        $attrs_match = 0;
+                        last;
+                    }
+                }
+                if ($attrs_match) {
+                    $matched = 1;
+                    last;
+                }
+            }
+        }
+        
+        if ($matched) {
+            push @$steps, {
+                step        => scalar @$steps + 1,
+                action      => 'rule_applied',
+                rule        => $rule->name,
+                goal_type   => $goal_type,
+                goal_attrs  => $goal_attrs,
+                conditions  => \@condition_proofs,
+                success     => 1,
+            };
+            return 1;
+        }
+    }
+    
+    push @$steps, {
+        step    => scalar @$steps + 1,
+        action  => 'goal_unprovable',
+        type    => $goal_type,
+        attrs   => $goal_attrs,
+        success => 0,
+    };
+    return 0;
+}
+
+# === NEGATION AS FAILURE ===
+
+# Check if a fact does NOT exist (negation as failure).
+sub not_exists {
+    my ($self, $type, $attrs) = @_;
+    $attrs //= {};
+    return !$self->_fact_exists($type, $attrs);
+}
+
+# Enhanced _match_condition with negation support.
+sub _match_condition_with_negation {
+    my ($self, $cond) = @_;
+    
+    # Handle not_exists conditions.
+    if ($cond->{not_exists}) {
+        my $type = $cond->{type} // return undef;
+        my @check_attrs;
+        for my $k (keys %$cond) {
+            next if $k eq 'type';
+            next if $k eq 'bind';
+            next if $k eq 'op';
+            next if $k eq 'not_exists';
+            push @check_attrs, ($k, $cond->{$k});
+        }
+        my $exists = $self->_fact_exists($type, {@check_attrs});
+        return { _negation => 1, _result => !$exists };
+    }
+    
+    return $self->_match_condition($cond);
+}
+
+# === CONFLICT RESOLUTION ===
+
+# Resolve conflicts when multiple rules fire simultaneously.
+# Returns the winning rule based on strategy.
+sub resolve_conflicts {
+    my ($self, @fired_rules) = @_;
+    
+    return () unless @fired_rules;
+    return ($fired_rules[0]) if @fired_rules == 1;
+    
+    if ($self->{strategy} eq 'first') {
+        # Highest priority wins.
+        return ((sort { $b->priority <=> $a->priority } @fired_rules)[0]);
+    }
+    elsif ($self->{strategy} eq 'random') {
+        return ($fired_rules[rand @fired_rules]);
+    }
+    elsif ($self->{strategy} eq 'probabilistic') {
+        my $total = 0;
+        $total += $_->weight for @fired_rules;
+        my $rand = rand($total);
+        my $cumulative = 0;
+        for my $rule (@fired_rules) {
+            $cumulative += $rule->weight;
+            return ($rule) if $rand <= $cumulative;
+        }
+        return ($fired_rules[-1]);
+    }
+    elsif ($self->{strategy} eq 'all') {
+        return @fired_rules;
+    }
+    
+    return ($fired_rules[0]);
+}
+
+# Enhanced forward chaining with conflict resolution.
+sub chain_with_resolution {
+    my ($self, $initial_facts) = @_;
+    $self->{chain_log} = [];
+    my $iterations     = 0;
+    my $facts_asserted = 0;
+    my $rules_fired    = 0;
+    
+    # Assert initial facts.
+    if (ref $initial_facts eq 'ARRAY') {
+        for my $f (@$initial_facts) {
+            if (ref $f eq 'HASH') {
+                $self->assert_fact($f->{type}, $f->{attributes}, { asserted_by => 'initial' });
+                $facts_asserted++;
+            } elsif (!ref $f) {
+                $self->assert_fact("$f", {}, { asserted_by => 'initial' });
+                $facts_asserted++;
+            }
+        }
+    }
+    
+    # Chain until no new rules fire or max depth.
+    while ($iterations < $self->{max_chain_depth}) {
+        my @fired_this_iter;
+        my @all_fired_rules;
+        
+        # Collect all matching rules first.
+        for my $rule ($self->{rules}->@*) {
+            next unless $rule->enabled;
+            next if $rule->type ne 'production';
+            
+            my $matched = $self->_match_production($rule);
+            next unless $matched;
+            
+            push @all_fired_rules, { rule => $rule, match => $matched };
+        }
+        
+        # Resolve conflicts and execute winners.
+        my @winner_rules = $self->resolve_conflicts(map { $_->{rule} } @all_fired_rules);
+        my %winner_names = map { $_->name => 1 } @winner_rules;
+        
+        for my $fired (@all_fired_rules) {
+            my $rule = $fired->{rule};
+            next unless $winner_names{$rule->name};
+            
+            my $result = $rule->execute({ facts => $self->{facts}, match => $fired->{match}{facts}[0] });
+            next unless defined $result;
+            
+            my @new_facts = ref $result eq 'ARRAY' ? @$result : ($result);
+            my $asserted_any = 0;
+            
+            for my $nf (@new_facts) {
+                next unless ref $nf eq 'HASH' && $nf->{type};
+                next if $self->_fact_exists($nf->{type}, $nf->{attributes} // {});
+                
+                $self->assert_fact(
+                    $nf->{type},
+                    $nf->{attributes} // {},
+                    { asserted_by => $rule->name },
+                );
+                $facts_asserted++;
+                $asserted_any = 1;
+                push @fired_this_iter, {
+                    rule    => $rule->name,
+                    fact    => $nf->{type},
+                    details => $nf->{attributes} // {},
+                };
+            }
+            
+            $rules_fired++ if $asserted_any;
+        }
+        
+        push $self->{chain_log}->@*, {
+            iteration => $iterations + 1,
+            fired     => scalar @fired_this_iter,
+            rules     => \@fired_this_iter,
+        };
+        
+        last unless @fired_this_iter;
+        $iterations++;
+    }
+    
+    return {
+        iterations     => $iterations,
+        facts_asserted => $facts_asserted,
+        rules_fired    => $rules_fired,
+        max_reached    => $iterations >= $self->{max_chain_depth},
+        log            => $self->{chain_log},
+    };
+}
+
+# === RULE COMPOSITION ===
+
+# Execute a pipeline of rules, passing output of one as input to the next.
+sub chain_rules {
+    my ($self, @rule_names) = @_;
+    
+    return undef unless @rule_names;
+    
+    my $context = { facts => $self->{facts} };
+    my @pipeline_trace;
+    
+    for my $name (@rule_names) {
+        my $rule = $self->get_rule($name);
+        unless ($rule) {
+            push @pipeline_trace, {
+                rule   => $name,
+                error  => 'rule not found',
+                result => undef,
+            };
+            last;
+        }
+        
+        my $result = $rule->execute($context);
+        push @pipeline_trace, {
+            rule   => $name,
+            input  => $context,
+            result => $result,
+        };
+        
+        # Pass result as context for next rule.
+        if (ref $result eq 'HASH') {
+            $context = { %$context, %$result };
+        } elsif (defined $result) {
+            $context = { %$context, result => $result };
+        }
+    }
+    
+    return {
+        pipeline => \@pipeline_trace,
+        final    => $context,
+        steps    => scalar @pipeline_trace,
+    };
+}
+
+# === INCREMENTAL RE-EVALUATION ===
+
+# Build dependency graph: which rules depend on which fact types.
+sub _build_dependency_graph {
+    my ($self) = @_;
+    $self->{rule_deps} = {};
+    
+    for my $rule ($self->{rules}->@*) {
+        next unless $rule->type eq 'production';
+        my %deps;
+        
+        for my $cond (@{$rule->{conditions} // []}) {
+            next unless ref $cond eq 'HASH';
+            my $cond_type = $cond->{type};
+            next unless defined $cond_type;
+            $deps{$cond_type} = 1;
+        }
+        
+        $self->{rule_deps}{$rule->name} = [ keys %deps ];
+    }
+}
+
+    # Re-evaluate only rules that depend on changed fact types.
+sub re_evaluate {
+    my ($self, $changed_fact_types) = @_;
+    $changed_fact_types = [ $changed_fact_types ] unless ref $changed_fact_types eq 'ARRAY';
+    
+    # Build dependency graph if not already done or rules changed.
+    $self->_build_dependency_graph;
+    
+    # Find rules that depend on changed types.
+    my %affected_rules;
+    for my $fact_type (@$changed_fact_types) {
+        for my $rule_name (keys $self->{rule_deps}->%*) {
+            my $deps = $self->{rule_deps}{$rule_name};
+            if (grep { $_ eq $fact_type } @$deps) {
+                $affected_rules{$rule_name} = 1;
+            }
+        }
+    }
+    
+    # Re-evaluate affected rules.
+    my @re_evaluated;
+    for my $rule_name (keys %affected_rules) {
+        my $rule = $self->get_rule($rule_name);
+        next unless $rule && $rule->enabled;
+        
+        my $matched = $self->_match_production($rule);
+        if ($matched) {
+            my $result = $rule->execute({ facts => $self->{facts}, match => $matched->{facts}[0] });
+            if (defined $result) {
+                my @new_facts = ref $result eq 'ARRAY' ? @$result : ($result);
+                for my $nf (@new_facts) {
+                    next unless ref $nf eq 'HASH' && $nf->{type};
+                    next if $self->_fact_exists($nf->{type}, $nf->{attributes} // {});
+                    
+                    $self->assert_fact(
+                        $nf->{type},
+                        $nf->{attributes} // {},
+                        { asserted_by => $rule->name },
+                    );
+                    push @re_evaluated, {
+                        rule => $rule_name,
+                        fact => $nf->{type},
+                    };
+                }
+            }
+        }
+    }
+    
+    return {
+        affected     => [ keys %affected_rules ],
+        re_evaluated => \@re_evaluated,
+        count        => scalar @re_evaluated,
+    };
+}
 
 1;

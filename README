@@ -1,15 +1,16 @@
 
-Clam — A Perl AI Environment
-============================
+Clam — A Perl Hybrid AI Harness
+================================
 
 LLMs are fat-fingered geniuses. Logic engines are idiot savants.
 Clam bridges them — in Perl.
 
-Clam is an AI harness built over a SQLite blackboard and a
-pub/sub bus inspired by Minsky's Society of Mind. LLMs handle
-pattern recognition and intuition. Datalog, rules engines, FSMs,
-and SAT solvers handle deliberate reasoning. The blackboard
-coordinates everything.
+Clam is a neurosymbolic AI harness that combines LLM pattern
+recognition with explicit world models, symbolic reasoning, and
+deterministic rules. Entities, relations, temporal facts, causal
+links, and beliefs live in a shared SQLite blackboard. Datalog,
+FSMs, behavior trees, and SAT solvers reason over that world
+model. LLMs generate and critique. The bus coordinates everything.
 
 Perl is the backbone because Larry Wall designed it to fit human
 language instincts, and LLMs are trained on that text. The harness
