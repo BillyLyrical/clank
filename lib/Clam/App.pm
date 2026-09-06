@@ -64,6 +64,11 @@ sub start_session {
     # wits: load + register (error-isolated per wit)
     my $pm = Clam::PluginManager->new;
     $pm->bind(bus => $self->{bus}, store => $self->{store}, session => $session);
+
+    # built-in wits ship with the harness (session management, etc.)
+    $pm->load_builtins('Clam::Wit::Session');
+
+    # discovered wits from filesystem roots
     my @wits = $pm->load_all(extra_paths => $self->{wit_paths});
 
     # tools: builtins + wit-registered

@@ -12,12 +12,9 @@ Demonstrates all three registration surfaces (see `docs/ROADMAP.md` §5):
 
 ```
 hello/
-  lib/Clam/Wit/Hello.pm    # the wit module (standard layout)
+  lib/Clam/Wits/Hello.pm    # the wit module (standard layout)
   README.md
 ```
-
-Tiny wits may also be a single `.pm` file at the wit root (no `lib/`); the
-declared package name is read from the source.
 
 ## Try it
 
@@ -25,8 +22,9 @@ declared package name is read from the source.
 # run clam with this example on the wit path:
 clam -w /path/to/clam/wits.example/hello
 
-# or install it to ~/.clam/wits:
-clam wits install /path/to/clam/wits.example/hello
+# or install it:
+cd /path/to/clam/wits.example/hello
+cpanm .
 ```
 
 Then in the REPL: `/hello there` — and ask the model to "greet alice" to see

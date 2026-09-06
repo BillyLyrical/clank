@@ -20,10 +20,10 @@ mkdir "$tmp/wits" or die;
 mkdir "$hello_dir" or die;
 mkdir "$hello_dir/lib" or die;
 mkdir "$hello_dir/lib/Clam" or die;
-mkdir "$hello_dir/lib/Clam/Wit" or die;
-open my $fh, '>', "$hello_dir/lib/Clam/Wit/Hello.pm" or die;
+mkdir "$hello_dir/lib/Clam/Wits" or die;
+open my $fh, '>', "$hello_dir/lib/Clam/Wits/Hello.pm" or die;
 print {$fh} <<'WIT';
-package Clam::Wit::Hello;
+package Clam::Wits::Hello;
 use strict; use warnings;
 use parent 'Clam::Wit';
 sub register {

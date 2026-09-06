@@ -262,7 +262,8 @@ sub load_dir {
 
     my ($pkg, $file);
     if (-d "$dir/lib") {
-        my $wits_dir = "$dir/lib/Clam/Wit";
+        # User wits live in Clam/Wits/, harness infrastructure in Clam/Wit/
+        my $wits_dir = -d "$dir/lib/Clam/Wits" ? "$dir/lib/Clam/Wits" : "$dir/lib/Clam/Wit";
         my @mods;
         if (-d $wits_dir) {
             opendir(my $dh, $wits_dir);
@@ -270,12 +271,16 @@ sub load_dir {
             closedir $dh;
         }
         unless (@mods) {
-            push @{ $self->{errors} }, "$dir: no lib/Clam/Wit/*.pm";
+            push @{ $self->{errors} }, "$dir: no lib/Clam/Wits/*.pm or lib/Clam/Wit/*.pm";
             warn "[wits] $dir: no wit modules found, skipping\n";
             return;
         }
         (my $mod = shift @mods) =~ s{\.pm$}{};
-        ($pkg, $file) = ("Clam::Wit::$mod", "$wits_dir/$mod.pm");
+        ($pkg, $file) = ("Clam::Wits::$mod", "$wits_dir/$mod.pm");
+        # If module is in Clam/Wit/ (harness infrastructure), use that namespace
+        if ($wits_dir =~ m{/Clam/Wit$}) {
+            ($pkg, $file) = ("Clam::Wit::$mod", "$wits_dir/$mod.pm");
+        }
         # Namespace discipline BEFORE lib/ hits @INC: a module wit may only
         # ship its own package (the wit + helpers under it).
         return unless _enforce_namespaces($self, $name, $dir, namespaces => [$pkg]);
@@ -345,6 +350,41 @@ sub load_dir {
 
 # Bind runtime objects before loading (bus/store/session/ui).
 sub bind { my ($self, %o) = @_; $self->{$_} = $o{$_} for qw(bus store session ui); return $self }
+
+# Load built-in wits that ship with the harness. These are loaded like any
+# other wit (register into a fresh API) but come from the harness's own lib
+# rather than discovered directories. Each module must have a register() method.
+sub load_builtins {
+    my ($self, @modules) = @_;
+    for my $module (@modules) {
+        eval {
+            # require with a variable and Clam::Wit::File loaded triggers a
+            # Perl 5.40 path-resolution quirk — use the string-path form
+            # (same as load_dir uses for .pm wits).
+            (my $file = $module) =~ s{::}{/}g;
+            require "$file.pm";
+            my $wit = $module->can('new') ? $module->new : bless {}, $module;
+            my $api = Clam::Wit::API->new(
+                bus => $self->{bus}, store => $self->{store},
+                session => $self->{session}, ui => $self->{ui},
+                wit_name => $module,
+            );
+            $wit->register($api);
+            my $rec = {
+                name => $module, pkg => $module, dir => '',
+                wit => $wit, api => $api, meta => {}, state => 'active',
+            };
+            push @{ $self->{wits} }, $rec;
+            $self->{apis}{$module} = $api;
+            1;
+        } or do {
+            my $err = "$@";
+            push @{ $self->{errors} }, "builtin $module: $err";
+            warn "[wits] failed to load builtin $module: $err";
+        };
+    }
+    return $self;
+}
 
 # Return refs (not lists): callers dereference, and list-returning accessors
 # misbehave in scalar context (e.g. `@{ $pm->errors }`).

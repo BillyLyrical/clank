@@ -1,16 +1,21 @@
-# Example Wit: Hello
+# CLAM-WIT: name=Hello
+# CLAM-WIT: version=1.0
+# CLAM-WIT: about=Example wit showing tool, command, and bus hook registration
+# CLAM-WIT: usage=Template for writing your own wits. Load to try it.
+# CLAM-WIT: hint=Example: greet tool, /hello command, input tagging hook
+# CLAM-WIT: author=clam
+# CLAM-WIT: license=Artistic-2.0
 #
 # The smallest useful wit — a template for writing your own. Shows all three
 # registration surfaces: a tool, a REPL slash command, and an event hook.
 #
 # Install (optional; discovery also finds it in place):
-#   clam wits install <dir-containing-this>
+#   cpanm .  (from this directory)
 #
-# Layout: standard wit layout — lib/Clam/Wit/<Name>.pm
+# Layout: standard wit layout — lib/Clam/Wits/<Name>.pm
 
-package Clam::Wit::Hello;
+package Clam::Wits::Hello;
 use strict; use warnings;
-use parent 'Clam::Wit';
 
 sub register {
     my ($self, $api) = @_;

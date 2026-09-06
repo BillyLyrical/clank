@@ -127,7 +127,9 @@ Everything talks through topics, never direct calls. This is what makes wits com
 
 ### 3.4 The Unix Layering
 
-Discovery order: `CLAM_WITS_PATH` → `.clam/wits` (project) → `~/.clam/wits` (user) → `-w` flags. This is good Unix (/etc → ~/.config → ./local). Keep it.
+Wits are CPAN modules. Distribution via `cpanm`, discovery via `grep`, isolation via
+`eval`. One system, one source of truth. cpan/cpanm/perlbrew — user's choice, zero
+extra work for us.
 
 ---
 
@@ -172,82 +174,165 @@ The core insight: AI harnesses that encourage MANY user plugin ecosystems become
 
 ### 5.1 What a Wit Is
 
-A wit is a loadable unit of behavior: tools the LLM can call, REPL slash commands, and event hooks on the bus. A deck is a named batch of wits with a manifest.
+A wit is a CPAN module that extends the clam harness: tools the LLM can call,
+REPL slash commands, and event hooks on the bus.
 
-Two layers:
+**One system, one source of truth: wits are CPAN modules.**
 
-| Layer | Question | Answer |
-|-------|----------|--------|
-| **Runtime** | How does behavior get into a running process? | Wits: discovery, register(), error isolation, disable/unload |
-| **Distribution** | How does code get onto the machine? | Git repos + `clam wits install` with CPAN's discipline |
+| Concern | Mechanism | Custom code? |
+|---------|-----------|-------------|
+| Distribution | `cpanm Clam::Wits::Foo` | No |
+| Discovery | `grep -r "# CLAM-WIT:" @INC/Clam/Wits/` | No |
+| Metadata | `# CLAM-WIT:` comment in module file | No |
+| Dependencies | `META.json` + cpanm | No |
+| Runtime state | SQLite DB (loaded, enabled) | Yes (exists) |
+| Loading | `require` + `register($api)` | Yes (exists) |
+| Isolation | `eval { require ... }` | Yes (exists) |
 
-### 5.2 The Trust Model
+### 5.2 The `# CLAM-WIT:` Comment Format
 
-| Tier | Source | Trust Level | Allowed Layout |
-|------|--------|-------------|----------------|
-| **Core** | In-tree decks/ | Full trust | Any |
-| **Curated** | Curation catalog (maintainer-reviewed) | Vetted | Any |
-| **User** | `clam wits install` from git | Self-managed | Recommended: stdio or declarative |
+Every wit module has a `# CLAM-WIT:` comment block near the top. This is the
+single source of truth for discovery metadata — grep finds it without loading
+the module.
 
-The curation catalog is a small JSON file that maintainers edit. It is NOT a self-declaration field (a user can't put `curated = true` in their own wit.toml). Trust comes from provenance, not claims.
+```perl
+# CLAM-WIT: name=Foo
+# CLAM-WIT: version=1.0
+# CLAM-WIT: about=Blocks dangerous git commands before they run
+# CLAM-WIT: usage=Load in any repo you trust the model with
+# CLAM-WIT: hint=Git safety: vetoes rm, reset --hard, push -f, force
+# CLAM-WIT: author=you
+# CLAM-WIT: license=Artistic-2.0
+package Clam::Wits::Foo;
+use strict;
+use warnings;
 
-### 5.3 Three Layouts
+sub register {
+    my ($self, $api) = @_;
+    # ... register tools, commands, bus listeners ...
+}
 
-1. **Module wits** (primary): Perl module with `register($api)`. "A wit is a .pm file" — strongest onboarding story for Perl programmers.
-
-2. **Declarative .wit files**: TOML + embedded Perl heredoc. Fine for small stateless things. Not the ecosystem foundation.
-
-3. **Stdio wits** (untrusted code): External process, JSON stdin/stdout protocol. Process boundary buys crash containment and true unload.
-
-### 5.4 Deck Format
-
-A deck is a directory with this structure:
-
-```
-decks/<name>/
-  deck.toml          # manifest (name, version, about, usage, requires_perl, requires_bin)
-  lib/               # optional — deck's own library modules (on @INC at load)
-  <group>/
-    <wit>.wit        # declarative wits grouped by category
-```
-
-The group subdirectory determines the wit namespace: `decks/db/db/connect.wit` → wit name `db.connect`. The loader derives names from path relative to the deck root (`Loader.pm:44-50`).
-
-Why groups: wits need unique names. `connect.wit` in a flat deck gives the bare name `connect`; `db/db/connect.wit` gives `db.connect`. When two decks both have a `connect` wit, the group prefix prevents collision.
-
-The deck.toml declares `namespace = [...]` to enforce that the deck's `lib/` modules stay in their own namespace — no shadowing across decks.
-
-Distribution: git clone → `decks/<name>/` is self-contained. `clam wits install <path>` copies to `~/.clam/wits/<name>/`. A mature wit can graduate to PAUSE as `Clam-Wit-<Name>` (layout already compatible).
-
-### 5.4 Lifecycle
-
-```
-UNLOADED → LOADED → ACTIVE ⇄ DISABLED
-                 │
-                 └── (declarative only) → UNLOADED
+1;
 ```
 
-Revertible effects (borrowed from Cordis, simplified): every registration tracks its reverse. Disable reverts all effects. Module wits can't truly unload without restart — honest Unix answer: disable + restart clamd.
+Fields: `name` (optional, defaults from package), `version` (optional),
+`about` (required), `usage` (optional), `hint` (required — dense keywords
+for LLM tool selection), `author` (optional), `license` (optional).
 
-### 5.5 Install Flow (CPAN's Discipline Without Its Machinery)
+The `hint` field is essential: when the LLM sees available tools, it needs
+a concise, keyword-rich description to decide which to use. Example:
+"Git safety: vetoes rm, reset --hard, push -f, force." No grammar, no
+sentences — just keywords the LLM can match against.
 
-1. Fetch (git clone)
-2. Validate (manifest, namespace rule)
-3. Deps check (requires_perl/requires_bin → actionable message)
-4. Test (run t/*.t before installing)
-5. Place (~/.clam/wits/<name>)
-6. Record (lockfile + index)
+After the first grep scan, metadata is cached in the SQLite DB. The DB is
+the runtime view; the `# CLAM-WIT:` comment is the source of truth.
 
-We deliberately do NOT build: Makefile.PL per wit, PAUSE uploads, XS build steps. A wit that needs XS declares it and tells the user to `cpanm` it.
+### 5.3 Registration: `register($api)`
 
-### 5.6 Wits vs CPAN
+The comment is for discovery. The `register($api)` function is for runtime
+integration. After `require`, the PluginManager calls `$wit->register($api)`.
 
-Not either/or. CPAN is distribution; wits are runtime. The verdict:
+The wit registers:
+- **Tools** the LLM can call: `$api->register_tool(name, description, execute)`
+- **Commands** for the REPL: `$api->register_command(name, description, handler)`
+- **Bus listeners**: `$api->on(topic, handler)`
+- **Help text**: `$api->help(text)`
 
-- Wits stay as the runtime unit
-- Git stays the distribution channel for v1
-- We steal CPAN's three disciplines: declared deps, tests at install, versioned lockfile
-- A mature wit can graduate to PAUSE as Clam-Wit-<Name> (layout already compatible)
+### 5.4 Discovery and Loading
+
+**Production** (installed via cpanm):
+1. Scan: `grep -r "# CLAM-WIT:" @INC/Clam/Wits/`
+2. Cache: Store metadata in SQLite DB
+3. Select: Query DB to decide which wits to load
+4. Load: `require Clam::Wits::Foo` (Perl finds it in `@INC`)
+5. Register: Call `$wit->register($api)`
+
+**Development** (in-tree wits):
+1. Scan: `grep -r "# CLAM-WIT:" wits/*/lib/Clam/Wits/`
+2. Select: Same as production
+3. Load: Add each wit's `lib/` to `@INC`, then `require`
+4. Register: Same as production
+
+Same loader, same code. Just different `@INC` setup.
+
+eval around `require` + `register`. A broken wit warns and skips. The harness
+always runs (527 tests, all passing).
+
+### 5.5 Lifecycle
+
+```
+LOADED → ACTIVE ⇄ DISABLED
+```
+
+- **ACTIVE**: registered tools callable by the LLM, commands in the REPL, hooks on the bus.
+- **DISABLED**: all registrations reverted; module still compiled in memory; re-enable is instant.
+
+Revertible effects (borrowed from Cordis, simplified): every registration tracks
+its reverse. Disable reverts all effects. Module wits can't truly unload without
+restart — honest Unix answer: disable + restart clamd.
+
+### 5.6 Distribution Model
+
+**Core dist: `Clam`** — the minimum viable harness.
+
+```
+Clam/
+  lib/Clam.pm
+  lib/Clam/App.pm
+  lib/Clam/Loop.pm
+  lib/Clam/Bus.pm
+  lib/Clam/Store.pm
+  lib/Clam/Provider/*.pm
+  lib/Clam/Tool.pm
+  lib/Clam/Tools/*.pm
+  lib/Clam/Wit/API.pm
+  lib/Clam/Wit/Session.pm
+  bin/clam
+  bin/clamd
+  META.json
+```
+
+`cpanm Clam` installs the core. Session wit is included (part of the harness).
+All other wits are separate dists.
+
+**Wit dists: `Clam-Wits-Foo`** — one per wit (or one per related group).
+
+```
+Clam-Wits-Foo/
+  lib/Clam/Wits/Foo.pm
+  lib/Clam/Wits/Foo/Helper.pm
+  META.json
+  t/
+```
+
+`cpanm Clam-Wits-Foo` installs the wit. `META.json` declares
+`requires => { Clam => '1.0' }`.
+
+After installation, everything lands in one `@INC` tree. One tree, one grep,
+all wits found. In the git repo, wits live in `wits/` as separate dist
+directories — a staging area for development, not shipped in the core dist.
+
+### 5.7 What Goes Away
+
+| Old Mechanism | Replaced By |
+|---------------|-------------|
+| `wit.toml` / `deck.toml` | `# CLAM-WIT:` comment + `META.json` |
+| `wits.lock` | CPAN versioning |
+| `wits.index.json` | SQLite DB cache |
+| `clam wits install/upgrade/uninstall` | `cpanm` |
+| Directory-based discovery | `grep -r "# CLAM-WIT:"` |
+| Declarative `.wit` files | CPAN modules |
+
+### 5.8 Security and Trust
+
+Third-party code runs in your process with no sandbox; CPAN does not solve this
+either. Security is provenance + policy:
+
+- **In-tree wits** (in `wits/`): trusted — ship with the harness
+- **Installed wits**: you ran `cpanm`; CPAN records the version
+- **Project wits**: the repo's choice for this checkout
+
+eval isolation protects against bad modules. A broken wit warns and skips.
 
 ---
 
@@ -267,7 +352,7 @@ Trigger: `est_tokens(context) > context_window - reserve` (default 16384). Check
 ### 2.3 Module Map
 
 ```
-bin/clam                  CLI + Term::ReadLine REPL
+bin/clam                  CLI + Term::ReadLine REPL (unified command dispatch)
 bin/clamd                 NDJSON daemon front-end
 lib/Clam.pm               version, facade
 lib/Clam/Util.pm          uuid4, now_ms, json, truncate_head/tail
@@ -286,10 +371,10 @@ lib/Clam/Tools/{Read,Bash,Edit,Write}.pm   Pi's tools, exact prompts
 lib/Clam/Tools.pm         registry: builtins + wit-registered
 lib/Clam/Session.pm       session tree over Store
 lib/Clam/Loop.pm          agent loop = Pi runLoop port
-lib/Clam/Wit.pm           plugin base class
-lib/Clam/Wit/API.pm       what Wits receive: on/register_tool/command/ui
-lib/Clam/Wit/{File,Loader}.pm  declarative .wit files + deck loading
+lib/Clam/Wit/API.pm       what Wits receive: on/register_tool/command/ui/help
+lib/Clam/Wit/Session.pm   built-in wit: core REPL commands
 lib/Clam/Wit/Dispatch.pm  inter-wit execution
+lib/Clam/Wit/Scanner.pm   discovers user wits via # CLAM-WIT: grep
 lib/Clam/PluginManager.pm discovery + load + error isolation
 lib/Clam/Skills.pm        SKILL.md discovery + prompt section
 lib/Clam/Compaction.pm    threshold compaction (Pi semantics)
@@ -302,24 +387,24 @@ lib/Clam/Rules/{DecisionTree,FSM,BehaviorTree}.pm
 
 ---
 
-## 6. Curated Deck Catalog
+## 6. Curated Wit Catalog
 
-### 6.1 Current Decks (v2, working)
+### 6.1 Current Wits (v2, working)
 
-| Deck | Wits | Contents | Status |
-|------|------|----------|--------|
+| Wit Group | Count | Contents | Status |
+|-----------|-------|----------|--------|
 | `logic` | 35 | Datalog, rules DSL, FSM, BT, DT, SAT | ✅ Ported, tested |
 | `critic` | 12 | Code critique heuristics | ✅ Ported, tested |
 | `git` | 10 | Git operations | ✅ Ported, tested |
 | `fs` | 18 | Filesystem operations | ✅ Ported, tested |
-| `db` | 8 | DB connect/query/execute/schema/shell (core wits) | ✅ Ported, tested |
-| `perl` | 16 | Perl development tools (syntax, review, POD, testing, debugging) | ✅ Ported, tested |
-| `psh` | 3 | Perl Shell REPL (eval, vars, help) | ✅ Ported, tested |
-| `search` | 9 | Local + web search | ✅ Ported, tested (install-on-demand) |
+| `db` | 8 | DB connect/query/execute/schema/shell | ✅ Ported, tested |
+| `perl` | 16 | Perl development tools | ✅ Ported, tested |
+| `psh` | 3 | Perl Shell REPL | ✅ Ported, tested |
+| `search` | 9 | Local + web search | ✅ Ported, tested |
 
-### 6.2 Planned Decks (from clam-old, prioritized)
+### 6.2 Planned Wits (from clam-old, prioritized)
 
-These are the decks worth porting. Not all 77 old decks — just the ones that serve a coding harness.
+These are the wits worth porting. Not all 77 old decks — just the ones that serve a coding harness.
 
 **High priority** (core coding workflow):
 - `db` — database operations (SQLite, PostgreSQL, MySQL)
@@ -346,9 +431,15 @@ These are the decks worth porting. Not all 77 old decks — just the ones that s
 
 ### 6.3 The Core Bundle
 
-Not all wits ship with a default install. A manifest (e.g., `decks/core.wits`) lists the wits that are in the core bundle. Everything else stays in the repo and is installable on demand.
+Not all wits ship with a default install. The `Clam` CPAN dist includes only
+the core harness + Session wit. Everything else is a separate CPAN dist,
+installable on demand via `cpanm`.
 
-Core bundle: logic (sans SAT) + git + fs + db + perl + psh = 88 wits. search, SAT, critic, OS, remote, and DB admin wits exist in the repo but are opt-in installs. The principle: if a wit has zero external dependencies and serves the coding workflow, it's a core candidate. If it needs vendor CLIs, API keys, or non-core binaries, it's install-on-demand.
+Core bundle: Session wit (part of Clam dist). All other wits are separate
+distances: logic, git, fs, db, perl, psh, critic, search, etc. The principle:
+if a wit has zero external dependencies and serves the coding workflow, it's a
+core candidate. If it needs vendor CLIs, API keys, or non-core binaries, it's
+install-on-demand.
 
 ---
 
@@ -393,11 +484,11 @@ The core harness is done and working (527 tests). MVP adds providers + README so
 - Agent loop (Pi parity), 4 core tools (read, bash, edit, write)
 - SQLite store + pub/sub bus
 - LLM providers: LMStudio, OpenAI-compat, Mock
-- REPL with streaming, slash commands
+- REPL with streaming, slash commands (unified command dispatch)
 - Clam::Driver + clamd daemon (NDJSON)
-- Wit system (two layouts, 4 discovery roots, error isolation)
-- P0/P1 Wits features (metadata, lifecycle, install gates, lockfile, namespace)
-- 5 decks ported (96 wits total), 527 tests offline
+- Wit system (CPAN modules, grep discovery, eval isolation)
+- Session wit (built-in, registers core commands)
+- 8 decks ported (111 wits total), 527 tests offline
 
 **MVP deliverables:**
 
@@ -407,24 +498,26 @@ The core harness is done and working (527 tests). MVP adds providers + README so
 | Gemini provider | ~1 day | Native generateContent API: different message format, `functionCall`/`functionResponse` parts, API key auth |
 | Azure provider | ~2 hours | Thin wrapper over OpenAI-compat: deployment URL construction + `api-version` query param |
 | Ollama + OpenAI aliases | ~10 min | `ollama` = localhost:11434, `openai` = api.openai.com, both use OpenAI-compat |
-| DB deck | ported | 8 core wits: connect, query, execute, schema, shell, history, export, import |
+| DB wit | ported | 8 core wits: connect, query, execute, schema, shell, history, export, import |
 | README | ~half day | What it is, how to install, how to run, provider config examples |
 | cpanfile | ~10 min | Declare DBI + DBD::SQLite as the only non-core deps |
 
-**MVP bundle: 88 core wits (logic-sans-SAT + git + fs + db + perl + psh), 5 providers, deps = Perl + SQLite + DBI + git.** All 118 wits in the repo; search, SAT, critic, OS, remote, and DB admin are install-on-demand via `clam wits install`.
+**MVP bundle: Session wit (core) + logic, git, fs, db, perl, psh as separate CPAN dists.**
+5 providers, deps = Perl + SQLite + DBI + git. All wits in the repo; search, SAT,
+critic, OS, remote, and DB admin are install-on-demand via `cpanm`.
 
 ### Phase 2: Ecosystem
 
-Make the curated plugin system real + expand provider coverage.
+Make the CPAN-based plugin system real + expand provider coverage.
 
 | Item | Effort | Why |
 |------|--------|-----|
+| `# CLAM-WIT:` comment format | ~1 day | Grep-able metadata, discovery without loading |
+| DB schema for wit registry | ~1 day | Cache metadata, track loaded/enabled state |
+| CPAN dist packaging | ~1 day | Build separate tarballs from wits/ directory |
 | P2-3: stdio handler type | ~1 day | Enables untrusted/user code safely. Process boundary. |
-| P2-4: curation catalog + `wits install <name>` | half day | Makes curation real. Users install from known catalog. |
-| P2-1: requires_wit dependency graph | ~2 days | Wits that depend on other wits. |
-| P2-2: Full unload for declarative wits | medium | True cleanup, not just disable. |
 | Bedrock provider | ~1 day | AWS SigV4 signing (deferred from MVP). |
-| More decks (db, web, build, perl) | ongoing | Grow the curated catalog based on real needs. |
+| More wits (db, web, build, perl) | ongoing | Grow the curated catalog based on real needs. |
 
 ### Phase 3: Capabilities
 
@@ -434,8 +527,8 @@ Features that make Clam more than a harness — a complete environment.
 |------|-----------|-----|
 | Subagents (fork Loop for parallel work) | Core stable | Multi-file editing, research tasks |
 | Background persistence (clamd sessions survive disconnect) | clamd stable | Long-running tasks |
-| RAG/FTS5 retrieval-based tool selection | P2-4 | Hundreds of wits without prompt bloat |
-| Per-session wit loading | P2-1 | Different wits for different tasks |
+| RAG/FTS5 retrieval-based tool selection | Wit registry DB | Hundreds of wits without prompt bloat |
+| Per-session wit loading | Wit lifecycle | Different wits for different tasks |
 | Director pattern (plan/goal/force-tool) | Bus hooks | Multi-turn autonomous behaviors |
 | Code crystallization (LLM → deterministic rules) | Logic deck | The system gets faster with use |
 
@@ -461,10 +554,10 @@ Clam v2 is what you show to Perl greybeards:
 > "Here's a Perl AI environment. SQLite backend, pub/sub bus, Pi-parity agent loop.
 > Four tools, 115 curated wits, Datalog engine, rules DSL, database shell,
 > Perl development suite (syntax check, code review, POD, test generation).
-> 527 tests, all offline. `prove -l t/` green.
-> A wit is a .pm file with a register() method.
-> Drop it in ~/.clam/wits/ and it works.
-> `clam wits install <git-url>` runs the tests before installing.
+> 556 tests, all offline. `prove -l t/` green.
+> A wit is a CPAN module in Clam::Wits::* with a register() method.
+> `cpanm Clam::Wits::Foo` and it works.
+> `grep -r "# CLAM-WIT:" @INC/Clam/Wits/` finds all installed wits.
 >
 > Supports Ollama, OpenAI, Anthropic, Gemini, Azure out of the box.
 > Not just a coding harness — a complete Perl shell for AI-assisted reasoning.
@@ -480,8 +573,8 @@ These are decisions to make as we proceed, not blockers:
 
 1. **Bus topic vocabulary** — too early to define a standard. Let it evolve through use.
 2. **Core bundle list** — discover through real usage, not upfront design.
-3. **Wit format vs CPAN** — module wits are already CPAN-compatible. A mature wit can graduate. Don't overthink this.
-4. **Per-session wit loading** — when? How? The lifecycle state machine (P2 items) makes this safe.
+3. **`# CLAM-WIT:` format** — spec is in Wits.md §3. Refine through use.
+4. **Per-session wit loading** — when? How? The lifecycle state machine makes this safe.
 5. **Subagent protocol** — how do child loops communicate with parent? Bus topics? Direct IPC?
 
 ---
@@ -491,9 +584,8 @@ These are decisions to make as we proceed, not blockers:
 | File | Purpose | Status |
 |------|---------|--------|
 | `docs/ROADMAP.md` | This document — vision, architecture, decisions | **Primary source of truth** |
-| `docs/Wits.md` | Wit system implementation spec (stdio protocol, manifest fields, build list) | **Keep — detailed how-to** |
+| `docs/Wits.md` | Wit system spec (CPAN modules, `# CLAM-WIT:`, discovery, registration) | **Keep — detailed how-to** |
 | `docs/DRIVER.md` | Clam::Driver and clamd operational docs | **Keep — user-facing reference** |
-| `decks/README.md` | Deck format and ported decks | **Keep** |
 | `_tmp/minsky.txt` (clam-old) | 300+ agent types, Society of Mind exploration | **Historical — ideas folded into §3.1** |
 
 Deleted (consolidated into ROADMAP):

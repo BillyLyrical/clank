@@ -117,6 +117,22 @@ CREATE TABLE IF NOT EXISTS rag_documents (
 );
 SQL
     }
+    # Wit registry: tracks installed wits discovered via # CLAM-WIT: markers.
+    # The comment is source of truth; this table is the runtime cache.
+    $db->do(qq{
+CREATE TABLE IF NOT EXISTS wits (
+  name TEXT PRIMARY KEY,
+  version TEXT,
+  about TEXT,
+  usage TEXT,
+  hint TEXT,
+  author TEXT,
+  license TEXT,
+  path TEXT,
+  state TEXT DEFAULT 'available',   -- available|active|disabled
+  loaded_at INTEGER,
+  created_at INTEGER
+)});
 }
 
 sub dbh { $_[0]->{dbh} }
@@ -379,6 +395,62 @@ SQL
     $st->execute($match, $limit);
     # fetchall_arrayref already returns an arrayref — do not double-wrap.
     return $st->fetchall_arrayref({});
+}
+
+# --- wit registry -----------------------------------------------------------
+sub wit_insert {
+    my ($self, %a) = @_;
+    $self->{dbh}->prepare(
+        'INSERT INTO wits (name,version,about,usage,hint,author,license,path,state,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)'
+    )->execute($a{name}, $a{version}, $a{about}, $a{usage}, $a{hint},
+               $a{author}, $a{license}, $a{path}, $a{state} // 'available', now_ms());
+    return 1;
+}
+
+sub wit_update {
+    my ($self, %a) = @_;
+    my @sets;
+    for my $k (qw(version about usage hint path state)) {
+        push @sets, "$k=?" if exists $a{$k};
+    }
+    return 0 unless @sets;
+    my $sql = "UPDATE wits SET " . join(', ', @sets) . " WHERE name=?";
+    my @vals = map { $a{$_} } grep { exists $a{$_} } qw(version about usage hint path state);
+    push @vals, $a{name};
+    $self->{dbh}->prepare($sql)->execute(@vals);
+    return 1;
+}
+
+sub wit_get {
+    my ($self, $name) = @_;
+    my $row = $self->{dbh}->selectrow_hashref('SELECT * FROM wits WHERE name=?', undef, $name);
+    return $row;
+}
+
+sub wit_list {
+    my ($self, %o) = @_;
+    my $where = '';
+    my @bind;
+    if ($o{state}) {
+        $where = 'WHERE state=?';
+        push @bind, $o{state};
+    }
+    my $st = $self->{dbh}->prepare("SELECT * FROM wits $where ORDER BY name");
+    $st->execute(@bind);
+    return $st->fetchall_arrayref({});
+}
+
+sub wit_set_state {
+    my ($self, $name, $state) = @_;
+    $self->{dbh}->prepare('UPDATE wits SET state=?, loaded_at=? WHERE name=?')
+        ->execute($state, $state eq 'active' ? now_ms() : undef, $name);
+    return 1;
+}
+
+sub wit_remove {
+    my ($self, $name) = @_;
+    $self->{dbh}->prepare('DELETE FROM wits WHERE name=?')->execute($name);
+    return 1;
 }
 
 1;
