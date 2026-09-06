@@ -778,6 +778,126 @@ sub search_all {
 # Internal
 # ---------------------------------------------------------------------------
 
+# === HYBRID SEARCH (BM25 + embeddings) ===
+
+# Hybrid search: combines FTS5 BM25 keyword relevance with embedding cosine
+# similarity. When embeddings are available, both scores are blended.
+# When not, falls back to BM25 only.
+#
+# Returns arrayref of results with { score, bm25_score, embedding_score, ... }.
+sub hybrid_search {
+    my ($self, $query, %args) = @_;
+    return [] unless defined $query && length $query;
+
+    my $limit    = $args{limit}    // 10;
+    my $type     = $args{type};         # optional entity type filter
+    my $bm25_weight    = $args{bm25_weight}    // 0.5;
+    my $embed_weight   = $args{embed_weight}   // 0.5;
+    my $min_score      = $args{min_score}      // 0.1;
+    my $embedding_func = $args{embedding_func}; # optional: sub { ($text) => \@vector }
+
+    # Phase 1: BM25 search.
+    my @bm25_results;
+    if ($self->{has_fts}) {
+        my ($sql, @bind) = ("SELECT e.*, rank FROM wm_entities_fts f
+            JOIN wm_entities e ON e.rowid = f.rowid
+            WHERE wm_entities_fts MATCH ?");
+        my $q = _fts_quote($query);
+        push @bind, $q;
+
+        if ($type) {
+            $sql .= ' AND e.type = ?';
+            push @bind, $type;
+        }
+
+        # FTS5 rank is negative BM25 (lower = more relevant). Normalize to 0..1.
+        $sql .= ' ORDER BY rank LIMIT ?';
+        push @bind, $limit * 3;   # over-fetch for blending
+
+        my $rows = $self->{dbh}->selectall_arrayref($sql, { Slice => {} }, @bind);
+        for my $r (@$rows) {
+            $r->{attributes} = jdecode($r->{attributes} // '{}');
+            # Normalize BM25: rank is negative, so negate and invert.
+            # Typical rank range: -12 (best) to 0 (worst). Map to 1..0.
+            my $rank = $r->{rank} // 0;
+            $r->{bm25_score} = 1 + $rank / 12;   # clamp later
+            $r->{bm25_score} = 0 if $r->{bm25_score} < 0;
+            $r->{bm25_score} = 1 if $r->{bm25_score} > 1;
+        }
+        @bm25_results = @$rows;
+    }
+
+    # Phase 2: Embedding search (if function provided).
+    my @embed_results;
+    if ($embedding_func && $self->{dbh}) {
+        my $query_vec = eval { $embedding_func->($query) };
+        if ($query_vec && ref $query_vec eq 'ARRAY' && @$query_vec) {
+            # Load all embeddings.
+            my $embed_rows = $self->{dbh}->selectall_arrayref(
+                'SELECT e.*, em.embedding FROM wm_entities e
+                 JOIN wm_embeddings em ON em.entity_id = e.id',
+                { Slice => {} });
+
+            for my $r (@$embed_rows) {
+                $r->{attributes} = jdecode($r->{attributes} // '{}');
+                my $vec = [split /,/, $r->{embedding}];
+                next unless @$vec == @$query_vec;
+                my $score = _cosine_sim($query_vec, $vec);
+                $r->{embedding_score} = $score;
+                push @embed_results, $r if $score > 0;
+            }
+        }
+    }
+
+    # Phase 3: Blend scores.
+    my %combined;
+    for my $r (@bm25_results) {
+        my $id = $r->{id};
+        $combined{$id} = $r;
+        $combined{$id}{bm25_score} = $r->{bm25_score};
+        $combined{$id}{embedding_score} = 0;
+    }
+
+    for my $r (@embed_results) {
+        my $id = $r->{id};
+        if (exists $combined{$id}) {
+            $combined{$id}{embedding_score} = $r->{embedding_score};
+        } else {
+            $combined{$id} = $r;
+            $combined{$id}{bm25_score} = 0;
+            $combined{$id}{embedding_score} = $r->{embedding_score};
+        }
+    }
+
+    # Compute blended score.
+    my @results;
+    for my $id (keys %combined) {
+        my $r = $combined{$id};
+        $r->{score} = ($r->{bm25_score} * $bm25_weight) + ($r->{embedding_score} * $embed_weight);
+        next if $r->{score} < $min_score;
+        push @results, $r;
+    }
+
+    # Sort by blended score descending.
+    @results = sort { $b->{score} <=> $a->{score} } @results[0..($#results < $limit - 1 ? $#results : $limit - 1)];
+
+    return \@results;
+}
+
+# Pure cosine similarity (from embedding wit, duplicated here for independence).
+sub _cosine_sim {
+    my ($a, $b) = @_;
+    return 0 unless @$a && @$b && @$a == @$b;
+    my ($dot, $na, $nb) = (0, 0, 0);
+    for my $i (0..$#$a) {
+        $dot += $a->[$i] * $b->[$i];
+        $na  += $a->[$i] ** 2;
+        $nb  += $b->[$i] ** 2;
+    }
+    my $denom = sqrt($na) * sqrt($nb);
+    return $denom > 0 ? $dot / $denom : 0;
+}
+
 sub _gen_id {
     my @chars = ('a'..'z', '0'..'9');
     return join '', map { $chars[int(rand(@chars))] } 1..12;
