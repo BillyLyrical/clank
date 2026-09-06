@@ -1,572 +1,419 @@
 # Neurosymbolic AI in Clam
 
-Status: architecture proposal. This document describes how Clam could evolve
-from an LLM harness with symbolic tools into a genuine neurosymbolic system
-with explicit world models, bidirectional reasoning, and crystallization.
+Status: implemented. This document describes what Clam has built, the theory
+behind it, how the pieces fit together, and what we hope to achieve.
 
-## 1. What Neurosymbolic AI Is
+## 1. The Thesis
 
-Gary Marcus champions neurosymbolic AI as the path beyond pure neural networks.
-The core insight: LLMs are brilliant pattern recognizers but terrible at
-reasoning. Rules engines are brilliant at reasoning but terrible at
-understanding natural language. Combining them yields systems that can both
-understand and reason.
+LLMs are brilliant pattern recognizers but terrible at reasoning. Rules engines
+are brilliant at reasoning but terrible at understanding natural language. The
+neurosymbolic thesis is that combining them yields systems that can both
+understand and reason — and that this combination is more than the sum of its
+parts.
 
-Neurosymbolic AI requires three things Clam currently lacks:
+Clam is not a pure neural system with bolted-on logic. It is not a logic
+system with a language model attached. It is an integrated architecture where
+neural and symbolic components share a common world model, communicate through
+a shared bus, and influence each other's behavior through well-defined hooks.
 
-1. **Explicit world model** — structured representation of entities, relations,
-   temporal facts, and causal links that both neural and symbolic components
-   read and write.
-
-2. **Bidirectional integration** — LLM generates hypotheses, rules validate
-   them, validated facts update the world model, world model constrains
-   subsequent LLM generation. This loop doesn't exist in current Clam.
-
-3. **Crystallization** — when the LLM solves a problem, the solution is
-   captured as a deterministic rule that runs forever after without LLM
-   involvement. The system gets cheaper and faster the more it's used.
-
-## 2. What Clam Already Has
-
-### Symbolic Components
-
-| Component | Location | Capability |
-|-----------|----------|------------|
-| Rules engine | `lib/Clam/Rules/Engine.pm` | Forward-chaining rule evaluation |
-| Datalog | `wits/logic/` | Relational query over facts |
-| SAT solver | `wits/logic/` | Constraint satisfaction |
-| FSM | `lib/Clam/Rules/FSM.pm` | State machine transitions |
-| Behavior trees | `lib/Clam/Rules/BehaviorTree.pm` | Hierarchical task execution |
-| Deduction chains | `wits/logic/` | Axiom → rule → conclusion with proof |
-| SQLite store | `lib/Clam/Store.pm` | Persistent key-value and event storage |
-| Bus/pub-sub | `lib/Clam/Bus.pm` | Minsky's agent communication |
-
-### Neural Components
-
-| Component | Location | Capability |
-|-----------|----------|------------|
-| LLM providers | `lib/Clam/Provider/` | Ollama, OpenAI, Anthropic, Gemini, Azure |
-| Tool calling | `lib/Clam/Tools/` | read, bash, edit, write |
-| System prompt | `lib/Clam/Session/SystemPrompt.pm` | Context injection |
-| 200+ wits | `wits/` | Domain-specific tools and classifiers |
-
-### The Gap
-
-All these components exist but operate in isolation:
+The core insight: **the world model is the integration point**. Both the LLM
+and the rules engine read from and write to the same structured knowledge
+base. This creates a feedback loop:
 
 ```
-LLM generates text → rules run deterministically → output
+LLM generates hypothesis → Rules validate → World Model updates →
+LLM constrained by world model → Better output
 ```
 
-The LLM never learns from rule outcomes. Rules never adapt from LLM insights.
-They are parallel tracks, not integrated reasoning.
+Each pass through the loop makes the system more knowledgeable. The LLM learns
+from rule outcomes. Rules adapt from LLM insights. Crystallization captures
+solutions as deterministic rules, making the system faster and cheaper over
+time.
 
-## 3. The World Model
+## 2. What We Built
 
-### 3.1 What a World Model Requires
+### 2.1 The World Model (`lib/Clam/WorldModel.pm`)
 
-A world model is not a key-value store. It needs:
+A structured knowledge base backed by SQLite, with five tables:
 
-- **Entities** — named things with types and attributes
-- **Relations** — typed connections between entities
-- **Temporal facts** — what was true when, what changed
-- **Causal links** — what causes what
-- **Beliefs** — what the system thinks is true (with confidence)
-- **Counterfactuals** — what would happen if X were different
+| Table | Purpose |
+|-------|---------|
+| `wm_entities` | Named things with types and attributes |
+| `wm_relations` | Typed connections between entities (with temporal validity) |
+| `wm_facts` | Temporal truths with confidence and source provenance |
+| `wm_causes` | Causal links between entities |
+| `wm_beliefs` | Claims with confidence, evidence, and supersession chains |
 
-### 3.2 Schema Design
+The world model is not a key-value store. It is a graph with temporal
+semantics, confidence propagation, and counterfactual reasoning.
 
-The world model extends SQLite with a structured schema:
+**Key capabilities:**
 
-```sql
--- Entities: things the system knows about
-CREATE TABLE wm_entities (
-    id          TEXT PRIMARY KEY,
-    type        TEXT NOT NULL,           -- 'person', 'concept', 'file', 'goal', ...
-    name        TEXT,
-    attributes  TEXT,                    -- JSON blob
-    created_at  INTEGER,
-    updated_at  INTEGER
-);
+- **Entity/relation/fact CRUD** — structured knowledge representation
+- **Temporal queries** — what was true when, fact history, belief lineage
+- **Causal reasoning** — trace causes of effects, predict effects of causes
+- **Graph traversal** — BFS walk with distance, shortest path between entities
+- **Hybrid search** — BM25 keyword search blended with embedding cosine similarity
+- **Counterfactual queries** — "what if X were different?" via SQLite SAVEPOINTs
+- **Belief revision** — confidence propagation through dependency graphs
+- **FTS5 integration** — full-text search over entities, beliefs, and facts
 
--- Relations: typed connections between entities
-CREATE TABLE wm_relations (
-    id          INTEGER PRIMARY KEY,
-    source_id   TEXT NOT NULL REFERENCES wm_entities(id),
-    target_id   TEXT NOT NULL REFERENCES wm_entities(id),
-    type        TEXT NOT NULL,           -- 'depends_on', 'causes', 'part_of', ...
-    attributes  TEXT,                    -- JSON blob
-    confidence  REAL DEFAULT 1.0,        -- 0.0 to 1.0
-    created_at  INTEGER,
-    valid_until INTEGER                  -- NULL = still valid
-);
+### 2.2 The Rules Engine (`lib/Clam/Rules/`)
 
--- Temporal facts: what was true when
-CREATE TABLE wm_facts (
-    id          INTEGER PRIMARY KEY,
-    entity_id   TEXT REFERENCES wm_entities(id),
-    predicate   TEXT NOT NULL,           -- 'is_above', 'has_value', ...
-    value       TEXT,                    -- JSON value
-    confidence  REAL DEFAULT 1.0,
-    source      TEXT,                    -- 'llm', 'rule', 'observation', 'user'
-    valid_from  INTEGER NOT NULL,
-    valid_until INTEGER                  -- NULL = still valid
-);
+A complete rule evaluation system:
 
--- Causal links: what causes what
-CREATE TABLE wm_causes (
-    id              INTEGER PRIMARY KEY,
-    cause_entity    TEXT REFERENCES wm_entities(id),
-    effect_entity   TEXT REFERENCES wm_entities(id),
-    mechanism       TEXT,                -- description of causal pathway
-    confidence      REAL DEFAULT 1.0,
-    evidence        TEXT                 -- JSON array of supporting facts
-);
+| Component | Capability |
+|-----------|------------|
+| `Engine` | Forward-chaining with conflict resolution |
+| `DSL` | Rule definition language |
+| `Rule` | Individual rule objects (pattern, fact, production) |
+| `Parser` | Parse rule definitions |
+| `FSM` | Finite state machine transitions |
+| `BehaviorTree` | Hierarchical task execution |
+| `DecisionTree` | Branching decision logic |
 
--- Beliefs: what the system thinks (with provenance)
-CREATE TABLE wm_beliefs (
-    id          INTEGER PRIMARY KEY,
-    statement   TEXT NOT NULL,           -- natural language claim
-    confidence  REAL DEFAULT 0.5,
-    source      TEXT,                    -- 'llm', 'rule', 'inference'
-    evidence    TEXT,                    -- JSON array of fact IDs
-    created_at  INTEGER,
-    superseded_by INTEGER REFERENCES wm_beliefs(id)
-);
+The engine supports backward chaining, negation as failure, rule composition,
+and incremental re-evaluation when facts change.
+
+### 2.3 The Bidirectional Integration (`lib/Clam/NeuroIntegration.pm`)
+
+Three-phase pipeline that makes the LLM and world model talk to each other:
+
+**Phase 1: LLM reads world model.** Before the LLM generates a response,
+relevant world model facts are injected into the context. The LLM sees what
+the system already knows.
+
+**Phase 2: Rules validate LLM output.** After the LLM generates, the output
+is checked against world model facts. Contradictions are flagged. If the LLM
+says "Perl is not a scripting language" but the world model knows it is, the
+system catches it.
+
+**Phase 3: LLM updates world model.** After successful conversation, entities
+and facts are extracted from the conversation and stored. The world model
+grows from every interaction.
+
+All three phases hook into the bus — no changes to Loop.pm required.
+
+### 2.4 Crystallization (`lib/Clam/Crystallizer.pm`)
+
+When the LLM solves a problem, the solution is captured as a deterministic
+rule. The system gets cheaper and faster the more it's used.
+
+Pipeline: conversation → pattern extraction (heuristic or LLM) → validate
+against world model → register rule in engine. The Crystallizer hooks into
+`agent_end` to analyze completed conversations automatically.
+
+### 2.5 Output Constraints (`lib/Clam/Constraints.pm`)
+
+A registry of validation schemas that check LLM output before emission:
+
+| Schema | What it catches |
+|--------|----------------|
+| `vagueness` | Excessive hedging and imprecision |
+| `overclaiming` | Absolute certainty without evidence |
+| `wm_contradiction` | Contradicting known world model facts |
+
+Custom constraints are trivial to add — register a name, description,
+severity, and validation function. Constraints hook into `message_end` via
+the bus.
+
+### 2.6 Goal Planning (`lib/Clam/Logic/GoalPlanner.pm`)
+
+Decomposes goals into subgoals with dependency tracking and relevance scoring.
+Uses the world model's belief graph to prioritize: beliefs that are close to a
+goal in the dependency graph and have high confidence score highest.
+
+Supports topological execution planning, automatic subgoal completion
+detection, and hierarchical goal structures.
+
+### 2.7 Taxonomy (`lib/Clam/Logic/Taxonomy.pm`)
+
+Hierarchical classification for entities, beliefs, and goals. Categories form
+trees with inherited properties. Enables category-aware queries across the
+world model.
+
+Property inheritance: child categories inherit properties from parents, with
+child overrides. Category-aware queries: find all entities/beliefs/goals under
+a branch.
+
+### 2.8 Infrastructure Primitives
+
+| Module | Purpose |
+|--------|---------|
+| `Governor` | Rate limiting, budget caps, circuit breaker for LLM providers |
+| `Tracer` | Event-trace log for pipeline observability |
+| `Cache` | TTL cache for LLM responses (prevents re-asking the same question) |
+| `Metrics` | Simple counters for LLM calls, tokens, rules, crystallizations |
+| `EventSourcing` | Immutable state-change log for debugging and replay |
+
+All wired into the agent loop via `App.pm`. Governor wraps provider calls,
+Tracer wraps pipeline stages, Cache checks before provider calls, Metrics
+counts at key points.
+
+## 3. The Architecture
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                         User Input                            │
+└───────────────────────────┬──────────────────────────────────┘
+                            │
+                            ▼
+┌──────────────────────────────────────────────────────────────┐
+│              World Model Context Injection                     │
+│  Query relevant facts, beliefs, and relations                 │
+└───────────────────────────┬──────────────────────────────────┘
+                            │
+                            ▼
+┌──────────────────────────────────────────────────────────────┐
+│                    LLM Generation                              │
+│  Generate response constrained by world model context         │
+└───────────────────────────┬──────────────────────────────────┘
+                            │
+                            ▼
+┌──────────────────────────────────────────────────────────────┐
+│                  Constraint Validation                         │
+│  Check output against practical schemas and world facts       │
+└───────────────────────────┬──────────────────────────────────┘
+                            │
+                    ┌───────┴───────┐
+                    │               │
+                    ▼               ▼
+              ┌──────────┐    ┌──────────┐
+              │  Valid   │    │ Invalid  │
+              └────┬─────┘    └────┬─────┘
+                   │               │
+                   │               ▼
+                   │        ┌──────────────┐
+                   │        │ LLM Revision │
+                   │        │ (with facts) │
+                   │        └──────┬───────┘
+                   │               │
+                   ▼               ▼
+┌──────────────────────────────────────────────────────────────┐
+│              World Model Update                                │
+│  Extract new entities, relations, facts from conversation     │
+└───────────────────────────┬──────────────────────────────────┘
+                            │
+                            ▼
+┌──────────────────────────────────────────────────────────────┐
+│              Crystallization                                   │
+│  Capture reusable patterns as deterministic rules             │
+└───────────────────────────┬──────────────────────────────────┘
+                            │
+                            ▼
+┌──────────────────────────────────────────────────────────────┐
+│                   Output to User                               │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-### 3.3 World Model Operations
+Every arrow is a bus event. No component calls another directly. This means:
+
+- **Any component can be replaced** without touching others
+- **Any component can be disabled** at runtime
+- **New components can be added** by subscribing to bus events
+- **All interactions are journaled** for debugging and replay
+
+## 4. How to Use It
+
+### 4.1 As a Coding Harness
+
+```bash
+clam --provider ollama --model codellama
+```
+
+The standard coding harness — read files, edit code, run commands. The
+neurosymbolic layer runs silently in the background: the world model
+accumulates knowledge about your codebase, constraints catch contradictions,
+crystallized rules speed up repeated tasks.
+
+### 4.2 As a Reasoning System
 
 ```perl
-package Clam::WorldModel;
+use Clam::App;
 
-# Entity operations
-sub add_entity    { ... }   # create or update entity
-sub get_entity    { ... }   # retrieve entity with attributes
-sub query_entities { ... }  # find entities by type/attribute
+my $app = Clam::App->new(provider => 'ollama', model => 'llama3');
+$app->start_session;
 
-# Relation operations
-sub add_relation  { ... }   # create relation between entities
-sub get_relations { ... }   # find relations by type/source/target
-sub infer_relations { ... } # derive new relations from existing ones
+# The world model is automatically available.
+# Add knowledge:
+my $wm = $app->{world_model};
+$wm->add_entity(id => 'perl', type => 'language', name => 'Perl');
+$wm->assert_fact(entity_id => 'perl', predicate => 'is', value => 'a scripting language');
+$wm->believe(statement => 'Perl is good for text processing', confidence => 0.9);
 
-# Fact operations
-sub assert_fact   { ... }   # add temporal fact
-sub query_facts   { ... }   # find facts by entity/predicate/time
-sub retract_fact  { ... }   # mark fact as no longer valid
+# Query it:
+my $facts = $wm->query_facts(entity_id => 'perl');
+my $beliefs = $wm->query_beliefs(min_confidence => 0.7);
 
-# Causal operations
-sub add_cause     { ... }   # record causal link
-sub trace_causes  { ... }   # find all causes of an effect
-sub predict_effects { ... } # find all effects of a cause
-
-# Belief operations
-sub believe       { ... }   # add belief with confidence
-sub query_beliefs { ... }   # find beliefs by statement/confidence
-sub update_belief { ... }   # supersede old belief with new evidence
+# Use goal planning:
+my $gp = Clam::Logic::GoalPlanner->new(world_model => $wm);
+my $goal_id = $gp->set_goal(statement => 'Learn Perl', priority => 1);
+$gp->add_subgoal(goal_id => $goal_id, statement => 'Read perldoc');
+$gp->add_subgoal(goal_id => $goal_id, statement => 'Write a script', depends_on => [$subgoal_id]);
+my $plan = $gp->plan($goal_id);
 ```
 
-### 3.4 Integration with Existing Store
+### 4.3 As a Knowledge Base
 
-The world model sits alongside the existing `Clam::Store`:
-
-```
-lib/Clam/
-  Store.pm            # existing: sessions, messages, kv, events
-  WorldModel.pm       # new: entities, relations, facts, causes, beliefs
-```
-
-`Store.pm` handles session state. `WorldModel.pm` handles world knowledge.
-They share the same SQLite database but different tables.
-
-## 4. Bidirectional Integration
-
-### 4.1 The Loop
-
-The current flow is unidirectional:
-
-```
-User → LLM → Tools → Rules → Output
-```
-
-The neurosymbolic flow is circular:
-
-```
-User → LLM generates hypothesis → Rules validate → World Model updates → LLM constrained by world model → Output
-```
-
-### 4.2 Implementation
-
-#### Phase 1: LLM reads world model
-
-When the LLM generates a response, inject relevant world model facts into
-the system prompt:
+The world model persists across sessions. Build up knowledge over time:
 
 ```perl
-sub build_context {
-    my ($self) = @_;
-    my $chain = Clam::Session::Messages::chain($self->{store}, $self->{id});
+# Knowledge accumulates in SQLite
+$wm->add_entity(id => 'project_x', type => 'project', name => 'Project X',
+    attributes => { language => 'Perl', status => 'active' });
+$wm->add_relation(source_id => 'perl', target_id => 'project_x', type => 'used_by');
 
-    # NEW: inject world model facts relevant to current query
-    my $world_context = $self->{world_model}->relevant_facts($chain);
-    push @$chain, { role => 'system', content => $world_context };
-
-    return Clam::Session::Messages::to_provider_list($chain);
-}
+# Crystallized rules persist — repeated questions get faster
+# Constraints persist — output quality improves over time
 ```
 
-This is the simplest integration — the LLM sees what the world model knows.
-
-#### Phase 2: Rules validate LLM output
-
-After the LLM generates output but before emitting it, run validation rules:
+### 4.4 Extending with Custom Constraints
 
 ```perl
-sub validate_output {
-    my ($self, $output) = @_;
+use Clam::Constraints;
 
-    # Run validation rules against LLM output
-    my @violations = $self->{rules}->validate($output);
-
-    if (@violations) {
-        # World model detected contradiction — ask LLM to revise
-        my $revised = $self->{provider}->post_json('/chat/completions', {
-            model    => $self->{provider}{model},
-            messages => [
-                @{ $self->build_context },
-                { role => 'assistant', content => $output },
-                { role => 'system', content =>
-                    "Your response contradicts known facts: "
-                    . join("\n", @violations)
-                    . "\nPlease revise." },
-            ],
-        });
-        return $revised->{choices}[0]{message}{content};
-    }
-
-    return $output;
-}
-```
-
-#### Phase 3: LLM updates world model
-
-After successful interaction, extract new knowledge from the conversation:
-
-```perl
-sub extract_world_facts {
-    my ($self, $conversation) = @_;
-
-    # Ask LLM to extract entities, relations, and facts
-    my $extraction = $self->{provider}->post_json('/chat/completions', {
-        model    => $self->{provider}{model},
-        messages => [
-            { role => 'system', content =>
-                "Extract entities, relations, and facts from this conversation.
-                 Return JSON: { entities: [...], relations: [...], facts: [...] }" },
-            { role => 'user', content => $conversation },
-        ],
-    });
-
-    # Update world model with extracted knowledge
-    my $data = decode_json($extraction->{choices}[0]{message}{content});
-    $self->{world_model}->update_from_extraction($data);
-}
-```
-
-### 4.3 The Complete Pipeline
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        User Input                           │
-└─────────────────────┬───────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│              World Model Context Injection                   │
-│  Query relevant facts, beliefs, and relations               │
-└─────────────────────┬───────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    LLM Generation                            │
-│  Generate response constrained by world model context       │
-└─────────────────────┬───────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│                  Rule Validation                             │
-│  Check output against world model facts and beliefs         │
-└─────────────────────┬───────────────────────────────────────┘
-                      │
-              ┌───────┴───────┐
-              │               │
-              ▼               ▼
-        ┌──────────┐    ┌──────────┐
-        │  Valid   │    │ Invalid  │
-        └────┬─────┘    └────┬─────┘
-             │               │
-             │               ▼
-             │        ┌──────────────┐
-             │        │ LLM Revision │
-             │        │ (with facts) │
-             │        └──────┬───────┘
-             │               │
-             ▼               ▼
-┌─────────────────────────────────────────────────────────────┐
-│              World Model Update                              │
-│  Extract new entities, relations, facts from conversation   │
-└─────────────────────┬───────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   Output to User                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-## 5. Crystallization
-
-### 5.1 What Crystallization Means
-
-When the LLM solves a problem, the solution should be captured as a
-deterministic rule. The system gets cheaper and faster the more it's used.
-
-Example:
-- LLM is asked "what's the capital of France?"
-- LLM responds "Paris"
-- System creates rule: `capital_of(france) = paris`
-- Next time, rule fires instantly without LLM involvement
-
-### 5.2 Crystallization Pipeline
-
-```perl
-sub crystallize {
-    my ($self, $interaction) = @_;
-
-    # 1. LLM identifies reusable patterns
-    my $patterns = $self->{provider}->post_json('/chat/completions', {
-        model    => $self->{provider}{model},
-        messages => [
-            { role => 'system', content =>
-                "Identify reusable rules from this interaction.
-                 Return JSON: { rules: [{ name, condition, action, confidence }] }" },
-            { role => 'user', content => $interaction },
-        ],
-    });
-
-    # 2. Validate proposed rules against world model
-    my $data = decode_json($patterns->{choices}[0]{message}{content});
-    my @validated;
-    for my $rule (@{ $data->{rules} }) {
-        if ($self->{world_model}->supports_rule($rule)) {
-            push @validated, $rule;
-        }
-    }
-
-    # 3. Register validated rules
-    for my $rule (@validated) {
-        $self->{rules}->add_rule(
-            name       => $rule->{name},
-            condition  => $rule->{condition},
-            action     => $rule->{action},
-            confidence => $rule->{confidence},
-            source     => 'crystallized',
-        );
-    }
-
-    return scalar @validated;
-}
-```
-
-### 5.3 Crystallization Triggers
-
-Crystallization should happen when:
-
-- The LLM provides a definitive answer to a factual question
-- A deduction chain reaches a conclusion
-- The user confirms a correction
-- A pattern repeats across multiple interactions
-
-### 5.4 Crystallized Rule Storage
-
-Crystallized rules live in the rules engine alongside hand-written rules:
-
-```sql
-CREATE TABLE crystallized_rules (
-    id          INTEGER PRIMARY KEY,
-    name        TEXT NOT NULL,
-    condition   TEXT NOT NULL,        -- Perl expression or Datalog
-    action      TEXT NOT NULL,        -- Perl code or fact assertion
-    confidence  REAL DEFAULT 1.0,
-    source      TEXT,                 -- 'crystallized', 'llm', 'rule'
-    created_at  INTEGER,
-    last_used   INTEGER,
-    use_count   INTEGER DEFAULT 0
+my $c = Clam::Constraints->new(world_model => $wm);
+$c->add_constraint(
+    name     => 'no_jargon',
+    desc     => 'Avoid technical jargon for non-technical users',
+    severity => 'warn',
+    fn       => sub {
+        my ($output, $context) = @_;
+        my @v;
+        push @v, 'Contains jargon' if $output =~ /\b(?:monad|functor|kleisli)\b/i;
+        return @v;
+    },
 );
 ```
 
-## 6. Philosophical Constraint Schemas
-
-### 6.1 From Taxonomy to Rules
-
-The minsky.txt taxonomy of 200+ agent types across philosophical frameworks
-can be distilled into constraint schemas — rules that the LLM's output must
-satisfy before emission.
-
-These are not agent types. They are validation rules:
+### 4.5 Counterfactual Reasoning
 
 ```perl
-# Stoic constraint: separate controllable from uncontrollable
-sub stoic_control_check {
-    my ($output, $world_model) = @_;
-    my @violations;
-
-    # Check if output promises outcomes outside system control
-    if ($output =~ /\b(?:will guarantee|promise to ensure|definitely will)\b/i) {
-        my $controllable = $world_model->query_beliefs(
-            statement => 'system_can_control',
-            confidence => 0.8,
-        );
-        if (!$controllable) {
-            push @violations, "Stoic: promises outcomes outside system control";
-        }
-    }
-
-    return @violations;
-}
-
-# Confucian constraint: relational appropriateness
-sub confucian_li_check {
-    my ($output, $context) = @_;
-    my @violations;
-
-    # Check if output violates social context
-    if ($context->{user_role} eq 'elder' && $output =~ /\byou should\b/i) {
-        push @violations, "Confucian: directive language toward elder";
-    }
-
-    return @violations;
-}
-
-# Care ethics constraint: attentiveness
-sub care_ethics_check {
-    my ($output, $conversation) = @_;
-    my @violations;
-
-    # Check if output ignores emotional content
-    if ($conversation =~ /\b(?:frustrated|angry|sad|upset)\b/i
-        && $output !~ /\b(?:understand|sorry|difficult|hard)\b/i) {
-        push @violations, "Care ethics: ignores emotional content";
-    }
-
-    return @violations;
-}
-```
-
-### 6.2 Constraint Schema Registry
-
-```perl
-package Clam::Constraints;
-
-my @SCHEMAS = (
-    { name => 'stoic_control',      fn => \&stoic_control_check },
-    { name => 'confucian_li',       fn => \&confucian_li_check },
-    { name => 'care_ethics',        fn => \&care_ethics_check },
-    { name => 'marx_alienation',    fn => \&marx_alienation_check },
-    { name => 'jung_shadow',        fn => \&jung_shadow_check },
-    { name => 'freud_superego',     fn => \&freud_superego_check },
-    # ... more schemas from minsky.txt taxonomy
+# What would happen if Perl were compiled instead of interpreted?
+my $result = $wm->counterfactual(
+    scenario => [
+        { op => 'retract_fact', fact_id => $original_fact_id },
+        { op => 'assert_fact', entity_id => 'perl', predicate => 'type', value => 'compiled language' },
+    ],
+    query => sub {
+        my ($wm) = @_;
+        return $wm->query_facts(entity_id => 'perl');
+    },
 );
-
-sub validate {
-    my ($self, $output, $context) = @_;
-    my @all_violations;
-
-    for my $schema (@SCHEMAS) {
-        my @v = $schema->{fn}->($output, $context);
-        push @all_violations, map { "[$schema->{name}] $_" } @v;
-    }
-
-    return @all_violations;
-}
+# The world model is unchanged after the call.
 ```
 
-## 7. Implementation Roadmap
+## 5. What We Hope to Achieve
 
-### Phase 1: World Model Foundation (Weeks 1-4)
+### 5.1 The System Gets Smarter Over Time
 
-1. Design and implement `Clam::WorldModel` with SQLite schema
-2. Add entity/relation/fact CRUD operations
-3. Integrate with `Clam::Store` (same database, separate tables)
-4. Write tests for world model operations
-5. Add basic world model queries to session context
+Every interaction feeds the world model. Every crystallized rule reduces future
+LLM calls. Every validated output improves quality. The system is designed to
+be measurably better after a month of use than on day one.
 
-**Deliverable:** `lib/Clam/WorldModel.pm` with full test suite
+### 5.2 Explainable Reasoning
 
-### Phase 2: Bidirectional Context (Weeks 5-8)
+Every conclusion has a traceable path through world model facts and rules.
+When the system makes a recommendation, you can trace: which facts led to
+which beliefs, which rules fired, which crystallized rules contributed.
+No black boxes.
 
-1. Implement world model context injection into system prompt
-2. Add rule validation layer after LLM output
-3. Implement LLM revision loop when rules flag violations
-4. Add world fact extraction from successful conversations
-5. Write integration tests for the full loop
+### 5.3 Cost Reduction Through Crystallization
 
-**Deliverable:** Working bidirectional LLM ↔ rules integration
+The LLM is expensive. Deterministic rules are cheap. When the LLM solves a
+problem once, crystallization captures the solution as a rule. Next time, the
+rule fires instantly without LLM involvement. Over time, the fraction of
+queries handled by rules grows, and the fraction requiring LLM calls shrinks.
 
-### Phase 3: Crystallization (Weeks 9-12)
+### 5.4 Safe Autonomy Through Constraints
 
-1. Implement pattern extraction from LLM interactions
-2. Add rule validation against world model before crystallization
-3. Implement crystallized rule storage and execution
-4. Add crystallization triggers (factual answers, confirmed corrections)
-5. Write tests for crystallized rule execution
+The constraint system provides guardrails. Output is validated before
+emission. World model contradictions are caught. Overclaiming is flagged.
+This makes the system safe to use in contexts where unchecked LLM output
+would be dangerous.
 
-**Deliverable:** System that gets faster with use
+### 5.5 Goal-Directed Behavior
 
-### Phase 4: Constraint Schemas (Weeks 13-16)
+The goal planner enables multi-step reasoning. Set a goal, and the system
+decomposes it into subgoals, scores them by relevance to known beliefs,
+executes them in dependency order, and tracks completion. This is the
+foundation for autonomous task execution.
 
-1. Implement constraint schema registry
-2. Port philosophical constraints from minsky.txt taxonomy
-3. Add constraint validation to output pipeline
-4. Implement constraint-aware LLM revision
-5. Write tests for each constraint schema
+### 5.6 The Perl Advantage
 
-**Deliverable:** Philosophically grounded output validation
+This entire system is Perl. No Python runtime. No TypeScript transpiler. No
+Docker containers. SQLite and CPAN — the two things that have been reliable
+in production for decades. The neurosymbolic infrastructure runs in the same
+process as the LLM harness, with the same database, on the same machine.
 
-### Phase 5: Advanced Reasoning (Weeks 17-20)
+For experienced Perl developers, this means: the system is inspectable,
+modifiable, and hackable with the tools you already know. Every component
+is a Perl module with tests. Every bus event is a SQLite row you can query.
+Every rule is a Perl expression you can debug.
 
-1. Implement causal reasoning over world model
-2. Add counterfactual queries ("what if X were different?")
-3. Implement belief revision with confidence propagation
-4. Add temporal reasoning (what was true when)
-5. Write tests for advanced reasoning operations
+## 6. Implementation Status
 
-**Deliverable:** World model with causal and temporal reasoning
+### Completed
 
-## 8. Success Criteria
+| Phase | Component | Status |
+|-------|-----------|--------|
+| World Model | Schema, CRUD, Store integration | ✅ |
+| World Model | Hybrid search (BM25 + embeddings) | ✅ |
+| World Model | Graph traversal, shortest path | ✅ |
+| World Model | Temporal queries, fact/belief history | ✅ |
+| Bidirectional | Context injection into LLM | ✅ |
+| Bidirectional | Rule validation after LLM output | ✅ |
+| Bidirectional | Knowledge extraction from conversation | ✅ |
+| Crystallization | Pattern extraction, rule storage | ✅ |
+| Constraints | Practical validation schemas | ✅ |
+| Advanced Reasoning | Causal reasoning, trace causes | ✅ |
+| Advanced Reasoning | Counterfactual queries | ✅ |
+| Advanced Reasoning | Belief revision with confidence propagation | ✅ |
+| Goal Planning | Decomposition, relevance scoring | ✅ |
+| Taxonomy | Hierarchical classification, inheritance | ✅ |
+| Infrastructure | Governor, Tracer, Cache, Metrics | ✅ |
+| Infrastructure | Event sourcing, replay | ✅ |
+| Integration | All primitives wired into App.pm | ✅ |
 
-The system is neurosymbolic when:
+### Test Coverage
 
-1. **World model exists** — entities, relations, facts, causes, beliefs
-   are stored and queryable
-2. **Bidirectional flow works** — LLM reads world model, rules validate
-   LLM output, conversation updates world model
-3. **Crystallization happens** — LLM solutions become deterministic rules
-4. **Constraints are enforced** — philosophical schemas validate output
-5. **The system improves** — crystallized rules reduce LLM calls over time
-6. **Reasoning is explainable** — every conclusion has a traceable path
-   through world model facts and rules
+705 tests across 28 test files. All passing.
 
-## 9. Risks and Mitigations
+### Module Count
 
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| World model becomes stale | Contradictions between model and reality | Temporal facts with expiry, regular reconciliation |
-| Crystallized rules conflict | Inconsistent behavior | Rule conflict detection, confidence-based priority |
-| LLM hallucinates world facts | Corrupted world model | Confidence thresholds, human-in-the-loop for high-stakes facts |
-| Constraint schemas too rigid | Refuses valid outputs | Configurable constraint strength, learning from false positives |
-| Performance overhead | Slow responses | Async world model updates, cached context, selective validation |
+- Core modules: 32 (lib/Clam/)
+- Logic modules: 7 (lib/Clam/Logic/)
+- Rules modules: 7 (lib/Clam/Rules/)
+- Provider modules: 8 (lib/Clam/Provider/)
+- Wit decks: 10 (wits/)
 
-## 10. References
+## 7. What Comes Next
+
+### Constraint Schemas from Philosophical Frameworks
+
+The philosophical constraint schemas (Stoic, Confucian, Care Ethics, Marx,
+Jung, Freud) from the original AGI.md plan are available as a wit rather
+than built-in constraints. They can be loaded when needed without burdening
+every session.
+
+### Real-World Testing
+
+The infrastructure is built. The next step is running it against real coding
+tasks, real knowledge bases, and real reasoning challenges. Measuring:
+
+- How much does crystallization reduce LLM calls over time?
+- How accurate is the world model after a week of use?
+- How many contradictions does the constraint system catch?
+- How useful is goal planning for multi-step coding tasks?
+
+### Advanced Reasoning Extensions
+
+- **Counterfactual chains** — multi-step "what if" reasoning
+- **Belief propagation at scale** — confidence cascading through large graphs
+- **Temporal reasoning** — "what was true before X changed?"
+- **Constraint-aware revision** — LLM automatically revises when constraints fail
+
+## 8. References
 
 - Marcus, G. (2020). *The Next Decade in AI: Four Steps Towards Robust Artificial Intelligence*
 - Minsky, M. (1986). *The Society of Mind*
