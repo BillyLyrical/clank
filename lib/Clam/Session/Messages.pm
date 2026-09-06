@@ -1,5 +1,5 @@
 # Message tree ops + provider-format mapping over Clam::Store.
-package Clam::Messages;
+package Clam::Session::Messages;
 use strict;
 use warnings;
 use Clam::Util qw(jencode);

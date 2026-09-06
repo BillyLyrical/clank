@@ -12,7 +12,7 @@ use Clam::Loop;
 use Clam::Providers;
 use Clam::PluginManager;
 use Clam::Skills;
-use Clam::Compaction;
+use Clam::Session::Compaction;
 
 sub new {
     my ($class, %o) = @_;
@@ -31,7 +31,7 @@ sub new {
         base_url => $o{base_url},
         api_key  => $o{api_key},
     );
-    $app->{compactor} = Clam::Compaction->new(%{ $o{compact} // {} });
+    $app->{compactor} = Clam::Session::Compaction->new(%{ $o{compact} // {} });
     return $app;
 }
 

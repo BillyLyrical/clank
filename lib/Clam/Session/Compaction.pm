@@ -1,10 +1,10 @@
 # Pi-semantics compaction: when est_tokens(context) > context_window - reserve,
 # summarize the older span into a structured summary and insert it as a
 # 'compaction' message. Context after compaction = [summary] + kept messages.
-package Clam::Compaction;
+package Clam::Session::Compaction;
 use strict;
 use warnings;
-use Clam::Messages ();
+use Clam::Session::Messages ();
 use Clam::Util qw(jencode);
 
 sub new {
@@ -40,7 +40,7 @@ sub compact {
     # Walk back from newest until we hold keep_recent tokens.
     my ($acc, $cut) = (0, $n);
     for my $i (reverse($ci + 1 .. $n - 1)) {
-        $acc += Clam::Messages::est_tokens([ Clam::Messages::to_provider($all->[$i]) ]);
+        $acc += Clam::Session::Messages::est_tokens([ Clam::Session::Messages::to_provider($all->[$i]) ]);
         $cut = $i;
         last if $acc >= $self->{keep_recent};
     }
@@ -84,7 +84,7 @@ sub compact {
 
     # Appends under the current leaf and moves the conversation position to
     # the new compaction entry (subsequent messages hang off it).
-    my $id = Clam::Messages::add(
+    my $id = Clam::Session::Messages::add(
         $store, $sid,
         role    => 'compaction',
         content => {

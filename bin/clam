@@ -5,7 +5,6 @@ use warnings;
 use FindBin;
 use lib "$FindBin::RealBin/../lib";
 use Getopt::Long qw(GetOptions);
-use File::Path qw(make_path remove_tree);
 
 my %opt = ();
 my @wit_paths;   # repeatable -w/--wit: collect in a real array (avoids Getopt warning)
@@ -18,17 +17,12 @@ GetOptions(
     'wit|w+'     => \@wit_paths,
     'resume=s'   => \$opt{resume},
     'stream'     => \$opt{stream},
-    'force'      => \$opt{force},
     'help|h'     => \$opt{help},
 ) or exit _usage(2);
 $opt{wit_paths} = \@wit_paths if @wit_paths;
 
 my @argv = @ARGV;
 
-if (@argv && $argv[0] eq 'wits') {
-    shift @argv;
-    exit(_cmd_wits(@argv) ? 0 : 1);
-}
 if (@argv && $argv[0] eq 'providers') {
     shift @argv;
     exit(_cmd_providers(\%opt, @argv) ? 0 : 1);
@@ -64,7 +58,6 @@ sub _usage {
 clam — AI coding harness (Perl port of Pi)
 
 usage: clam [options] [prompt...]
-       clam wits install|upgrade [--force]|list|search|uninstall|info <name>
        clam providers [test]
 
 options:
@@ -81,276 +74,6 @@ options:
 With no prompt: interactive REPL. With a prompt: one-shot run.
 EOF
     return $code // 0;
-}
-
-# --- wits subcommand --------------------------------------------------------
-sub _wits_roots {
-    require Clam::Util;
-    my @roots;
-    push @roots, split /:/, $ENV{CLAM_WITS_PATH} if defined $ENV{CLAM_WITS_PATH} && length $ENV{CLAM_WITS_PATH};
-    push @roots, '.clam/wits';
-    push @roots, Clam::Util::clam_home() . '/wits';
-    return grep { length } @roots;
-}
-
-sub _cmd_wits {
-    my ($action, @args) = @_;
-    $action //= 'list';
-
-    if ($action eq 'install' || $action eq 'upgrade') {
-        my $src = shift @args or die "usage: clam wits $action <dir>" . ($action eq 'upgrade' ? ' [--force]' : ''), "\n";
-        -d $src or die "not a directory: $src\n";
-        (my $name = $src) =~ s{.*/}{};
-
-        require Clam::Util;
-        require Clam::WitLock;
-        my $dest_dir = Clam::Util::clam_home() . '/wits';
-        my $dest     = "$dest_dir/$name";
-        my $lock     = Clam::WitLock->load();
-
-        if ($action eq 'upgrade') {
-            die "not installed: $name (use 'wits install <dir>')\n" unless -d $dest && exists $lock->{$name};
-            # Version check BEFORE the gates run — a downgrade is refused even
-            # when the new source would pass everything else.
-            my $nm = _manifest($src);
-            die "no manifest found in $src (need deck.toml or wit.toml)\n" unless $nm;
-            my $force = $opt{force};   # consumed by GetOptions before dispatch
-            if (!$force && Clam::WitLock->ver_cmp("$nm->{version}", "$lock->{$name}{version}") < 0) {
-                die "refusing downgrade: installed v$lock->{$name}{version} > new v$nm->{version} (use --force to override)\n";
-            }
-        } elsif (-d $dest || exists $lock->{$name}) {
-            my $cur = $lock->{$name}{version};
-            die "already installed: $name" . ($cur ? " v$cur" : '') . " (use 'wits upgrade <dir>' to replace)\n";
-        }
-
-        # All gates run before anything is removed or copied.
-        my $m = _wits_validate_unit($src);
-        remove_tree($dest) if $action eq 'upgrade';
-        _wits_place_unit($src, $m, $dest_dir);
-        print $action eq 'upgrade'
-            ? "upgraded '$name' v$lock->{$name}{version} -> v$m->{version}\n"
-            : "installed ", (-f "$src/deck.toml" ? "deck" : "wit"), " '$name'\n";
-        return 1;
-    }
-
-    if ($action eq 'uninstall') {
-        my $name = shift @args or die "usage: clam wits uninstall <name>\n";
-        require Clam::Util;
-        require Clam::WitLock;
-        my $dir  = Clam::Util::clam_home() . "/wits/$name";
-        # Tolerate stale state in either direction (deleted dir with a lock
-        # entry, or a dir without one) — uninstall is the cleanup path.
-        my $had_dir  = -d $dir;
-        my $had_lock = exists Clam::WitLock->load()->{$name};
-        die "not installed: $name\n" unless $had_dir || $had_lock;
-        remove_tree($dir) if $had_dir;
-        require Clam::WitIndex;
-        Clam::WitIndex->rebuild();
-        Clam::WitLock->remove($name);
-        print "uninstalled '$name'\n";
-        return 1;
-    }
-
-    if ($action eq 'info') {
-        my $name = shift @args or die "usage: clam wits info <name>\n";
-        my $found = 0;
-        for my $root (_wits_roots()) {
-            my $d = "$root/$name";
-            next unless -d $d;
-            $found = 1;
-            print "$name:\n  dir: $d\n";
-            if (my $m = _manifest($d)) {
-                printf "  %s: %s\n", $_, $m->{$_}
-                    for grep { defined $m->{$_} && !ref $m->{$_} } qw(name version about usage author license description);
-            } else {
-                print "  (no manifest)\n";
-            }
-        }
-        die "wit not found: $name\n" unless $found;
-        return 1;
-    }
-
-    if ($action eq 'search') {
-        my $q = shift @args or die "usage: clam wits search <text>\n";
-        require Clam::WitIndex;
-        my $idx = Clam::WitIndex->rebuild();
-        my $hits = 0;
-        for my $name (sort keys %$idx) {
-            my $e = $idx->{$name};
-            for my $field (qw(about usage)) {
-                next unless length($e->{$field} // '');
-                if (index(lc $e->{$field}, lc $q) >= 0) {
-                    printf "%-20s [%s] %s\n", $name, $field, $e->{$field};
-                    $hits++;
-                    last;   # one line per unit
-                }
-            }
-        }
-        print "no wits match '$q'\n" unless $hits;
-        return $hits ? 1 : 0;    # grep convention: no match = non-zero exit
-    }
-
-    # list (default)
-    require Clam::WitIndex;
-    my $any = 0;
-    for my $root (_wits_roots()) {
-        next unless -d $root;
-        opendir(my $dh, $root) or next;
-        my @entries = sort grep { !/^\./ && -d "$root/$_" } readdir($dh);
-        closedir $dh;
-        next unless @entries;
-        print "$root:\n";
-        for my $e (@entries) {
-            my $entry = Clam::WitIndex->scan_dir("$root/$e");
-            printf "  %-20s %s\n", $e, ($entry ? $entry->{about} : _describe_wit_dir("$root/$e"));
-        }
-        $any = 1;
-    }
-    print "(no wits found)\n" unless $any;
-    Clam::WitIndex->rebuild();   # keep the index file fresh as a side effect
-    return 1;
-}
-
-# Parse a unit's manifest (deck.toml or wit.toml); dies on parse failure,
-# returns undef when no manifest exists.
-sub _manifest {
-    my ($dir) = @_;
-    for my $mf (qw(deck.toml wit.toml)) {
-        next unless -f "$dir/$mf";
-        require Clam::Wit::File;
-        open my $fh, '<', "$dir/$mf" or die "cannot read $dir/$mf: $!\n";
-        my $c = do { local $/; <$fh> };
-        close $fh;
-        return eval { Clam::Wit::File::parse_toml($c) } // die "unparseable $dir/$mf: $@\n";
-    }
-    return undef;
-}
-
-# Install gates shared by install and upgrade (docs/Wits.md §6): manifest
-# fields, namespace discipline, dependency pre-check, test gate, deck wit-list
-# sanity.  Dies with an actionable message on any failure — callers must run
-# this BEFORE removing or copying anything.  Returns the parsed manifest.
-sub _wits_validate_unit {
-    my ($src) = @_;
-    (my $name = $src) =~ s{.*/}{};
-
-    # Manifest is required and must carry the discoverability fields
-    # (docs/Wits.md §3): name, version, about, usage.  Install refuses to
-    # place a unit it cannot describe.
-    my $m = _manifest($src);
-    die "no manifest found in $src (need deck.toml or wit.toml)\n" unless $m;
-    my @missing = grep { !length( $m->{$_} // '' ) } qw(name version about usage);
-    die "manifest missing required fields: @missing (docs/Wits.md §3)\n" if @missing;
-
-    # Unit identity: the manifest name IS the install/lock/index key, so it
-    # must match the directory basename — no ambiguity for upgrade.
-    die "manifest name '$m->{name}' does not match directory name '$name'\n" unless $m->{name} eq $name;
-
-    # Namespace discipline (docs/Wits.md §4): refuse to install modules a
-    # unit ships outside its declared namespaces.
-    require Clam::PluginManager;
-    if (-f "$src/deck.toml") {
-        my @ns = ref($m->{namespace} // undef) eq 'ARRAY' ? @{ $m->{namespace} } : ();
-        my @bad = Clam::PluginManager->check_namespaces($src, namespaces => \@ns);
-        die "undeclared modules in lib/: @bad (declare namespace=[...] in deck.toml)\n" if @bad;
-    } elsif (-d "$src/lib") {
-        my $wits_dir = "$src/lib/Clam/Wit";
-        my @mods = -d $wits_dir ? do { opendir(my $dh, $wits_dir); grep { /\.pm$/ && !-d "$wits_dir/$_" } readdir($dh); closedir $dh; } : ();
-        die "no lib/Clam/Wit/*.pm in module wit\n" unless @mods;
-        (my $mod = shift @mods) =~ s{\.pm$}{};
-        my @bad = Clam::PluginManager->check_namespaces($src, namespaces => ["Clam::Wit::$mod"]);
-        die "undeclared modules in lib/: @bad\n" if @bad;
-    } else {
-        my @bad = Clam::PluginManager->check_namespaces($src, top_level_only => 1);
-        die "nested .pm files not allowed in a single-file wit: @bad\n" if @bad;
-    }
-
-    # Dependency pre-check (docs/Wits.md §6): fail loudly at install time
-    # with an actionable message — the load-time gate is for units already
-    # installed whose environment later changes.
-    for my $mod (@{ $m->{requires_perl} // [] }) {
-        eval { (my $f = $mod) =~ s{::}{/}g; require "$f.pm"; 1 }
-            or die "missing Perl module $mod (fix: cpanm $mod)\n";
-    }
-    for my $b (@{ $m->{requires_bin} // [] }) {
-        my $found = grep { -x "$_/$b" } split /:/, ($ENV{PATH} // '');
-        die "missing binary $b (fix: install '$b')\n" unless $found;
-    }
-
-    # Test gate (docs/Wits.md §6): run the unit's t/*.t from its SOURCE
-    # location before anything is copied — CPAN discipline, no prove
-    # dependency (plain perl per file works on minimal systems).  A red
-    # test aborts the install; nothing reaches ~/.clam/wits untested.
-    if (-d "$src/t") {
-        opendir(my $tdh, "$src/t");
-        my @tests = sort grep { /\.t$/ && -f "$src/t/$_" } readdir($tdh);
-        closedir $tdh;
-        for my $t (@tests) {
-            print "  testing: $t\n";
-            my @tout = `$^X -I"$src/lib" "$src/t/$t" 2>&1`;
-            if ($? != 0) {
-                print @tout;
-                die "tests failed for ", ($m->{name} // $name), " ($t) — install aborted (docs/Wits.md §6)\n";
-            }
-        }
-    }
-
-    # Deck awareness: validate the wit list against the files present.
-    if (-f "$src/deck.toml") {
-        require Clam::Wit::Loader;
-        print "deck: ", ($m->{name} // $name), " — ", ($m->{description} // ''), "\n";
-        my %have = map { $_ => 1 } @{ Clam::Wit::Loader->list_wits($src) };
-        for my $w (@{ $m->{wits} // [] }) {
-            warn "warning: deck lists missing wit: $w\n" unless $have{$w};
-        }
-    }
-
-    return $m;
-}
-
-# Copy a validated unit into the wits root, rebuild the index, and record it
-# in the lockfile.  Only call after _wits_validate_unit has passed.
-sub _wits_place_unit {
-    my ($src, $m, $dest_dir) = @_;
-    (my $name = $src) =~ s{.*/}{};
-    require Clam::Util;
-    require Clam::WitIndex;
-    require Clam::WitLock;
-    make_path($dest_dir);
-    my $dest = "$dest_dir/$name";
-    _copy_tree($src, $dest);
-    Clam::WitIndex->rebuild();
-    Clam::WitLock->record(
-        name => $name, version => $m->{version}, source => $src,
-        tested => (-d "$src/t" ? 1 : 0),
-    );
-    return $dest;
-}
-
-sub _describe_wit_dir {
-    my ($d) = @_;
-    require Clam::Wit::Loader;
-    my @wits = @{ Clam::Wit::Loader->list_wits($d) };
-    if (@wits) {
-        return (-f "$d/deck.toml" ? "deck (" . scalar(@wits) . " wits)" : "declarative (" . scalar(@wits) . " wits)");
-    }
-    return -d "$d/lib" ? 'lib layout' : 'single-file';
-}
-
-sub _copy_tree {
-    my ($src, $dest) = @_;
-    make_path($dest);
-    opendir(my $dh, $src) or die "opendir $src: $!";
-    for my $e (readdir $dh) {
-        next if $e =~ /^\.\.?$/;
-        my ($s, $d) = ("$src/$e", "$dest/$e");
-        if (-d $s) { _copy_tree($s, $d); }
-        else {
-            require File::Copy;
-            File::Copy::copy($s, $d) or die "copy $s -> $d: $!";
-        }
-    }
-    closedir $dh;
 }
 
 # --- providers subcommand ---------------------------------------------------

@@ -2,7 +2,7 @@ use strict; use warnings;
 use Test::More;
 use lib 'lib';
 use Clam::Store;
-use Clam::Messages;
+use Clam::Session::Messages;
 
 my $store = Clam::Store->new(path => ':memory:');
 isa_ok($store, 'Clam::Store');
@@ -17,29 +17,29 @@ $srow = $store->get_session($sid);
 is($srow->{title}, 'renamed', 'title updated');
 
 # message tree: linear chain then a branch
-my $m1 = Clam::Messages::add($store, $sid, role => 'user', content => 'hello');
-my $m2 = Clam::Messages::add($store, $sid, role => 'assistant', content => { text => 'hi' });
-is(Clam::Messages::head($store, $sid), $m2, 'head is newest');
+my $m1 = Clam::Session::Messages::add($store, $sid, role => 'user', content => 'hello');
+my $m2 = Clam::Session::Messages::add($store, $sid, role => 'assistant', content => { text => 'hi' });
+is(Clam::Session::Messages::head($store, $sid), $m2, 'head is newest');
 
 # branch from m1 (parent_id explicit)
-my $b1 = Clam::Messages::add($store, $sid, role => 'user', content => 'branch?', parent_id => $m1);
-my @chain = @{ Clam::Messages::chain($store, $sid, $b1) };
+my $b1 = Clam::Session::Messages::add($store, $sid, role => 'user', content => 'branch?', parent_id => $m1);
+my @chain = @{ Clam::Session::Messages::chain($store, $sid, $b1) };
 is(scalar(@chain), 2, 'branched chain has 2 messages');
 is($chain[0]{id}, $m1, 'branch root is m1');
 
 # main head still at m2
-my @main = @{ Clam::Messages::chain($store, $sid) };
+my @main = @{ Clam::Session::Messages::chain($store, $sid) };
 is(scalar(@main), 2, 'main chain has 2 messages');
 is($main[1]{id}, $m2, 'main head is m2');
 
 # provider mapping
-my $pm = Clam::Messages::to_provider($main[1]);
+my $pm = Clam::Session::Messages::to_provider($main[1]);
 is($pm->{role}, 'assistant', 'assistant role mapped');
 is($pm->{content}, 'hi', 'assistant text mapped');
 
-my $tr = Clam::Messages::add($store, $sid, role => 'toolResult',
+my $tr = Clam::Session::Messages::add($store, $sid, role => 'toolResult',
     content => { tool_call_id => 'tc1', output => 'ok', isError => 0 });
-my $pmt = Clam::Messages::to_provider({ %{$main[1]}, id => $tr, role => 'toolResult',
+my $pmt = Clam::Session::Messages::to_provider({ %{$main[1]}, id => $tr, role => 'toolResult',
     content => { tool_call_id => 'tc1', output => 'ok' } });
 is($pmt->{role}, 'tool', 'toolResult maps to tool');
 is($pmt->{tool_call_id}, 'tc1', 'tool_call_id preserved');

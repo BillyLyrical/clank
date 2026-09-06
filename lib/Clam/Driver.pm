@@ -17,7 +17,7 @@ use strict;
 use warnings;
 use Cwd qw(getcwd);
 use Clam::App;
-use Clam::Messages;
+use Clam::Session::Messages;
 use Clam::Util qw(jencode jdecode);
 
 sub new {
@@ -122,7 +122,7 @@ sub ask {
         }, name => 'driver.capture');
     }
 
-    my $before = scalar @{ Clam::Messages::chain($store, $sid) };
+    my $before = scalar @{ Clam::Session::Messages::chain($store, $sid) };
 
     my ($res, $timed_out);
     if ($timeout > 0) {
@@ -178,7 +178,7 @@ sub ask {
         turns          => $res->{turns},
         response       => $response,
         tools          => \@tools,
-        messages_added => scalar @{ Clam::Messages::chain($store, $sid) } - $before,
+        messages_added => scalar @{ Clam::Session::Messages::chain($store, $sid) } - $before,
     );
     $r{error}     = $res->{error} if !$r{ok};
     $r{timed_out} = 1             if $timed_out;
@@ -193,7 +193,7 @@ sub ask {
 sub messages {
     my ($self, %o) = @_;
     die "Clam::Driver: not started\n" unless $self->{session};
-    my @chain = @{ Clam::Messages::chain($self->store, $self->session_id) };
+    my @chain = @{ Clam::Session::Messages::chain($self->store, $self->session_id) };
     @chain = @chain[-$o{limit} .. -1] if $o{limit} && @chain > $o{limit};
     return \@chain;
 }
@@ -241,7 +241,7 @@ sub info {
     return {
         ok           => 1,
         session_id   => $self->session_id,
-        messages     => scalar @{ Clam::Messages::chain($self->store, $self->session_id) },
+        messages     => scalar @{ Clam::Session::Messages::chain($self->store, $self->session_id) },
         tools        => [ sort $self->tool_names ],
         wits         => [ $self->wit_names ],
         skipped_wits => (ref($skipped) eq 'ARRAY') ? $skipped : [],

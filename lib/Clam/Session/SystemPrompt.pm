@@ -1,4 +1,4 @@
-package Clam::SystemPrompt;
+package Clam::Session::SystemPrompt;
 use strict; use warnings;
 # Verbatim port of pi's buildSystemPrompt (packages/coding-agent/src/core/system-prompt.ts)
 # + formatSkillsForPrompt (skills.ts). Paths point at clam's own docs.

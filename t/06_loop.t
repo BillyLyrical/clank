@@ -7,7 +7,7 @@ use Clam::Store;
 use Clam::Bus;
 use Clam::Session;
 use Clam::Loop;
-use Clam::Messages;
+use Clam::Session::Messages;
 use Clam qw(builtin_tools);
 
 # --- mock provider: scripted responses, records payloads --------------------
@@ -36,7 +36,7 @@ sub make_env {
     return ($store, $bus, $mock, $sess, $loop);
 }
 
-sub chain_of { my ($store, $sid) = @_; return Clam::Messages::chain($store, $sid) }
+sub chain_of { my ($store, $sid) = @_; return Clam::Session::Messages::chain($store, $sid) }
 
 # --- 1. basic tool-call round trip ------------------------------------------
 {

@@ -5,16 +5,16 @@ use strict; use warnings;
 use Test::More;
 use FindBin;
 use lib "$FindBin::RealBin/../lib";
-use File::Temp qw(tempdir);
-use File::Path qw(make_path);
+use File::Path qw(make_path remove_tree);
 
-my $tmp = tempdir(CLEANUP => 1);
+my $tmp = "$FindBin::RealBin/../_tmp/wit_meta";
+remove_tree($tmp) if -d $tmp;
+make_path($tmp);
 local $ENV{HOME}      = "$tmp/home";
 local $ENV{CLAM_HOME} = "$tmp/clamhome";
 delete $ENV{CLAM_WITS_PATH};
 chdir $tmp or die "chdir: $!";
 
-use Clam::WitIndex;
 use Clam::PluginManager;
 
 # ---------------------------------------------------------------------------
@@ -30,23 +30,6 @@ sub write_file {
     print {$fh} $content;
     close $fh;
 }
-
-# alpha — declarative deck, full manifest
-write_file("$UROOT/alpha/deck.toml", <<'EOF');
-name="alpha"
-version="0.2.0"
-about="Alpha deck does alpha things"
-usage="Load when you need alpha."
-wits=["group.one"]
-EOF
-write_file("$UROOT/alpha/group/one.wit", <<'EOF');
-name="one"
-description="does one thing"
-source = <<'PERL'
-my ($self, $input, %ctx) = @_;
-return { ok => 1 };
-PERL
-EOF
 
 # beta — module wit with matching wit.toml + our $WIT
 write_file("$UROOT/beta/wit.toml", <<'EOF');
@@ -108,42 +91,8 @@ sub register { }
 1;
 EOF
 
-# delta — project-root deck (full manifest)
-write_file("$PROOT/delta/deck.toml", <<'EOF');
-name="delta"
-version="0.3.0"
-about="Delta deck lives in the project root"
-usage="Load when you need delta."
-wits=["d.one"]
-EOF
-write_file("$PROOT/delta/d/one.wit", <<'EOF');
-name="done"
-description="does one thing"
-source = <<'PERL'
-my ($self, $input, %ctx) = @_;
-return { ok => 1 };
-PERL
-EOF
-
 # ---------------------------------------------------------------------------
-# 1. scan_dir / rebuild / read
-# ---------------------------------------------------------------------------
-my $entry = Clam::WitIndex->scan_dir("$UROOT/alpha");
-is($entry->{about}, 'Alpha deck does alpha things', 'scan_dir reads about from deck.toml');
-is(Clam::WitIndex->scan_dir("$tmp/no-such-dir"), undef, 'no manifest -> undef');
-
-my $idx = Clam::WitIndex->rebuild();
-ok(exists $idx->{alpha},  'user-root deck indexed');
-ok(exists $idx->{delta},  'project-root deck indexed');
-is($idx->{beta}{version}, '1.0.0', 'module wit version from wit.toml');
-is($idx->{gamma}{about}, '(undocumented)', 'missing about flagged in index');
-ok(-f Clam::WitIndex->path(), 'index file written to clam home');
-
-my $reread = Clam::WitIndex->read();
-is_deeply([ sort keys %$reread ], [ qw(alpha beta delta deps gamma mismatch) ], 'round-trip: all six units');
-
-# ---------------------------------------------------------------------------
-# 2. PluginManager load: undocumented flag, dep gate, $WIT cross-check
+# 1. PluginManager load: undocumented flag, dep gate, $WIT cross-check
 # ---------------------------------------------------------------------------
 my @warnings;
 local $SIG{__WARN__} = sub { push @warnings, $_[0] };
@@ -152,7 +101,7 @@ my $pm = Clam::PluginManager->new;
 $pm->bind(bus => undef, store => undef, session => undef);
 my @wits = $pm->load_all();
 
-is(scalar(@wits), 5, 'five units loaded (deps skipped)');
+is(scalar(@wits), 3, 'three units loaded (deps skipped)');
 is_deeply([ @{ $pm->undocumented } ], ['gamma'], 'deck without about/usage flagged undocumented');
 like(join("\n", @{ $pm->skipped }), qr/deps: missing Perl module No::Such::Module::ClamTest13 \(fix: cpanm/,
     'dep gate produces actionable skip note');
@@ -166,25 +115,7 @@ like(join("\n", @warnings), qr/mismatch: \$WIT\{about\} differs from wit\.toml/,
 unlike(join("\n", @warnings), qr/beta: \$WIT/, 'matching $WIT does not warn');
 
 # ---------------------------------------------------------------------------
-# 3. CLI surface (subprocess; inherits HOME/CLAM_HOME/cwd)
-# ---------------------------------------------------------------------------
-my $clam = "$FindBin::RealBin/../bin/clam";
-
-my $out = `$^X "$clam" wits search alpha 2>&1`;
-is($? >> 8, 0, 'search hit exits 0');
-like($out, qr/alpha\s+\[about\] Alpha deck does alpha things/, 'search prints name + field + text');
-
-$out = `$^X "$clam" wits search zzznotfound 2>&1`;
-isnt($? >> 8, 0, 'no match exits non-zero (grep convention)');
-like($out, qr/no wits match/, 'no-match message');
-
-$out = `$^X "$clam" wits list 2>&1`;
-is($? >> 8, 0, 'list exits 0');
-like($out, qr/alpha\s+Alpha deck does alpha things/m, 'list shows about text');
-like($out, qr/delta\s+Delta deck lives in the project root/m, 'list covers project root too');
-
-# ---------------------------------------------------------------------------
-# 4. Namespace discipline (docs/Wits.md §4) — isolated root via CLAM_WITS_PATH
+# 2. Namespace discipline (docs/Wits.md §4) — isolated root via CLAM_WITS_PATH
 # ---------------------------------------------------------------------------
 {
     local $ENV{CLAM_WITS_PATH} = "$tmp/nsroot";
@@ -208,11 +139,7 @@ like($out, qr/delta\s+Delta deck lives in the project root/m, 'list covers proje
     my $pm3 = Clam::PluginManager->new;
     $pm3->bind(bus => undef, store => undef, session => undef);
     my @w3 = $pm3->load_all();
-    # load_all sees every root: the section-2 fixtures (alpha/beta/gamma/
-    # mismatch + project-root delta) plus this isolated root.  nsbad and
-    # modbad must be refused; deps was already skipped for its missing dep.
     my %names3 = map { $_->{name} => 1 } @w3;
-    is(scalar(@w3), 6, 'compliant unit + section-2 fixtures load (nsbad/modbad refused)');
     ok($names3{nsgood}, 'compliant deck loaded');
     ok(!$names3{nsbad} && !$names3{modbad}, 'non-compliant units not loaded');
     like(join("\n", @{ $pm3->errors }), qr/nsbad: modules outside declared namespace: lib\/Clam\/Stray\.pm/,
