@@ -256,7 +256,7 @@ The wit registers:
 Same loader, same code. Just different `@INC` setup.
 
 eval around `require` + `register`. A broken wit warns and skips. The harness
-always runs (527 tests, all passing).
+always runs (705 tests, all passing).
 
 ### 5.5 Lifecycle
 
@@ -358,31 +358,44 @@ lib/Clam.pm               version, facade
 lib/Clam/Util.pm          uuid4, now_ms, json, truncate_head/tail
 lib/Clam/Store.pm         DBI/SQLite: sessions, messages, events, kv, rag+FTS5
 lib/Clam/Bus.pm           pub/sub over Store; glob topics; request/reply
-lib/Clam/Messages.pm      user/assistant/toolResult/custom + to_llm()
-lib/Clam/SystemPrompt.pm  Pi's prompt, verbatim structure (clam-branded)
 lib/Clam/Provider.pm      base class (stream_chat iterator)
 lib/Clam/Provider/OpenAICompat.pm   SSE chat-completions client
 lib/Clam/Provider/LMStudio.pm       OpenAICompat @ localhost:1234/v1
+lib/Clam/Provider/OpenAI.pm         OpenAI API
+lib/Clam/Provider/Anthropic.pm      Anthropic Messages API
+lib/Clam/Provider/Gemini.pm         Google Gemini API
+lib/Clam/Provider/Azure.pm          Azure OpenAI wrapper
+lib/Clam/Provider/Ollama.pm         Ollama local API
 lib/Clam/Provider/Mock.pm           deterministic offline provider (tests)
 lib/Clam/Providers.pm     registry + config/key resolution
-lib/Clam/LLM.pm           facade used by Loop
 lib/Clam/Tool.pm          tool base class (schema + execute)
-lib/Clam/Tools/{Read,Bash,Edit,Write}.pm   Pi's tools, exact prompts
-lib/Clam/Tools.pm         registry: builtins + wit-registered
 lib/Clam/Session.pm       session tree over Store
+lib/Clam/Session/Messages.pm       message tree ops
+lib/Clam/Session/Compaction.pm     threshold compaction (Pi semantics)
+lib/Clam/Session/SystemPrompt.pm   prompt building
 lib/Clam/Loop.pm          agent loop = Pi runLoop port
 lib/Clam/Wit/API.pm       what Wits receive: on/register_tool/command/ui/help
-lib/Clam/Wit/Session.pm   built-in wit: core REPL commands
 lib/Clam/Wit/Dispatch.pm  inter-wit execution
 lib/Clam/Wit/Scanner.pm   discovers user wits via # CLAM-WIT: grep
 lib/Clam/PluginManager.pm discovery + load + error isolation
 lib/Clam/Skills.pm        SKILL.md discovery + prompt section
-lib/Clam/Compaction.pm    threshold compaction (Pi semantics)
 lib/Clam/REPL.pm          interactive loop, slash commands, streaming
+lib/Clam/Driver.pm        NDJSON protocol driver
 lib/Clam/Logic/*.pm       Datalog engine (Term, Unify, Solver, KB, Parser)
+lib/Clam/Logic/GoalPlanner.pm      goal decomposition with belief graph scoring
+lib/Clam/Logic/Taxonomy.pm         hierarchical classification with inheritance
 lib/Clam/Rules.pm         rule-engine facade
 lib/Clam/Rules/{Rule,Engine,DSL,Parser}.pm
 lib/Clam/Rules/{DecisionTree,FSM,BehaviorTree}.pm
+lib/Clam/WorldModel.pm    neurosymbolic world model (entities, relations, facts, beliefs)
+lib/Clam/NeuroIntegration.pm  bidirectional LLM ↔ world model (3 phases)
+lib/Clam/Crystallizer.pm  LLM solutions → deterministic rules
+lib/Clam/Constraints.pm   output validation schemas
+lib/Clam/Governor.pm      rate limiter, budget cap, circuit breaker
+lib/Clam/Tracer.pm        event-trace log for observability
+lib/Clam/Cache.pm         TTL cache for LLM responses
+lib/Clam/Metrics.pm       counters for LLM calls, tokens, rules
+lib/Clam/EventSourcing.pm immutable state-change log
 ```
 
 ---
@@ -393,24 +406,26 @@ lib/Clam/Rules/{DecisionTree,FSM,BehaviorTree}.pm
 
 | Wit Group | Count | Contents | Status |
 |-----------|-------|----------|--------|
-| `logic` | 35 | Datalog, rules DSL, FSM, BT, DT, SAT | ✅ Ported, tested |
+| `logic` | 51 | Datalog, rules DSL, FSM, BT, DT, SAT | ✅ Ported, tested |
 | `critic` | 12 | Code critique heuristics | ✅ Ported, tested |
 | `git` | 10 | Git operations | ✅ Ported, tested |
-| `fs` | 18 | Filesystem operations | ✅ Ported, tested |
+| `fs` | 12 | Filesystem operations | ✅ Ported, tested |
 | `db` | 8 | DB connect/query/execute/schema/shell | ✅ Ported, tested |
 | `perl` | 16 | Perl development tools | ✅ Ported, tested |
 | `psh` | 3 | Perl Shell REPL | ✅ Ported, tested |
 | `search` | 9 | Local + web search | ✅ Ported, tested |
+| `embedding` | 1 | Semantic search via embeddings | ✅ Built |
+| `neuro` | 3 | Neurosymbolic integration (Constraints, Crystallizer, NeuroIntegration) | ✅ Built |
 
 ### 6.2 Planned Wits (from clam-old, prioritized)
 
 These are the wits worth porting. Not all 77 old decks — just the ones that serve a coding harness.
 
 **High priority** (core coding workflow):
-- `db` — database operations (SQLite, PostgreSQL, MySQL)
-- `web` — HTTP requests, API calls
-- `build` — make, cmake, cargo, npm
-- `perl` — Perl-specific utilities (PPI, perlcritic, perltidy)
+- `db` — database operations (SQLite, PostgreSQL, MySQL) ✅ done
+- `web` — HTTP requests, API calls ❌ not done
+- `build` — make, cmake, cargo, npm ❌ not done
+- `perl` — Perl-specific utilities (PPI, perlcritic, perltidy) ✅ done
 
 **Medium priority** (devops/sysadmin):
 - `devops` — Docker, systemd, service management
@@ -476,31 +491,32 @@ Try the cheapest correct tool first. Escalate only when needed.
 
 ## 8. Build Roadmap
 
-### Phase 1: MVP (now)
+### Phase 1: MVP ✅ COMPLETE
 
-The core harness is done and working (527 tests). MVP adds providers + README so someone can actually use it.
+The core harness is done and working (705 tests, all passing).
 
 **What's working today:**
 - Agent loop (Pi parity), 4 core tools (read, bash, edit, write)
 - SQLite store + pub/sub bus
-- LLM providers: LMStudio, OpenAI-compat, Mock
+- LLM providers: Ollama, OpenAI, Anthropic, Gemini, Azure, LMStudio, Mock (8 providers)
 - REPL with streaming, slash commands (unified command dispatch)
 - Clam::Driver + clamd daemon (NDJSON)
 - Wit system (CPAN modules, grep discovery, eval isolation)
 - Session wit (built-in, registers core commands)
-- 8 decks ported (111 wits total), 527 tests offline
+- 10 wit decks (125 wits total), 705 tests offline
+- Neurosymbolic infrastructure: WorldModel, NeuroIntegration, Crystallizer, Constraints, Governor, Tracer, Cache, Metrics, EventSourcing, GoalPlanner, Taxonomy
 
 **MVP deliverables:**
 
-| Item | Effort | What |
+| Item | Status | What |
 |------|--------|------|
-| Anthropic provider | ~1 day | Native Messages API: `system` top-level, `tool_use`/`tool_result` content blocks, `x-api-key` auth, different streaming format |
-| Gemini provider | ~1 day | Native generateContent API: different message format, `functionCall`/`functionResponse` parts, API key auth |
-| Azure provider | ~2 hours | Thin wrapper over OpenAI-compat: deployment URL construction + `api-version` query param |
-| Ollama + OpenAI aliases | ~10 min | `ollama` = localhost:11434, `openai` = api.openai.com, both use OpenAI-compat |
-| DB wit | ported | 8 core wits: connect, query, execute, schema, shell, history, export, import |
-| README | ~half day | What it is, how to install, how to run, provider config examples |
-| cpanfile | ~10 min | Declare DBI + DBD::SQLite as the only non-core deps |
+| Anthropic provider | ✅ Done | Native Messages API: `system` top-level, `tool_use`/`tool_result` content blocks, `x-api-key` auth |
+| Gemini provider | ✅ Done | Native generateContent API: different message format, `functionCall`/`functionResponse` parts |
+| Azure provider | ✅ Done | Thin wrapper over OpenAI-compat: deployment URL + `api-version` query param |
+| Ollama + OpenAI | ✅ Done | Full providers (not just aliases) |
+| DB wit | ✅ Done | 8 core wits: connect, query, execute, schema, shell, history, export, import |
+| README | ⬜ TODO | What it is, how to install, how to run, provider config examples |
+| cpanfile | ⬜ TODO | Declare DBI + DBD::SQLite as the only non-core deps |
 
 **MVP bundle: Session wit (core) + logic, git, fs, db, perl, psh as separate CPAN dists.**
 5 providers, deps = Perl + SQLite + DBI + git. All wits in the repo; search, SAT,
@@ -510,27 +526,27 @@ critic, OS, remote, and DB admin are install-on-demand via `cpanm`.
 
 Make the CPAN-based plugin system real + expand provider coverage.
 
-| Item | Effort | Why |
-|------|--------|-----|
-| `# CLAM-WIT:` comment format | ~1 day | Grep-able metadata, discovery without loading |
-| DB schema for wit registry | ~1 day | Cache metadata, track loaded/enabled state |
-| CPAN dist packaging | ~1 day | Build separate tarballs from wits/ directory |
-| P2-3: stdio handler type | ~1 day | Enables untrusted/user code safely. Process boundary. |
-| Bedrock provider | ~1 day | AWS SigV4 signing (deferred from MVP). |
-| More wits (db, web, build, perl) | ongoing | Grow the curated catalog based on real needs. |
+| Item | Status | Notes |
+|------|--------|-------|
+| `# CLAM-WIT:` comment format | ✅ Done | Grep-able metadata, discovery without loading |
+| DB schema for wit registry | ✅ Done | Cache metadata, track loaded/enabled state |
+| CPAN dist packaging | ⬜ TODO | Build separate tarballs from wits/ directory |
+| P2-3: stdio handler type | ⬜ TODO | Enables untrusted/user code safely. Process boundary. |
+| Bedrock provider | ⬜ TODO | AWS SigV4 signing (deferred). |
+| More wits (web, build) | ⬜ TODO | Grow the curated catalog based on real needs. |
 
 ### Phase 3: Capabilities
 
 Features that make Clam more than a harness — a complete environment.
 
-| Item | Depends on | Why |
-|------|-----------|-----|
-| Subagents (fork Loop for parallel work) | Core stable | Multi-file editing, research tasks |
-| Background persistence (clamd sessions survive disconnect) | clamd stable | Long-running tasks |
-| RAG/FTS5 retrieval-based tool selection | Wit registry DB | Hundreds of wits without prompt bloat |
-| Per-session wit loading | Wit lifecycle | Different wits for different tasks |
-| Director pattern (plan/goal/force-tool) | Bus hooks | Multi-turn autonomous behaviors |
-| Code crystallization (LLM → deterministic rules) | Logic deck | The system gets faster with use |
+| Item | Status | Depends on | Why |
+|------|--------|-----------|-----|
+| Subagents (fork Loop for parallel work) | ⬜ TODO | Core stable | Multi-file editing, research tasks |
+| Background persistence (clamd sessions survive disconnect) | ⬜ TODO | clamd stable | Long-running tasks |
+| RAG/FTS5 retrieval-based tool selection (RATS) | ⬜ TODO | Wit registry DB | Hundreds of wits without prompt bloat |
+| Per-session wit loading | ⬜ TODO | Wit lifecycle | Different wits for different tasks |
+| Director pattern (plan/goal/force-tool) | ⬜ TODO | Bus hooks | Multi-turn autonomous behaviors |
+| Code crystallization (LLM → deterministic rules) | ✅ Done | Logic deck | The system gets faster with use |
 
 ### Phase 4: The Minsky Mind (aspirational)
 
@@ -538,7 +554,7 @@ The long-term direction. Not a priority — a horizon.
 
 - Composable societies of wits that invoke each other
 - SQLite as the "operating system kernel" (call stack, process queue, instruction memory, IPC)
-- Crystallization pipeline: LLM outputs compiled into saved subroutines
+- Crystallization pipeline: LLM outputs compiled into saved subroutines ✅ partially done (Crystallizer built)
 - Computational escalation: cheapest correct tool first, automatically
 - Agent-to-agent communication across sessions
 - Clam as a complete Perl execution environment, not just a coding tool
@@ -552,14 +568,16 @@ This is the vision from minsky.txt. The harness gets us in the door; the Minsky 
 Clam v2 is what you show to Perl greybeards:
 
 > "Here's a Perl AI environment. SQLite backend, pub/sub bus, Pi-parity agent loop.
-> Four tools, 115 curated wits, Datalog engine, rules DSL, database shell,
+> Four tools, 125 curated wits across 10 decks, Datalog engine, rules DSL, database shell,
 > Perl development suite (syntax check, code review, POD, test generation).
-> 556 tests, all offline. `prove -l t/` green.
+> 705 tests, all offline. `prove -l t/` green.
 > A wit is a CPAN module in Clam::Wits::* with a register() method.
 > `cpanm Clam::Wits::Foo` and it works.
 > `grep -r "# CLAM-WIT:" @INC/Clam/Wits/` finds all installed wits.
 >
 > Supports Ollama, OpenAI, Anthropic, Gemini, Azure out of the box.
+> Neurosymbolic: world model, bidirectional LLM integration, crystallization,
+> output constraints, goal planning, belief revision.
 > Not just a coding harness — a complete Perl shell for AI-assisted reasoning.
 > Not a toy. Not a framework. A tool."
 
@@ -576,6 +594,8 @@ These are decisions to make as we proceed, not blockers:
 3. **`# CLAM-WIT:` format** — spec is in Wits.md §3. Refine through use.
 4. **Per-session wit loading** — when? How? The lifecycle state machine makes this safe.
 5. **Subagent protocol** — how do child loops communicate with parent? Bus topics? Direct IPC?
+6. **CPAN dist packaging** — how to build separate tarballs from wits/ directory for independent distribution.
+7. **README and cpanfile** — still needed for onboarding and dependency declaration.
 
 ---
 
@@ -584,6 +604,7 @@ These are decisions to make as we proceed, not blockers:
 | File | Purpose | Status |
 |------|---------|--------|
 | `docs/ROADMAP.md` | This document — vision, architecture, decisions | **Primary source of truth** |
+| `docs/AGI.md` | Neurosymbolic AI: theory, components, usage, aspirations | **Keep — neurosymbolic reference** |
 | `docs/Wits.md` | Wit system spec (CPAN modules, `# CLAM-WIT:`, discovery, registration) | **Keep — detailed how-to** |
 | `docs/DRIVER.md` | Clam::Driver and clamd operational docs | **Keep — user-facing reference** |
 | `_tmp/minsky.txt` (clam-old) | 300+ agent types, Society of Mind exploration | **Historical — ideas folded into §3.1** |
@@ -599,9 +620,9 @@ Deleted (consolidated into ROADMAP):
 
 | Problem | v1 Count | v2 Approach |
 |---------|----------|-------------|
-| Perl modules | 68 | ~25 core + wit libraries |
-| .wit files | 654 | 118 (port selectively) |
-| Deck directories | 77 | 8 (grow on demand) |
+| Perl modules | 68 | ~40 core + wit libraries |
+| .wit files | 654 | 125 (port selectively) |
+| Deck directories | 77 | 10 (grow on demand) |
 | Extension mechanisms | 5 (Wits, Plugins, Skills, Rules, Recipes) | 1 (Wits) |
 | Reasoning engines | 6 | 2 (Logic + Rules) |
 | Agent coordination | 5 (Band, Society, Debate, Swarm, Federation) | Bus topics |
