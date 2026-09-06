@@ -1,5 +1,11 @@
 # The agent loop. Every Pi extension event is a bus topic; wits subscribe and
 # influence the run via per-topic reducer rules (see docs/ROADMAP.md §5).
+#
+# Optional integrations (all bus-driven, no hard deps):
+#   governor — rate limiting, budget cap, circuit breaker (wraps provider calls)
+#   tracer   — auto-trace pipeline stages (agent, turn, provider_call)
+#   cache    — LLM response caching (non-streaming only)
+#   metrics  — counters for turns, tool calls, errors
 package Clam::Loop;
 use strict;
 use warnings;
@@ -13,6 +19,13 @@ sub new {
         stream    => $o{stream} // 0,
         max_turns => $o{max_turns} // 50,
         compactor => $o{compactor},
+
+        # Optional neurosymbolic primitives.
+        governor  => $o{governor},
+        tracer    => $o{tracer},
+        cache     => $o{cache},
+        metrics   => $o{metrics},
+
         aborted   => 0,
     }, $class;
 }
@@ -30,6 +43,12 @@ sub run_prompt {
     my $bus     = $self->_bus;
     my $session = $self->{session};
 
+    # --- Tracer: wrap entire prompt in agent span ---
+    my $agent_span;
+    $agent_span = $self->{tracer}->start_span('agent.run_prompt', topic => 'agent')
+        if $self->{tracer};
+    $self->{metrics}->inc('agent.runs') if $self->{metrics};
+
     # 1) input hook: continue | transform | handled
     my $pub = $bus->publish('input', { text => $text, source => 'interactive' });
     my ($final_text, $handled_out) = ($text);
@@ -38,7 +57,10 @@ sub run_prompt {
         if (($r->{action} // '') eq 'transform' && defined $r->{text}) { $final_text = $r->{text} }
         elsif (($r->{action} // '') eq 'handled') { $handled_out = $r->{output}; last }
     }
-    return { ok => 1, handled => 1, output => $handled_out } if defined $handled_out;
+    if (defined $handled_out) {
+        $self->{tracer}->end_span($agent_span) if $self->{tracer} && $agent_span;
+        return { ok => 1, handled => 1, output => $handled_out };
+    }
 
     # 2) record user message; before_agent_start (inject message / chain systemPrompt)
     $session->add_user_message($final_text);
@@ -58,6 +80,13 @@ sub run_prompt {
     my ($turn, $last_error) = (0);
     while (!$self->{aborted}) {
         last if ++$turn > $self->{max_turns};
+
+        # --- Tracer: wrap turn in span ---
+        my $turn_span;
+        $turn_span = $self->{tracer}->start_span("turn.$turn", topic => 'turn')
+            if $self->{tracer};
+        $self->{metrics}->inc('agent.turns') if $self->{metrics};
+
         $bus->publish('turn_start', { turn => $turn, session_id => $session->id });
 
         # 3) context hook: replace messages (chained across wits)
@@ -68,8 +97,6 @@ sub run_prompt {
         }
 
         # 4) build provider payload; before_provider_request may replace it.
-        # chat_payload returns a HASHREF — keep it as one (assigning it to a
-        # list flattens nothing and yields a garbage single-key hash).
         my @schemas = map { $_->openai_schema } $session->tools;
         my $payload = $self->_provider->chat_payload(
             messages => [ { role => 'system', content => $sp }, @$msgs ],
@@ -81,13 +108,97 @@ sub run_prompt {
             $payload = $r->{payload} if ref $r eq 'HASH' && ref $r->{payload} eq 'HASH';
         }
 
+        # --- Governor: check before provider call ---
+        if ($self->{governor}) {
+            my $model = $self->_provider->{model} // '';
+            my ($ok, $reason) = $self->{governor}->check(
+                model => $model, estimated_tokens => 2000);
+            unless ($ok) {
+                $self->{metrics}->inc('agent.throttled') if $self->{metrics};
+                $self->{tracer}->end_span($turn_span) if $self->{tracer} && $turn_span;
+                $bus->publish('turn_end', { turn => $turn, throttled => 1 });
+                $last_error = "throttled: $reason";
+                last;
+            }
+        }
+
+        # --- Cache: check before provider call (non-streaming) ---
+        my $cache_hit;
+        if ($self->{cache} && !$self->{stream}) {
+            my $cache_key = ref($self->{cache}) =~ /Cache/ ? $self->{cache}->make_key(
+                model    => $self->_provider->{model} // '',
+                messages => $payload->{messages},
+                tools    => $payload->{tools},
+            ) : undef;
+            if ($cache_key) {
+                $cache_hit = $self->{cache}->get($cache_key);
+                $self->{metrics}->inc('cache.hits') if $self->{metrics} && $cache_hit;
+                $self->{metrics}->inc('cache.misses') if $self->{metrics} && !$cache_hit;
+            }
+        }
+
         # 5) provider call (streaming optional; deltas -> message_update events)
         my ($resp, $err);
-        eval { $resp = $self->_provider_call($payload) };
-        if ($@) {
-            $last_error = "$@";
-            $bus->publish('agent_end', { error => $last_error });
-            return { ok => 0, error => $last_error, turns => $turn };
+        if ($cache_hit) {
+            $resp = $cache_hit;
+        } else {
+            # --- Tracer: wrap provider call ---
+            my $prov_span;
+            $prov_span = $self->{tracer}->start_span('provider.call', topic => 'provider')
+                if $self->{tracer};
+
+            eval { $resp = $self->_provider_call($payload) };
+
+            if ($self->{tracer} && $prov_span) {
+                my $usage = $resp->{usage} // {};
+                $self->{tracer}->end_span($prov_span, {
+                    input_tokens  => $usage->{prompt_tokens} // 0,
+                    output_tokens => $usage->{completion_tokens} // 0,
+                });
+            }
+
+            if ($@) {
+                $last_error = "$@";
+                $self->{metrics}->inc('agent.errors') if $self->{metrics};
+                $self->{governor}->record_failure(
+                    model => $self->_provider->{model} // '', fatal => 1)
+                    if $self->{governor};
+                $self->{tracer}->end_span($turn_span) if $self->{tracer} && $turn_span;
+                $self->{tracer}->end_span($agent_span) if $self->{tracer} && $agent_span;
+                $bus->publish('agent_end', { error => $last_error });
+                return { ok => 0, error => $last_error, turns => $turn };
+            }
+
+            # --- Governor: record successful call ---
+            if ($self->{governor} && $resp->{usage}) {
+                my $u = $resp->{usage};
+                $self->{governor}->record(
+                    model         => $self->_provider->{model} // '',
+                    input_tokens  => $u->{prompt_tokens} // 0,
+                    output_tokens => $u->{completion_tokens} // 0,
+                );
+            }
+
+            # --- Metrics: record tokens ---
+            if ($self->{metrics} && $resp->{usage}) {
+                $self->{metrics}->inc('llm.calls');
+                $self->{metrics}->inc('llm.tokens.input', $resp->{usage}{prompt_tokens} // 0);
+                $self->{metrics}->inc('llm.tokens.output', $resp->{usage}{completion_tokens} // 0);
+            }
+
+            # --- Cache: store response ---
+            if ($self->{cache} && !$self->{stream}) {
+                my $cache_key = ref($self->{cache}) =~ /Cache/ ? $self->{cache}->make_key(
+                    model    => $self->_provider->{model} // '',
+                    messages => $payload->{messages},
+                    tools    => $payload->{tools},
+                ) : undef;
+                if ($cache_key) {
+                    $self->{cache}->set($cache_key, $resp,
+                        model => $self->_provider->{model} // '');
+                    $self->{metrics}->inc('cache.sets') if $self->{metrics};
+                }
+            }
         }
 
         my $choice = $resp->{choices}[0] // {};
@@ -122,6 +233,8 @@ sub run_prompt {
         for my $tc (@{ $final->{tool_calls} }) {
             last if $self->{aborted};
 
+            $self->{metrics}->inc('tools.calls') if $self->{metrics};
+
             # tool_call hook: input mutable in place; first block wins
             my $input = $tc->{arguments};
             my $pub2  = $bus->publish('tool_call',
@@ -136,15 +249,18 @@ sub run_prompt {
             my ($output, $is_err);
             if ($blocked) {
                 ($output, $is_err) = ("tool call blocked: $reason", 1);
+                $self->{metrics}->inc('tools.blocked') if $self->{metrics};
             } else {
                 my $tool = _find_tool($session, $tc->{name});
                 unless ($tool) {
                     ($output, $is_err) = ("unknown tool: $tc->{name}", 1);
+                    $self->{metrics}->inc('tools.unknown') if $self->{metrics};
                 } else {
                     $bus->publish('tool_execution_start',
                         { toolCallId => $tc->{id}, name => $tc->{name}, input => $input });
                     my $res = $tool->run($input);
                     ($output, $is_err) = ($res->{output}, $res->{isError} ? 1 : 0);
+                    $self->{metrics}->inc('tools.errors') if $self->{metrics} && $is_err;
                 }
             }
 
@@ -163,6 +279,7 @@ sub run_prompt {
         }
 
         $bus->publish('turn_end', { turn => $turn });
+        $self->{tracer}->end_span($turn_span) if $self->{tracer} && $turn_span;
 
         # Compaction threshold check between turns (Pi semantics).
         if ($self->{compactor}) {
@@ -181,6 +298,12 @@ sub run_prompt {
 
     $bus->publish('agent_end',     {});
     $bus->publish('agent_settled', {});
+    $self->{tracer}->end_span($agent_span) if $self->{tracer} && $agent_span;
+    $self->{metrics}->flush if $self->{metrics};
+
+    if ($last_error) {
+        return { ok => 0, error => $last_error, turns => $turn };
+    }
     return { ok => 1, turns => $turn };
 }
 

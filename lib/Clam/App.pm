@@ -13,6 +13,14 @@ use Clam::Providers;
 use Clam::PluginManager;
 use Clam::Skills;
 use Clam::Session::Compaction;
+use Clam::WorldModel;
+use Clam::Governor;
+use Clam::Tracer;
+use Clam::Cache;
+use Clam::Metrics;
+use Clam::NeuroIntegration;
+use Clam::Crystallizer;
+use Clam::Constraints;
 
 sub new {
     my ($class, %o) = @_;
@@ -32,6 +40,14 @@ sub new {
         api_key  => $o{api_key},
     );
     $app->{compactor} = Clam::Session::Compaction->new(%{ $o{compact} // {} });
+
+    # Shared neurosymbolic primitives (survive across sessions).
+    $app->{world_model} = Clam::WorldModel->new(store => $app->{store});
+    $app->{governor}    = Clam::Governor->new(store => $app->{store}, bus => $app->{bus});
+    $app->{tracer}      = Clam::Tracer->new(store => $app->{store});
+    $app->{cache}       = Clam::Cache->new(store => $app->{store}, namespace => 'llm');
+    $app->{metrics}     = Clam::Metrics->new(store => $app->{store});
+
     return $app;
 }
 
@@ -88,11 +104,42 @@ sub start_session {
     $session->set_skills(\@skills);
     $session->set_context_files(\@ctx);
 
+    # Bus-driven neurosymbolic modules (subscribe to events automatically).
+    Clam::NeuroIntegration->new(
+        store       => $self->{store},
+        bus         => $self->{bus},
+        world_model => $self->{world_model},
+        provider    => $self->{provider},
+        tracer      => $self->{tracer},
+        metrics     => $self->{metrics},
+    );
+
+    Clam::Crystallizer->new(
+        store       => $self->{store},
+        bus         => $self->{bus},
+        world_model => $self->{world_model},
+        provider    => $self->{provider},
+        tracer      => $self->{tracer},
+        metrics     => $self->{metrics},
+    );
+
+    Clam::Constraints->new(
+        bus         => $self->{bus},
+        world_model => $self->{world_model},
+    );
+
     $self->{pm}      = $pm;
     $self->{wits}    = \@wits;
     $self->{session} = $session;
     $self->{loop}    = Clam::Loop->new(
-        session => $session, stream => $self->{stream}, compactor => $self->{compactor});
+        session  => $session,
+        stream   => $self->{stream},
+        compactor => $self->{compactor},
+        governor => $self->{governor},
+        tracer   => $self->{tracer},
+        cache    => $self->{cache},
+        metrics  => $self->{metrics},
+    );
 
     $self->{bus}->publish('session_start', { session_id => $session->id });
     return $session;

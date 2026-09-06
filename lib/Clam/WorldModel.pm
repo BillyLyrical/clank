@@ -8,7 +8,7 @@ use Clam::Util qw(now_ms jencode jdecode);
 sub new {
     my ($class, %args) = @_;
     my $store = $args{store} or die "Clam::WorldModel requires store";
-    my $self = bless { store => $store, dbh => $store->dbh }, $class;
+    my $self = bless { store => $store, dbh => $store->dbh, _cf_depth => 0 }, $class;
     $self->_init_schema;
     return $self;
 }
@@ -83,6 +83,15 @@ CREATE TABLE IF NOT EXISTS wm_beliefs (
     superseded_by   INTEGER REFERENCES wm_beliefs(id)
 )});
     $db->do(qq{CREATE INDEX IF NOT EXISTS idx_wm_beliefs_confidence ON wm_beliefs(confidence)});
+
+    # Belief dependency graph for confidence propagation.
+    $db->do(qq{
+CREATE TABLE IF NOT EXISTS wm_belief_deps (
+    from_id INTEGER NOT NULL REFERENCES wm_beliefs(id) ON DELETE CASCADE,
+    to_id   INTEGER NOT NULL REFERENCES wm_beliefs(id) ON DELETE CASCADE,
+    weight  REAL DEFAULT 1.0,
+    PRIMARY KEY (from_id, to_id)
+)});
 
     # FTS5 indexes (guarded; may be absent in old builds)
     my $has_fts = eval {
@@ -700,6 +709,187 @@ sub supersede_belief {
     return $new_id;
 }
 
+# ---------------------------------------------------------------------------
+# Belief revision with confidence propagation
+# ---------------------------------------------------------------------------
+
+# Track which beliefs depend on which. weight = how much the source belief
+# contributes to the dependent belief's confidence (0.0–1.0).
+sub add_belief_dependency {
+    my ($self, %args) = @_;
+    my $from_id = $args{from_id} or die "add_belief_dependency requires from_id\n";
+    my $to_id   = $args{to_id}   or die "add_belief_dependency requires to_id\n";
+    my $weight  = $args{weight}  // 1.0;
+
+    $self->{dbh}->do(
+        'INSERT OR REPLACE INTO wm_belief_deps (from_id, to_id, weight) VALUES (?, ?, ?)',
+        undef, $from_id, $to_id, $weight,
+    );
+}
+
+sub remove_belief_dependency {
+    my ($self, %args) = @_;
+    $self->{dbh}->do(
+        'DELETE FROM wm_belief_deps WHERE from_id = ? AND to_id = ?',
+        undef, $args{from_id}, $args{to_id},
+    );
+}
+
+# Get all beliefs that depend on the given belief (direct dependents).
+sub belief_dependents {
+    my ($self, $belief_id) = @_;
+    my $rows = $self->{dbh}->selectall_arrayref(
+        'SELECT d.to_id, d.weight, b.statement, b.confidence
+         FROM wm_belief_deps d
+         JOIN wm_beliefs b ON b.id = d.to_id
+         WHERE d.from_id = ? AND b.superseded_by IS NULL',
+        { Slice => {} }, $belief_id,
+    );
+    return $rows;
+}
+
+# Get all beliefs that the given belief depends on (sources).
+sub belief_sources {
+    my ($self, $belief_id) = @_;
+    my $rows = $self->{dbh}->selectall_arrayref(
+        'SELECT d.from_id, d.weight, b.statement, b.confidence
+         FROM wm_belief_deps d
+         JOIN wm_beliefs b ON b.id = d.from_id
+         WHERE d.to_id = ? AND b.superseded_by IS NULL',
+        { Slice => {} }, $belief_id,
+    );
+    return $rows;
+}
+
+# Full dependency graph for a belief (BFS outward).
+sub belief_graph {
+    my ($self, $belief_id, %args) = @_;
+    my $max_depth = $args{max_depth} // 5;
+
+    my %visited;
+    my @queue = ({ id => $belief_id, depth => 0 });
+    $visited{$belief_id} = 1;
+    my @edges;
+
+    while (@queue) {
+        my $cur = shift @queue;
+        next if $cur->{depth} >= $max_depth;
+
+        my $deps = $self->belief_dependents($cur->{id});
+        for my $d (@$deps) {
+            next if $visited{$d->{to_id}}++;
+            push @edges, { from => $cur->{id}, to => $d->{to_id}, weight => $d->{weight} };
+            push @queue, { id => $d->{to_id}, depth => $cur->{depth} + 1 };
+        }
+    }
+
+    return \@edges;
+}
+
+# Propagate confidence changes through the dependency graph.
+# When a belief's confidence changes, recalculate dependent beliefs.
+#
+# Formula: new_conf = clamp(old_conf + delta * weight, 0, 1)
+# where delta = new_source_conf - old_source_conf.
+#
+# Returns arrayref of { id, old_confidence, new_confidence } for all changed beliefs.
+sub propagate_confidence {
+    my ($self, %args) = @_;
+    my $belief_id = $args{belief_id} or die "propagate_confidence requires belief_id\n";
+    my $old_conf  = $args{old_confidence};
+    my $new_conf  = $args{new_confidence};
+
+    # Read current confidence if not provided.
+    if (!defined $old_conf || !defined $new_conf) {
+        my $row = $self->{dbh}->selectrow_hashref(
+            'SELECT confidence FROM wm_beliefs WHERE id = ?', undef, $belief_id);
+        return [] unless $row;
+        $new_conf //= $row->{confidence};
+    }
+
+    return [] unless defined $old_conf && defined $new_conf;
+    my $delta = $new_conf - $old_conf;
+    return [] if abs($delta) < 0.001;  # negligible change
+
+    my @changed;
+    my %visited = ($belief_id => 1);
+    # Queue entries: [belief_id, delta_from_parent]
+    my @queue = ([ $belief_id, $delta ]);
+
+    while (@queue) {
+        my ($current, $cur_delta) = @{ shift @queue };
+        my $deps = $self->belief_dependents($current);
+
+        for my $dep (@$deps) {
+            next if $visited{$dep->{to_id}}++;
+            next if $dep->{confidence} <= 0;
+
+            my $old_dep_conf = $dep->{confidence};
+            my $adjustment = $cur_delta * $dep->{weight};
+            my $new_dep_conf = $old_dep_conf + $adjustment;
+            $new_dep_conf = 0 if $new_dep_conf < 0;
+            $new_dep_conf = 1 if $new_dep_conf > 1;
+
+            if (abs($new_dep_conf - $old_dep_conf) >= 0.001) {
+                $self->{dbh}->do(
+                    'UPDATE wm_beliefs SET confidence = ? WHERE id = ?',
+                    undef, $new_dep_conf, $dep->{to_id},
+                );
+                push @changed, {
+                    id             => $dep->{to_id},
+                    statement      => $dep->{statement},
+                    old_confidence => $old_dep_conf,
+                    new_confidence => $new_dep_conf,
+                };
+
+                # Propagate the per-dependent delta downstream.
+                my $child_delta = $new_dep_conf - $old_dep_conf;
+                push @queue, [ $dep->{to_id}, $child_delta ];
+            }
+        }
+    }
+
+    return \@changed;
+}
+
+# High-level: supersede a belief and propagate confidence changes.
+# Returns { new_id => ..., propagated => [...] }.
+sub revise_belief {
+    my ($self, $old_id, %args) = @_;
+    my $new_confidence = $args{confidence};
+    my $new_statement  = $args{statement};
+    my $reason         = $args{reason} // '';
+
+    # Read old belief.
+    my $old = $self->{dbh}->selectrow_hashref(
+        'SELECT * FROM wm_beliefs WHERE id = ?', undef, $old_id);
+    return undef unless $old;
+
+    my $old_conf = $old->{confidence};
+
+    # Supersede with new belief.
+    my $evidence = ref $args{evidence} eq 'ARRAY' ? jencode($args{evidence}) : ($args{evidence} // $old->{evidence});
+    my $new_id = $self->supersede_belief(
+        $old_id,
+        statement  => $new_statement // $old->{statement},
+        confidence => $new_confidence // $old_conf,
+        source     => $args{source} // 'revision',
+        evidence   => $evidence,
+    );
+
+    # Propagate confidence delta.
+    my $propagated = [];
+    if (defined $new_confidence && abs($new_confidence - $old_conf) >= 0.001) {
+        $propagated = $self->propagate_confidence(
+            belief_id     => $old_id,
+            old_confidence => $old_conf,
+            new_confidence => $new_confidence,
+        );
+    }
+
+    return { new_id => $new_id, propagated => $propagated };
+}
+
 # Temporal range queries for beliefs
 
 sub beliefs_temporal {
@@ -1075,6 +1265,216 @@ sub _cosine_sim {
 sub _gen_id {
     my @chars = ('a'..'z', '0'..'9');
     return join '', map { $chars[int(rand(@chars))] } 1..12;
+}
+
+# ---------------------------------------------------------------------------
+# Counterfactual queries
+# ---------------------------------------------------------------------------
+
+# Apply a scenario temporarily within a savepoint, run a query, rollback.
+# Returns the query result. The world model is unchanged after the call.
+#
+# scenario: arrayref of operations:
+#   { op => 'assert_fact', entity_id => ..., predicate => ..., value => ... }
+#   { op => 'retract_fact', fact_id => ... }
+#   { op => 'add_entity', id => ..., type => ..., name => ... }
+#   { op => 'remove_entity', entity_id => ... }
+#   { op => 'add_relation', source_id => ..., target_id => ..., type => ... }
+#   { op => 'retract_relation', rel_id => ... }
+#   { op => 'add_cause', cause_entity => ..., effect_entity => ... }
+#   { op => 'believe', statement => ..., confidence => ... }
+#   { op => 'supersede_belief', belief_id => ..., statement => ..., confidence => ... }
+#
+# query: sub { my ($wm) = @_; ... } — runs within the counterfactual state.
+sub counterfactual {
+    my ($self, %args) = @_;
+    my $scenario = $args{scenario} // [];
+    my $query    = $args{query}    // sub { [] };
+
+    # Track whether we started the transaction (re-entrant safe).
+    my $own_txn = !$self->{dbh}->{AutoCommit};
+    unless ($own_txn) {
+        $self->{dbh}->{AutoCommit} = 0;
+    }
+    $self->{dbh}->do('SAVEPOINT cf_' . $self->{_cf_depth}++);
+    eval {
+        for my $op (@$scenario) {
+            $self->_apply_op($op);
+        }
+    };
+    if ($@) {
+        my $err = $@;
+        $self->{dbh}->do('ROLLBACK TO cf_' . --$self->{_cf_depth});
+        $self->{dbh}->do('RELEASE cf_' . $self->{_cf_depth});
+        $self->{dbh}->{AutoCommit} = 1 unless $own_txn;
+        die "counterfactual scenario failed: $err";
+    }
+
+    my @result = eval { $query->($self) };
+    my $qerr = $@;
+    $self->{dbh}->do('ROLLBACK TO cf_' . --$self->{_cf_depth});
+    $self->{dbh}->do('RELEASE cf_' . $self->{_cf_depth});
+    $self->{dbh}->{AutoCommit} = 1 unless $own_txn;
+    die "counterfactual query failed: $qerr" if $qerr;
+
+    return wantarray ? @result : $result[0];
+}
+
+# Compare original vs counterfactual state for an entity.
+# Returns { original => [...], counterfactual => [...], diff => [...] }.
+sub counterfactual_diff {
+    my ($self, %args) = @_;
+    my $scenario  = $args{scenario}  // [];
+    my $entity_id = $args{entity_id};
+
+    # Capture original state.
+    my @orig_facts    = $entity_id ? @{$self->query_facts(entity_id => $entity_id)} : @{$self->query_facts()};
+    my @orig_beliefs  = @{$self->query_beliefs()};
+    my @orig_causes;
+    if ($entity_id) {
+        @orig_causes = (
+            @{$self->trace_causes($entity_id)},
+            @{$self->predict_effects($entity_id)},
+        );
+    }
+
+    # Capture counterfactual state via return value.
+    my $cf = $self->counterfactual(
+        scenario => $scenario,
+        query    => sub {
+            my ($wm) = @_;
+            my $f = $entity_id ? $wm->query_facts(entity_id => $entity_id) : $wm->query_facts();
+            my $b = $wm->query_beliefs();
+            my $c = [];
+            if ($entity_id) {
+                $c = [ @{$wm->trace_causes($entity_id)}, @{$wm->predict_effects($entity_id)} ];
+            }
+            return { facts => $f, beliefs => $b, causes => $c };
+        },
+    );
+
+    my $cf_facts   = $cf->{facts}   // [];
+    my $cf_beliefs = $cf->{beliefs} // [];
+
+    # Build diff: items in counterfactual but not original, and vice versa.
+    my %orig_f   = map { $_->{id} => 1 } @orig_facts;
+    my %cf_f     = map { $_->{id} => 1 } @$cf_facts;
+    my %orig_b   = map { $_->{id} => 1 } @orig_beliefs;
+    my %cf_b     = map { $_->{id} => 1 } @$cf_beliefs;
+
+    my @diff;
+    for my $f (@$cf_facts) {
+        push @diff, { type => 'fact_added', fact => $f } unless $orig_f{$f->{id}};
+    }
+    for my $f (@orig_facts) {
+        push @diff, { type => 'fact_removed', fact => $f } unless $cf_f{$f->{id}};
+    }
+    for my $b (@$cf_beliefs) {
+        push @diff, { type => 'belief_added', belief => $b } unless $orig_b{$b->{id}};
+    }
+    for my $b (@orig_beliefs) {
+        push @diff, { type => 'belief_removed', belief => $b } unless $cf_b{$b->{id}};
+    }
+
+    return {
+        original       => \@orig_facts,
+        counterfactual => $cf_facts,
+        diff           => \@diff,
+    };
+}
+
+# Counterfactual causal reasoning: what would X cause if a scenario held?
+# Returns effects of cause_entity under the counterfactual world.
+sub counterfactual_causes {
+    my ($self, %args) = @_;
+    my $scenario    = $args{scenario}    // [];
+    my $cause_id    = $args{cause_id};
+    my $effect_id   = $args{effect_id};
+
+    my ($effects, $causes);
+    $self->counterfactual(
+        scenario => $scenario,
+        query    => sub {
+            my ($wm) = @_;
+            $effects = $wm->predict_effects($cause_id) if $cause_id;
+            $causes  = $wm->trace_causes($effect_id)   if $effect_id;
+        },
+    );
+
+    return $effects if $cause_id;
+    return $causes  if $effect_id;
+    return [];
+}
+
+# Apply a single counterfactual operation.
+sub _apply_op {
+    my ($self, $op) = @_;
+    my $type = $op->{op} // die "counterfactual op requires 'op' field\n";
+
+    if ($type eq 'assert_fact') {
+        $self->assert_fact(
+            entity_id  => $op->{entity_id},
+            predicate  => $op->{predicate},
+            value      => $op->{value},
+            confidence => $op->{confidence} // 1.0,
+            source     => 'counterfactual',
+        );
+    }
+    elsif ($type eq 'retract_fact') {
+        my $rows = $self->{dbh}->do(
+            'UPDATE wm_facts SET valid_until = ? WHERE id = ?',
+            undef, now_ms(), $op->{fact_id},
+        );
+        die "retract_fact: fact $op->{fact_id} not found\n" if $rows == 0;
+    }
+    elsif ($type eq 'add_entity') {
+        $self->add_entity(
+            id         => $op->{id},
+            type       => $op->{type},
+            name       => $op->{name},
+            attributes => $op->{attributes},
+        );
+    }
+    elsif ($type eq 'remove_entity') {
+        $self->{dbh}->do('DELETE FROM wm_entities WHERE id = ?', undef, $op->{entity_id});
+    }
+    elsif ($type eq 'add_relation') {
+        $self->add_relation(
+            source_id  => $op->{source_id},
+            target_id  => $op->{target_id},
+            type       => $op->{type},
+            confidence => $op->{confidence} // 1.0,
+        );
+    }
+    elsif ($type eq 'retract_relation') {
+        $self->retract_relation($op->{rel_id});
+    }
+    elsif ($type eq 'add_cause') {
+        $self->add_cause(
+            cause_entity  => $op->{cause_entity},
+            effect_entity => $op->{effect_entity},
+            mechanism     => $op->{mechanism},
+            confidence    => $op->{confidence} // 1.0,
+        );
+    }
+    elsif ($type eq 'believe') {
+        $self->believe(
+            statement  => $op->{statement},
+            confidence => $op->{confidence} // 0.5,
+            source     => 'counterfactual',
+        );
+    }
+    elsif ($type eq 'supersede_belief') {
+        $self->supersede_belief(
+            $op->{belief_id},
+            statement  => $op->{statement},
+            confidence => $op->{confidence} // 0.5,
+            source     => 'counterfactual',
+        );
+    }
+    else {
+        die "unknown counterfactual op: $type\n";
+    }
 }
 
 1;
