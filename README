@@ -64,6 +64,23 @@ Quick start
   '
 
 
+Development setup
+-----------------
+
+  cd clam
+  perl link_wits.pl        # symlink wits/ into lib/
+  prove -l t/              # run core tests
+  prove -l wits/*/t/       # run wit tests
+
+link_wits.pl creates relative symlinks from lib/Clam/Wits/* to
+each wit's lib/ directory. This makes the dev tree behave like an
+installed CPAN tree — all modules load from -Ilib.
+
+  perl link_wits.pl --clean   # remove symlinks
+
+The symlinks are gitignored. Run link_wits.pl after clone.
+
+
 The Perl thesis
 ---------------
 
@@ -77,8 +94,7 @@ the harness by writing wits. Logic engines can collapse expensive
 LLM calls into fast deterministic rules. The system gets cheaper
 and faster the more it's used.
 
-This is not a coding assistant. It's a Perl shell for the
-age of AI.
+It's a Perl shell for the age of AI.
 
 
 Questions for testers

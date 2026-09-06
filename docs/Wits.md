@@ -301,7 +301,18 @@ clam/
     Clam.pm
     Clam/
       App.pm
-      ...
+      Loop.pm
+      Bus.pm
+      Store.pm
+      Provider/
+      Tool.pm
+      Tools/
+      Wit/
+        API.pm
+        Session.pm
+      Wits/              # symlinks (created by link_wits.pl)
+        Foo -> ../../../wits/foo/lib/Clam/Wits/Foo
+        Bar -> ../../../wits/bar/lib/Clam/Wits/Bar
   wits/                 # wit modules (separate dists)
     Foo/
       lib/Clam/Wits/Foo.pm
@@ -316,6 +327,19 @@ clam/
 
 The `Clam` dist's `META.json` lists only core modules. The `wits/` directory
 is a staging area for development, not shipped in the core dist.
+
+#### Dev symlinks
+
+`link_wits.pl` creates relative symlinks so the dev tree behaves like an
+installed CPAN tree. All wit modules load from `-Ilib`:
+
+```
+perl link_wits.pl              # create symlinks
+perl link_wits.pl --clean      # remove symlinks
+```
+
+The symlinks are gitignored. Run `link_wits.pl` after clone. This lets
+IDEs, editors, and tests find all modules from a single `@INC` path.
 
 ### Packaging
 

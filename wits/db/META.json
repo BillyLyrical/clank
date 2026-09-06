@@ -1,0 +1,54 @@
+{
+  "name": "Clam-Wits-Db",
+  "version": "1.0.0",
+  "author": "CLAM",
+  "license": "Artistic-2.0",
+  "abstract": "Database wits for Clam — connect, query, execute, schema, shell, history, export, import",
+  "provides": {
+    "Clam::Wits::Db::Connect": {
+      "file": "lib/Clam/Wits/Db/Connect.pm",
+      "version": "1.0.0"
+    },
+    "Clam::Wits::Db::Query": {
+      "file": "lib/Clam/Wits/Db/Query.pm",
+      "version": "1.0.0"
+    },
+    "Clam::Wits::Db::Execute": {
+      "file": "lib/Clam/Wits/Db/Execute.pm",
+      "version": "1.0.0"
+    },
+    "Clam::Wits::Db::Schema": {
+      "file": "lib/Clam/Wits/Db/Schema.pm",
+      "version": "1.0.0"
+    },
+    "Clam::Wits::Db::Shell": {
+      "file": "lib/Clam/Wits/Db/Shell.pm",
+      "version": "1.0.0"
+    },
+    "Clam::Wits::Db::History": {
+      "file": "lib/Clam/Wits/Db/History.pm",
+      "version": "1.0.0"
+    },
+    "Clam::Wits::Db::Export": {
+      "file": "lib/Clam/Wits/Db/Export.pm",
+      "version": "1.0.0"
+    },
+    "Clam::Wits::Db::Import": {
+      "file": "lib/Clam/Wits/Db/Import.pm",
+      "version": "1.0.0"
+    }
+  },
+  "requires": {
+    "perl": "5.010"
+  },
+  "wits": [
+    { "trigger": "db_connect",       "module": "Clam::Wits::Db::Connect" },
+    { "trigger": "db_query",         "module": "Clam::Wits::Db::Query" },
+    { "trigger": "db_execute",       "module": "Clam::Wits::Db::Execute" },
+    { "trigger": "db_schema",        "module": "Clam::Wits::Db::Schema" },
+    { "trigger": "db_shell",         "module": "Clam::Wits::Db::Shell" },
+    { "trigger": "dbshell_history",  "module": "Clam::Wits::Db::History" },
+    { "trigger": "dbshell_export",   "module": "Clam::Wits::Db::Export" },
+    { "trigger": "dbshell_import",   "module": "Clam::Wits::Db::Import" }
+  ]
+}

@@ -11,3 +11,7 @@ _tmp/
 # analysis artifacts
 .tmp-analysis/
 .wit-analysis/
+
+# dev symlinks (created by bin/setup-dev-symlinks)
+lib/Clam/Wits/*
+
