@@ -286,6 +286,180 @@ sub retract_relation {
 }
 
 # ---------------------------------------------------------------------------
+# Graph traversal
+# ---------------------------------------------------------------------------
+
+# All entities directly connected to $entity_id (outgoing, incoming, or both).
+# Returns arrayref of { entity, relation } hashrefs.
+sub neighbors {
+    my ($self, $entity_id, %args) = @_;
+    my $direction = $args{direction} // 'both';   # out|in|both
+    my $rel_type  = $args{type};                   # optional: filter by relation type
+    my $limit     = $args{limit} // 100;
+
+    my @results;
+    my $now = now_ms();
+
+    # Outgoing: source_id = entity_id.
+    if ($direction eq 'out' || $direction eq 'both') {
+        my ($sql, @bind) = (
+            'SELECT r.*, e.name, e.type as entity_type, e.attributes
+             FROM wm_relations r JOIN wm_entities e ON e.id = r.target_id
+             WHERE r.source_id = ? AND (r.valid_until IS NULL OR r.valid_until > ?)',
+            $entity_id, $now);
+        if ($rel_type) {
+            $sql .= ' AND r.type = ?';
+            push @bind, $rel_type;
+        }
+        $sql .= ' ORDER BY r.confidence DESC LIMIT ?';
+        push @bind, $limit;
+
+        my $rows = $self->{dbh}->selectall_arrayref($sql, { Slice => {} }, @bind);
+        for my $r (@$rows) {
+            $r->{attributes} = jdecode($r->{attributes} // '{}');
+            $r->{entity_attributes} = jdecode($r->{entity_attributes} // '{}');
+            push @results, { entity => { id => $r->{target_id}, name => $r->{name}, type => $r->{entity_type}, attributes => $r->{entity_attributes} },
+                             relation => { id => $r->{id}, type => $r->{type}, confidence => $r->{confidence}, attributes => $r->{attributes} },
+                             direction => 'out' };
+        }
+    }
+
+    # Incoming: target_id = entity_id.
+    if ($direction eq 'in' || $direction eq 'both') {
+        my ($sql, @bind) = (
+            'SELECT r.*, e.name, e.type as entity_type, e.attributes
+             FROM wm_relations r JOIN wm_entities e ON e.id = r.source_id
+             WHERE r.target_id = ? AND (r.valid_until IS NULL OR r.valid_until > ?)',
+            $entity_id, $now);
+        if ($rel_type) {
+            $sql .= ' AND r.type = ?';
+            push @bind, $rel_type;
+        }
+        $sql .= ' ORDER BY r.confidence DESC LIMIT ?';
+        push @bind, $limit;
+
+        my $rows = $self->{dbh}->selectall_arrayref($sql, { Slice => {} }, @bind);
+        for my $r (@$rows) {
+            $r->{attributes} = jdecode($r->{attributes} // '{}');
+            $r->{entity_attributes} = jdecode($r->{entity_attributes} // '{}');
+            push @results, { entity => { id => $r->{source_id}, name => $r->{name}, type => $r->{entity_type}, attributes => $r->{entity_attributes} },
+                             relation => { id => $r->{id}, type => $r->{type}, confidence => $r->{confidence}, attributes => $r->{attributes} },
+                             direction => 'in' };
+        }
+    }
+
+    return \@results;
+}
+
+# BFS traversal from $entity_id. Returns all reachable entities up to $max_hops.
+# Returns arrayref of { entity, distance, path } hashrefs.
+sub walk {
+    my ($self, $entity_id, %args) = @_;
+    my $max_hops = $args{max_hops} // 3;
+    my $rel_type = $args{type};
+    my $limit    = $args{limit} // 100;
+
+    my %visited;
+    my @queue = ($entity_id);
+    $visited{$entity_id} = 0;
+    my @result;
+    my $now = now_ms();
+
+    while (@queue && @result < $limit) {
+        my $current = shift @queue;
+        my $dist = $visited{$current};
+
+        next if $dist > $max_hops;
+
+        # Get neighbors (outgoing only for BFS).
+        my ($sql, @bind) = (
+            'SELECT r.target_id, e.name, e.type as entity_type, e.attributes, r.type as rel_type, r.confidence, r.attributes as rel_attrs
+             FROM wm_relations r JOIN wm_entities e ON e.id = r.target_id
+             WHERE r.source_id = ? AND (r.valid_until IS NULL OR r.valid_until > ?)',
+            $current, $now);
+        if ($rel_type) {
+            $sql .= ' AND r.type = ?';
+            push @bind, $rel_type;
+        }
+        $sql .= ' LIMIT ?';
+        push @bind, $limit;
+
+        my $rows = $self->{dbh}->selectall_arrayref($sql, { Slice => {} }, @bind);
+        for my $r (@$rows) {
+            next if exists $visited{$r->{target_id}};
+            $visited{$r->{target_id}} = $dist + 1;
+
+            push @result, {
+                entity   => { id => $r->{target_id}, name => $r->{name}, type => $r->{entity_type}, attributes => jdecode($r->{attributes} // '{}') },
+                distance => $dist + 1,
+                via      => { type => $r->{rel_type}, confidence => $r->{confidence}, attributes => jdecode($r->{rel_attrs} // '{}') },
+            };
+
+            push @queue, $r->{target_id} if $dist + 1 < $max_hops;
+        }
+    }
+
+    return \@result;
+}
+
+# Shortest path between two entities (BFS). Returns arrayref of { entity, via }
+# representing the path, or undef if no path exists.
+sub path {
+    my ($self, $from_id, $to_id, %args) = @_;
+    my $max_hops = $args{max_hops} // 6;
+    my $rel_type = $args{type};
+
+    my %prev;       # entity_id => { prev_id, via_type, via_attrs }
+    my %visited;
+    my @queue = ($from_id);
+    $visited{$from_id} = 1;
+    my $now = now_ms();
+
+    while (@queue) {
+        my $current = shift @queue;
+
+        if ($current eq $to_id) {
+            # Reconstruct path.
+            my @path;
+            my $cur = $to_id;
+            while ($cur ne $from_id) {
+                my $info = $prev{$cur};
+                unshift @path, { entity_id => $cur, via_type => $info->{via_type}, via_attrs => $info->{via_attrs} };
+                $cur = $info->{prev_id};
+            }
+            unshift @path, { entity_id => $from_id };
+            return \@path;
+        }
+
+        my $dist = $visited{$current};
+        next if $dist >= $max_hops;
+
+        my ($sql, @bind) = (
+            'SELECT target_id, type, attributes FROM wm_relations
+             WHERE source_id = ? AND (valid_until IS NULL OR valid_until > ?)',
+            $current, $now);
+        if ($rel_type) {
+            $sql .= ' AND type = ?';
+            push @bind, $rel_type;
+        }
+
+        my $rows = $self->{dbh}->selectall_arrayref($sql, { Slice => {} }, @bind);
+        for my $r (@$rows) {
+            next if exists $visited{$r->{target_id}};
+            $visited{$r->{target_id}} = $dist + 1;
+            $prev{$r->{target_id}} = {
+                prev_id   => $current,
+                via_type  => $r->{type},
+                via_attrs => jdecode($r->{attributes} // '{}'),
+            };
+            push @queue, $r->{target_id};
+        }
+    }
+
+    return undef;   # no path
+}
+
+# ---------------------------------------------------------------------------
 # Fact operations
 # ---------------------------------------------------------------------------
 
