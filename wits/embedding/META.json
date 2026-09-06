@@ -1,0 +1,13 @@
+{
+  "name": "Clam-Wits-Embedding",
+  "version": "1.0.0",
+  "author": "CLAM",
+  "license": "Artistic-2.0",
+  "requires": {
+    "perl": "5.040001",
+    "Clam": "1.0"
+  },
+  "provides": {
+    "Clam::Wits::Embedding::Embedding": { "file": "lib/Clam/Wits/Embedding/Embedding.pm", "version": "1.0.0" }
+  }
+}
