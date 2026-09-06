@@ -18,7 +18,7 @@ subtest 'Construction' => sub {
     my $c = Clam::Constraints->new;
     isa_ok($c, 'Clam::Constraints');
     my $schemas = $c->list_schemas;
-    ok(scalar @$schemas >= 8, 'has built-in schemas');
+    ok(scalar @$schemas >= 3, 'has built-in schemas');
 };
 
 # === Test 2: List schemas ===
@@ -27,68 +27,13 @@ subtest 'List schemas' => sub {
     my $c = Clam::Constraints->new;
     my $schemas = $c->list_schemas;
     my @names = map { $_->{name} } @$schemas;
-    ok(scalar @names >= 8, 'multiple schemas registered');
-    ok((grep { $_ eq 'stoic_control' } @names), 'stoic_control present');
-    ok((grep { $_ eq 'care_ethics' } @names), 'care_ethics present');
+    ok(scalar @names >= 3, 'multiple schemas registered');
     ok((grep { $_ eq 'vagueness' } @names), 'vagueness present');
+    ok((grep { $_ eq 'overclaiming' } @names), 'overclaiming present');
+    ok((grep { $_ eq 'wm_contradiction' } @names), 'wm_contradiction present');
 };
 
-# === Test 3: Stoic constraint — flags overclaiming ===
-
-subtest 'Stoic control: flags guarantees' => sub {
-    my $c = Clam::Constraints->new;
-    my $v = $c->validate('This will guarantee your success.', {});
-    ok(scalar @$v >= 1, 'violation detected');
-    is($v->[0]{schema}, 'stoic_control', 'correct schema');
-};
-
-subtest 'Stoic control: passes normal output' => sub {
-    my $c = Clam::Constraints->new;
-    my $v = $c->validate('This approach should work well in most cases.', {});
-    my @stoic = grep { $_->{schema} eq 'stoic_control' } @$v;
-    is(scalar @stoic, 0, 'no stoic violation for normal output');
-};
-
-# === Test 4: Care ethics constraint ===
-
-subtest 'Care ethics: flags ignoring emotion' => sub {
-    my $c = Clam::Constraints->new;
-    my $v = $c->validate('The answer is 42.', {
-        conversation => 'I am really frustrated with this bug.',
-    });
-    my @care = grep { $_->{schema} eq 'care_ethics' } @$v;
-    ok(scalar @care >= 1, 'care ethics violation detected');
-    like($care[0]{message}, qr/emotional/i, 'mentions emotional content');
-};
-
-subtest 'Care ethics: passes empathetic response' => sub {
-    my $c = Clam::Constraints->new;
-    my $v = $c->validate('I understand this is difficult. Here is what you can try.', {
-        conversation => 'I am really frustrated with this bug.',
-    });
-    my @care = grep { $_->{schema} eq 'care_ethics' } @$v;
-    is(scalar @care, 0, 'no care ethics violation for empathetic response');
-};
-
-# === Test 5: Marx alienation constraint ===
-
-subtest 'Marx alienation: flags dehumanizing language' => sub {
-    my $c = Clam::Constraints->new;
-    my $v = $c->validate('Just fire them and replace the human with a script.', {});
-    my @marx = grep { $_->{schema} eq 'marx_alienation' } @$v;
-    ok(scalar @marx >= 1, 'alienation violation detected');
-};
-
-# === Test 6: Jung shadow constraint ===
-
-subtest 'Jung shadow: flags dismissal' => sub {
-    my $c = Clam::Constraints->new;
-    my $v = $c->validate('Just dont think about it. There are no downsides to this approach.', {});
-    my @jung = grep { $_->{schema} eq 'jung_shadow' } @$v;
-    ok(scalar @jung >= 1, 'shadow violation detected');
-};
-
-# === Test 7: Vagueness constraint ===
+# === Test 3: Vagueness constraint ===
 
 subtest 'Vagueness: flags excessive hedging' => sub {
     my $c = Clam::Constraints->new;
@@ -106,7 +51,7 @@ subtest 'Vagueness: passes specific output' => sub {
     is(scalar @vague, 0, 'no vagueness violation for specific output');
 };
 
-# === Test 8: Overclaiming constraint ===
+# === Test 4: Overclaiming constraint ===
 
 subtest 'Overclaiming: flags absolute claims' => sub {
     my $c = Clam::Constraints->new;
@@ -115,7 +60,7 @@ subtest 'Overclaiming: flags absolute claims' => sub {
     ok(scalar @over >= 1, 'overclaiming violation detected');
 };
 
-# === Test 9: Constraint with world model ===
+# === Test 5: Constraint with world model ===
 
 subtest 'WM contradiction: detects contradiction' => sub {
     my $wm_store = Clam::Store->new(db => ':memory:');
@@ -146,7 +91,7 @@ subtest 'WM contradiction: no false positives' => sub {
     is(scalar @wm_v, 0, 'no false positive');
 };
 
-# === Test 10: Severity levels ===
+# === Test 6: Severity levels ===
 
 subtest 'Severity: strict violations detected' => sub {
     my $wm_store = Clam::Store->new(db => ':memory:');
@@ -162,11 +107,11 @@ subtest 'Severity: strict violations detected' => sub {
 
 subtest 'Severity: warn violations not blocking' => sub {
     my $c = Clam::Constraints->new;
-    my $v = $c->validate('This will guarantee success.', {});
+    my $v = $c->validate('This code always works.', {});
     ok(!$c->has_blocking_violations($v), 'no blocking violations for warn-only');
 };
 
-# === Test 11: Custom constraint ===
+# === Test 7: Custom constraint ===
 
 subtest 'Custom constraint: register and validate' => sub {
     my $c = Clam::Constraints->new;
@@ -187,7 +132,7 @@ subtest 'Custom constraint: register and validate' => sub {
     ok(scalar @jargon >= 1, 'custom constraint fires');
 };
 
-# === Test 12: Unregister ===
+# === Test 8: Unregister ===
 
 subtest 'Unregister constraint' => sub {
     my $c = Clam::Constraints->new;
@@ -198,27 +143,27 @@ subtest 'Unregister constraint' => sub {
     is(scalar @{$c->list_schemas}, $before, 'removed');
 };
 
-# === Test 13: Set severity ===
+# === Test 9: Set severity ===
 
 subtest 'Set severity' => sub {
     my $c = Clam::Constraints->new;
-    $c->set_severity('stoic_control', 'strict');
+    $c->set_severity('vagueness', 'strict');
     my $schemas = $c->list_schemas;
-    my ($s) = grep { $_->{name} eq 'stoic_control' } @$schemas;
+    my ($s) = grep { $_->{name} eq 'vagueness' } @$schemas;
     is($s->{severity}, 'strict', 'severity updated');
 };
 
-# === Test 14: Format for revision ===
+# === Test 10: Format for revision ===
 
 subtest 'Format for revision' => sub {
     my $c = Clam::Constraints->new;
-    my $v = $c->validate('This will guarantee success.', {});
+    my $v = $c->validate('This code always works.', {});
     my $msg = $c->format_for_revision($v);
-    like($msg, qr/stoic_control/, 'contains schema name');
+    like($msg, qr/overclaiming/, 'contains schema name');
     ok(length($msg) > 0, 'has message content');
 };
 
-# === Test 15: Bus integration ===
+# === Test 11: Bus integration ===
 
 subtest 'Bus: message_end triggers validation' => sub {
     my $bus_store = Clam::Store->new(db => ':memory:');
@@ -234,7 +179,7 @@ subtest 'Bus: message_end triggers validation' => sub {
     # Publish a message_end with violating content.
     my $result = $bus->publish('message_end', {
         role    => 'assistant',
-        content => { text => 'This will guarantee success.', tool_calls => [] },
+        content => { text => 'This code always works without exception.', tool_calls => [] },
     });
 
     # The constraints subscriber should have returned a violation payload.
@@ -242,7 +187,7 @@ subtest 'Bus: message_end triggers validation' => sub {
     ok(scalar @violations >= 1, 'constraint violation returned from bus');
 };
 
-# === Test 16: Multiple violations ===
+# === Test 12: Multiple violations ===
 
 subtest 'Multiple violations in one output' => sub {
     my $wm_store = Clam::Store->new(db => ':memory:');
@@ -253,13 +198,13 @@ subtest 'Multiple violations in one output' => sub {
 
     my $c = Clam::Constraints->new(world_model => $wm);
     my $v = $c->validate(
-        'Perl is not compiled. This will guarantee it fails. Just dont think about it.',
+        'Perl is not compiled. This code always works without exception.',
         { conversation => 'I feel upset about this.' }
     );
-    ok(scalar @$v >= 3, 'multiple violations detected');
+    ok(scalar @$v >= 2, 'multiple violations detected');
     my @schemas = map { $_->{schema} } @$v;
     ok((grep { $_ eq 'wm_contradiction' } @schemas), 'contradiction found');
-    ok((grep { $_ eq 'stoic_control' } @schemas), 'stoic found');
+    ok((grep { $_ eq 'overclaiming' } @schemas), 'overclaiming found');
 };
 
 done_testing;
