@@ -9,7 +9,7 @@
 # Phase 1: LLM reads world model (inject relevant facts into context)
 # Phase 2: Rules validate LLM output (catch contradictions)
 # Phase 3: LLM updates world model (extract knowledge from conversation)
-package Clam::NeuroIntegration;
+package Clam::Wits::Neuro::NeuroIntegration;
 use strict;
 use warnings;
 use Clam::Util qw(jencode jdecode);

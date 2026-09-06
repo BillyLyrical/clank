@@ -18,9 +18,9 @@ use Clam::Governor;
 use Clam::Tracer;
 use Clam::Cache;
 use Clam::Metrics;
-use Clam::NeuroIntegration;
-use Clam::Crystallizer;
 use Clam::Constraints;
+use Clam::Crystallizer;
+use Clam::NeuroIntegration;
 
 sub new {
     my ($class, %o) = @_;
@@ -104,29 +104,28 @@ sub start_session {
     $session->set_skills(\@skills);
     $session->set_context_files(\@ctx);
 
-    # Bus-driven neurosymbolic modules (subscribe to events automatically).
+    # Bus-driven neurosymbolic wits (subscribe to events automatically).
+    my $api = _make_api($self);
+
     Clam::NeuroIntegration->new(
-        store       => $self->{store},
-        bus         => $self->{bus},
         world_model => $self->{world_model},
         provider    => $self->{provider},
         tracer      => $self->{tracer},
         metrics     => $self->{metrics},
-    );
+    )->register($api);
 
     Clam::Crystallizer->new(
-        store       => $self->{store},
-        bus         => $self->{bus},
         world_model => $self->{world_model},
         provider    => $self->{provider},
         tracer      => $self->{tracer},
         metrics     => $self->{metrics},
-    );
+    )->register($api);
 
     Clam::Constraints->new(
-        bus         => $self->{bus},
         world_model => $self->{world_model},
-    );
+        tracer      => $self->{tracer},
+        metrics     => $self->{metrics},
+    )->register($api);
 
     $self->{pm}      = $pm;
     $self->{wits}    = \@wits;
@@ -150,6 +149,16 @@ sub run_prompt { $_[0]->{loop}->run_prompt($_[1]) }
 sub shutdown {
     my ($self) = @_;
     $self->{bus}->publish('session_shutdown', {}) if $self->{bus};
+}
+
+# Create a minimal Wit::API-like object for bus-driven wits.
+sub _make_api {
+    my ($app) = @_;
+    require Clam::Wit::API;
+    return Clam::Wit::API->new(
+        bus   => $app->{bus},
+        store => $app->{store},
+    );
 }
 
 1;

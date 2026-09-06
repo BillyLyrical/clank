@@ -1,4 +1,4 @@
-# Clam::Taxonomy — hierarchical classification for entities, beliefs, and goals.
+# Clam::Logic::Taxonomy — hierarchical classification for entities, beliefs, and goals.
 #
 # Provides inheritance: child categories inherit properties from parents.
 # Properties override at deeper levels. Enables category-aware queries
@@ -9,14 +9,14 @@
 #   - Each category can have key-value properties (inherited)
 #   - Entities, beliefs, and goals map to categories
 #   - Queries traverse the tree to collect inherited properties
-package Clam::Taxonomy;
+package Clam::Logic::Taxonomy;
 use strict;
 use warnings;
 use Clam::Util qw(now_ms jencode jdecode);
 
 sub new {
     my ($class, %args) = @_;
-    my $world_model = $args{world_model} or die "Clam::Taxonomy requires world_model\n";
+    my $world_model = $args{world_model} or die "Clam::Logic::Taxonomy requires world_model\n";
 
     my $self = bless {
         world_model => $world_model,
@@ -435,13 +435,13 @@ __END__
 
 =head1 NAME
 
-Clam::Taxonomy — hierarchical classification for entities, beliefs, and goals.
+Clam::Logic::Taxonomy — hierarchical classification for entities, beliefs, and goals.
 
 =head1 SYNOPSIS
 
-  use Clam::Taxonomy;
+  use Clam::Logic::Taxonomy;
 
-  my $tx = Clam::Taxonomy->new(
+  my $tx = Clam::Logic::Taxonomy->new(
       world_model => $wm,             # required: Clam::WorldModel
       bus         => $bus,            # optional
       metrics     => $metrics,        # optional
@@ -472,7 +472,7 @@ Clam::Taxonomy — hierarchical classification for entities, beliefs, and goals.
 
 =head1 DESCRIPTION
 
-Clam::Taxonomy provides hierarchical classification across the world model.
+Clam::Logic::Taxonomy provides hierarchical classification across the world model.
 Entities, beliefs, and goals map to categories in a tree. Properties on
 categories are inherited by children (child overrides parent).
 

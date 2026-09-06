@@ -192,10 +192,12 @@ subtest 'Bus agent_end triggers crystallization' => sub {
     my $store3 = Clam::Store->new(db => ':memory:');
     require Clam::Bus;
     my $bus = Clam::Bus->new(store => $store3);
+    require Clam::Wit::API;
+    my $api = Clam::Wit::API->new(bus => $bus, store => $store3);
 
-    my $c = Clam::Crystallizer->new(store => $store3, bus => $bus);
+    my $c = Clam::Crystallizer->new(store => $store3);
+    $c->register($api);
 
-    # Create a session with messages.
     my $sid = $store3->create_session(title => 'test');
     $store3->append_message(session_id => $sid, role => 'user', content => 'What is gold?');
     $store3->append_message(session_id => $sid, role => 'assistant', content => 'Gold is a precious metal.');

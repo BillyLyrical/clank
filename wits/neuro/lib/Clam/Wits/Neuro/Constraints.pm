@@ -9,7 +9,7 @@
 # Registry pattern: each constraint is a named { name, desc, severity, fn } entry.
 # validate() runs all enabled constraints against LLM output, returns violations.
 # Severity: strict (blocks), warn (logs), ignore (skipped).
-package Clam::Constraints;
+package Clam::Wits::Neuro::Constraints;
 use strict;
 use warnings;
 use Clam::Util qw(now_ms jencode);

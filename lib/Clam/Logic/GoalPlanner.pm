@@ -1,4 +1,4 @@
-# Clam::GoalPlanner — goal decomposition and execution planning.
+# Clam::Logic::GoalPlanner — goal decomposition and execution planning.
 #
 # Uses the WorldModel belief graph for relevance scoring: beliefs that
 # are close to a goal in the dependency graph and have high confidence
@@ -10,14 +10,14 @@
 #   3. Score relevance → prioritize subgoals by belief proximity
 #   4. Generate plan → topological sort of ready subgoals
 #   5. Execute → mark subgoals complete → re-score dependents
-package Clam::GoalPlanner;
+package Clam::Logic::GoalPlanner;
 use strict;
 use warnings;
 use Clam::Util qw(now_ms jencode jdecode);
 
 sub new {
     my ($class, %args) = @_;
-    my $world_model = $args{world_model} or die "Clam::GoalPlanner requires world_model\n";
+    my $world_model = $args{world_model} or die "Clam::Logic::GoalPlanner requires world_model\n";
 
     my $self = bless {
         world_model => $world_model,

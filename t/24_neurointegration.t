@@ -9,6 +9,12 @@ use Clam::Store;
 use Clam::Bus;
 use Clam::WorldModel;
 use Clam::NeuroIntegration;
+use Clam::Wit::API;
+
+sub _make_api {
+    my ($store, $bus) = @_;
+    return Clam::Wit::API->new(bus => $bus, store => $store);
+}
 
 # === Test 1: Construction ===
 
@@ -16,12 +22,10 @@ subtest 'Construction' => sub {
     my $store = Clam::Store->new(db => ':memory:');
     my $bus = Clam::Bus->new(store => $store);
     my $wm = Clam::WorldModel->new(store => $store);
+    my $api = _make_api($store, $bus);
 
-    my $ni = Clam::NeuroIntegration->new(
-        store       => $store,
-        bus         => $bus,
-        world_model => $wm,
-    );
+    my $ni = Clam::NeuroIntegration->new(world_model => $wm);
+    $ni->register($api);
     isa_ok($ni, 'Clam::NeuroIntegration');
 };
 
@@ -31,33 +35,23 @@ subtest 'Phase 1: injects world model facts into context' => sub {
     my $store = Clam::Store->new(db => ':memory:');
     my $bus = Clam::Bus->new(store => $store);
     my $wm = Clam::WorldModel->new(store => $store);
+    my $api = _make_api($store, $bus);
 
-    # Add entities directly to DB (bypass FTS if unavailable).
-    my $dbh = $store->dbh;
     my $id1 = $wm->add_entity(type => 'concept', name => 'Perl', attributes => { language => 'scripting' });
     my $id2 = $wm->add_entity(type => 'concept', name => 'Python', attributes => { language => 'scripting' });
 
-    my $ni = Clam::NeuroIntegration->new(
-        store       => $store,
-        bus         => $bus,
-        world_model => $wm,
-    );
+    my $ni = Clam::NeuroIntegration->new(world_model => $wm);
+    $ni->register($api);
 
-    # Simulate context event with a user query about Perl.
     my $result = $bus->publish('context', {
-        messages => [
-            { role => 'user', content => 'Tell me about Perl' },
-        ],
+        messages => [{ role => 'user', content => 'Tell me about Perl' }],
     });
 
-    # If FTS is available, we get injected facts. If not, we get nothing.
     my @injected = grep { ref $_ eq 'HASH' && defined $_->{message} } @{$result->{results}};
     if ($store->has_fts) {
         ok(scalar @injected >= 1, 'context hook returned a message');
         like($injected[0]{message}, qr/Perl/, 'injected message mentions Perl');
     } else {
-        # Without FTS, search_entities returns empty, so no injection.
-        # This is expected behavior — FTS is required for semantic search.
         pass('FTS not available, context injection skipped (expected)');
     }
 };
@@ -68,11 +62,11 @@ subtest 'Phase 1: no injection for empty conversation' => sub {
     my $store = Clam::Store->new(db => ':memory:');
     my $bus = Clam::Bus->new(store => $store);
     my $wm = Clam::WorldModel->new(store => $store);
+    my $api = _make_api($store, $bus);
     $wm->add_entity(type => 'concept', name => 'Perl', attributes => {});
 
-    my $ni = Clam::NeuroIntegration->new(
-        store => $store, bus => $bus, world_model => $wm,
-    );
+    my $ni = Clam::NeuroIntegration->new(world_model => $wm);
+    $ni->register($api);
 
     my $result = $bus->publish('context', { messages => [] });
     my @injected = grep { ref $_ eq 'HASH' && defined $_->{message} } @{$result->{results}};
@@ -85,19 +79,14 @@ subtest 'Phase 2: validation catches contradictions' => sub {
     my $store = Clam::Store->new(db => ':memory:');
     my $bus = Clam::Bus->new(store => $store);
     my $wm = Clam::WorldModel->new(store => $store);
+    my $api = _make_api($store, $bus);
 
-    # Assert that Perl is a scripting language.
     my $ent_id = $wm->add_entity(type => 'concept', name => 'Perl');
     $wm->assert_fact(entity_id => $ent_id, predicate => 'is', value => 'a scripting language');
 
-    my $ni = Clam::NeuroIntegration->new(
-        store       => $store,
-        bus         => $bus,
-        world_model => $wm,
-        validate    => 1,
-    );
+    my $ni = Clam::NeuroIntegration->new(world_model => $wm, validate => 1);
+    $ni->register($api);
 
-    # LLM output that contradicts.
     my $result = $bus->publish('message_end', {
         role    => 'assistant',
         content => { text => 'Perl is not a scripting language', tool_calls => [] },
@@ -113,13 +102,13 @@ subtest 'Phase 2: no violation for correct output' => sub {
     my $store = Clam::Store->new(db => ':memory:');
     my $bus = Clam::Bus->new(store => $store);
     my $wm = Clam::WorldModel->new(store => $store);
+    my $api = _make_api($store, $bus);
 
     my $ent_id = $wm->add_entity(type => 'concept', name => 'Perl');
     $wm->assert_fact(entity_id => $ent_id, predicate => 'is', value => 'a scripting language');
 
-    my $ni = Clam::NeuroIntegration->new(
-        store => $store, bus => $bus, world_model => $wm, validate => 1,
-    );
+    my $ni = Clam::NeuroIntegration->new(world_model => $wm, validate => 1);
+    $ni->register($api);
 
     my $result = $bus->publish('message_end', {
         role    => 'assistant',
@@ -136,21 +125,17 @@ subtest 'Phase 3: extracts entities from conversation' => sub {
     my $store = Clam::Store->new(db => ':memory:');
     my $bus = Clam::Bus->new(store => $store);
     my $wm = Clam::WorldModel->new(store => $store);
+    my $api = _make_api($store, $bus);
 
-    # Create a session with messages.
     my $sid = $store->create_session(title => 'test');
-    $store->append_message(session_id => $sid, role => 'user',
-                          content => 'I like Tokyo very much');
-    $store->append_message(session_id => $sid, role => 'assistant',
-                          content => 'Tokyo is a great city in Japan');
+    $store->append_message(session_id => $sid, role => 'user', content => 'I like Tokyo very much');
+    $store->append_message(session_id => $sid, role => 'assistant', content => 'Tokyo is a great city in Japan');
 
-    my $ni = Clam::NeuroIntegration->new(
-        store => $store, bus => $bus, world_model => $wm, extract => 1,
-    );
+    my $ni = Clam::NeuroIntegration->new(world_model => $wm, extract => 1);
+    $ni->register($api);
 
     $bus->publish('agent_end', { session_id => $sid });
 
-    # Check if entities were extracted.
     my $entities = $wm->query_entities(type => 'concept');
     ok(scalar @$entities > 0, 'entities extracted');
     my @names = map { $_->{name} } @$entities;
@@ -163,10 +148,10 @@ subtest 'Phase 3: no extraction when disabled' => sub {
     my $store = Clam::Store->new(db => ':memory:');
     my $bus = Clam::Bus->new(store => $store);
     my $wm = Clam::WorldModel->new(store => $store);
+    my $api = _make_api($store, $bus);
 
-    my $ni = Clam::NeuroIntegration->new(
-        store => $store, bus => $bus, world_model => $wm, extract => 0,
-    );
+    my $ni = Clam::NeuroIntegration->new(world_model => $wm, extract => 0);
+    $ni->register($api);
 
     my $sid = $store->create_session(title => 'test');
     $store->append_message(session_id => $sid, role => 'user', content => 'Hello');
@@ -179,8 +164,6 @@ subtest 'Phase 3: no extraction when disabled' => sub {
 # === Test 8: Entity extraction helpers ===
 
 subtest 'Entity extraction' => sub {
-    require Clam::NeuroIntegration;
-
     my @ents = Clam::NeuroIntegration::_extract_entities(
         'Alice went to Paris with Bob');
     my @names = map { $_->{name} } @ents;
@@ -191,8 +174,6 @@ subtest 'Entity extraction' => sub {
 };
 
 subtest 'Fact extraction' => sub {
-    require Clam::NeuroIntegration;
-
     my @facts = Clam::NeuroIntegration::_extract_facts(
         'Perl is a scripting language. Python has many libraries.');
     ok(scalar @facts >= 2, 'extracted facts');
@@ -207,18 +188,15 @@ subtest 'Metrics tracking' => sub {
     my $store = Clam::Store->new(db => ':memory:');
     my $bus = Clam::Bus->new(store => $store);
     my $wm = Clam::WorldModel->new(store => $store);
+    my $api = _make_api($store, $bus);
 
     require Clam::Metrics;
     my $metrics = Clam::Metrics->new(store => $store);
-
     $wm->add_entity(type => 'concept', name => 'Test', attributes => {});
 
     my $ni = Clam::NeuroIntegration->new(
-        store       => $store,
-        bus         => $bus,
-        world_model => $wm,
-        metrics     => $metrics,
-    );
+        world_model => $wm, metrics => $metrics);
+    $ni->register($api);
 
     $bus->publish('context', { messages => [{ role => 'user', content => 'Tell me about Test' }] });
     $bus->publish('message_end', { role => 'assistant', content => { text => 'Test is fine', tool_calls => [] } });
@@ -231,12 +209,11 @@ subtest 'Metrics tracking' => sub {
 subtest 'Works without world model or rules' => sub {
     my $store = Clam::Store->new(db => ':memory:');
     my $bus = Clam::Bus->new(store => $store);
+    my $api = _make_api($store, $bus);
 
-    my $ni = Clam::NeuroIntegration->new(
-        store => $store, bus => $bus,
-    );
+    my $ni = Clam::NeuroIntegration->new;
+    $ni->register($api);
 
-    # Should not crash.
     $bus->publish('context', { messages => [{ role => 'user', content => 'hello' }] });
     $bus->publish('message_end', { role => 'assistant', content => { text => 'hi', tool_calls => [] } });
     $bus->publish('agent_end', {});

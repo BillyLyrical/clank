@@ -115,7 +115,7 @@ subtest 'Severity: warn violations not blocking' => sub {
 
 subtest 'Custom constraint: register and validate' => sub {
     my $c = Clam::Constraints->new;
-    $c->register(
+    $c->add_constraint(
         name     => 'no_jargon',
         desc     => 'Avoid technical jargon',
         severity => 'warn',
@@ -137,9 +137,9 @@ subtest 'Custom constraint: register and validate' => sub {
 subtest 'Unregister constraint' => sub {
     my $c = Clam::Constraints->new;
     my $before = scalar @{$c->list_schemas};
-    $c->register(name => 'temp', fn => sub { () });
+    $c->add_constraint(name => 'temp', fn => sub { () });
     is(scalar @{$c->list_schemas}, $before + 1, 'added');
-    $c->unregister('temp');
+    $c->remove_constraint('temp');
     is(scalar @{$c->list_schemas}, $before, 'removed');
 };
 
@@ -168,21 +168,16 @@ subtest 'Format for revision' => sub {
 subtest 'Bus: message_end triggers validation' => sub {
     my $bus_store = Clam::Store->new(db => ':memory:');
     my $bus = Clam::Bus->new(store => $bus_store);
-    my $c = Clam::Constraints->new(bus => $bus);
+    require Clam::Wit::API;
+    my $api = Clam::Wit::API->new(bus => $bus, store => $bus_store);
+    my $c = Clam::Constraints->new;
+    $c->register($api);
 
-    my @received;
-    $bus->subscribe('constraint_violations', sub {
-        my ($ev) = @_;
-        push @received, $ev->{payload};
-    }, name => 'test_collector');
-
-    # Publish a message_end with violating content.
     my $result = $bus->publish('message_end', {
         role    => 'assistant',
         content => { text => 'This code always works without exception.', tool_calls => [] },
     });
 
-    # The constraints subscriber should have returned a violation payload.
     my @violations = grep { ref $_ eq 'HASH' && ref $_->{content}{_violations} eq 'ARRAY' } @{$result->{results}};
     ok(scalar @violations >= 1, 'constraint violation returned from bus');
 };

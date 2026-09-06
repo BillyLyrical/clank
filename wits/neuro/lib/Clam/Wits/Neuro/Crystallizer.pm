@@ -8,7 +8,7 @@
 #
 # Pipeline: conversation → pattern extraction → validate → register rule.
 # Hooks into agent_end to analyze completed conversations.
-package Clam::Crystallizer;
+package Clam::Wits::Neuro::Crystallizer;
 use strict;
 use warnings;
 use Clam::Util qw(now_ms jencode jdecode);
