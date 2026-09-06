@@ -389,13 +389,6 @@ Every rule is a Perl expression you can debug.
 
 ## 7. What Comes Next
 
-### Constraint Schemas from Philosophical Frameworks
-
-The philosophical constraint schemas (Stoic, Confucian, Care Ethics, Marx,
-Jung, Freud) from the original AGI.md plan are available as a wit rather
-than built-in constraints. They can be loaded when needed without burdening
-every session.
-
 ### Real-World Testing
 
 The infrastructure is built. The next step is running it against real coding

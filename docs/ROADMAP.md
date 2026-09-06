@@ -541,11 +541,11 @@ Features that make Clam more than a harness — a complete environment.
 
 | Item | Status | Depends on | Why |
 |------|--------|-----------|-----|
-| Subagents (fork Loop for parallel work) | ⬜ TODO | Core stable | Multi-file editing, research tasks |
+| Subagents (fork Loop for parallel work) | ✅ Done | Core stable | Multi-file editing, research tasks |
 | Background persistence (clamd sessions survive disconnect) | ⬜ TODO | clamd stable | Long-running tasks |
-| RAG/FTS5 retrieval-based tool selection (RATS) | ⬜ TODO | Wit registry DB | Hundreds of wits without prompt bloat |
-| Per-session wit loading | ⬜ TODO | Wit lifecycle | Different wits for different tasks |
-| Director pattern (plan/goal/force-tool) | ⬜ TODO | Bus hooks | Multi-turn autonomous behaviors |
+| RAG/FTS5 retrieval-based tool selection (RATS) | ✅ Done | Wit registry DB | Hundreds of wits without prompt bloat |
+| Per-session wit loading | ✅ Done | Wit lifecycle | Different wits for different tasks |
+| Director pattern (plan/goal/force-tool) | ✅ Done | Bus hooks | Multi-turn autonomous behaviors |
 | Code crystallization (LLM → deterministic rules) | ✅ Done | Logic deck | The system gets faster with use |
 
 ### Phase 4: The Minsky Mind (aspirational)
@@ -609,27 +609,4 @@ These are decisions to make as we proceed, not blockers:
 | `docs/DRIVER.md` | Clam::Driver and clamd operational docs | **Keep — user-facing reference** |
 | `_tmp/minsky.txt` (clam-old) | 300+ agent types, Society of Mind exploration | **Historical — ideas folded into §3.1** |
 
-Deleted (consolidated into ROADMAP):
-- `docs/DESIGN.md` → §2, §2.1, §2.2, §2.3
-- `docs/plan.txt` → §3, §7, §8
-- `docs/verdict` → §5.6
-- `docs/logic` → §7
-- `docs/cordis` → §4.3
 
-## Appendix B: Clam v1 Postmortem (What NOT to Repeat)
-
-| Problem | v1 Count | v2 Approach |
-|---------|----------|-------------|
-| Perl modules | 68 | ~40 core + wit libraries |
-| .wit files | 654 | 125 (port selectively) |
-| Deck directories | 77 | 10 (grow on demand) |
-| Extension mechanisms | 5 (Wits, Plugins, Skills, Rules, Recipes) | 1 (Wits) |
-| Reasoning engines | 6 | 2 (Logic + Rules) |
-| Agent coordination | 5 (Band, Society, Debate, Swarm, Federation) | Bus topics |
-| Knowledge systems | 5 (Dream, Wiki, Skills, Store, Recipe) | Store + FTS5 |
-| Communication patterns | 4 (Bus, Blackboard, Store, TiedHash) | Bus over Store |
-| God Object (Core.pm) | 1585 lines | App.pm + Loop.pm + REPL.pm |
-| Process turn() | 22 steps, 300 lines | Loop.pm (Pi port) |
-| Philosophy decks | 8 (linus, rms, larry, etc.) | 0 |
-
-The pattern: v1 tried to be everything. v2 does one thing well and lets wits add the rest.

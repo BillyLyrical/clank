@@ -140,6 +140,10 @@ sub start_session {
         metrics  => $self->{metrics},
     );
 
+    # Register subagent spawn tool (needs loop reference).
+    require Clam::Tools::Spawn;
+    $session->add_tool(Clam::Tools::Spawn->new(loop => $self->{loop}));
+
     $self->{bus}->publish('session_start', { session_id => $session->id });
     return $session;
 }

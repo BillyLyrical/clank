@@ -39,8 +39,21 @@ sub provider { $_[0]->{provider} }
 sub cwd      { $_[0]->{cwd} }
 
 sub add_tool { my ($s, $t) = @_; push @{ $s->{tools} }, $t; return $s }
-sub tools    { @{ $_[0]->{tools} } }
-sub tool_names { map { $_->{name} } @{ $_[0]->{tools} } }
+sub tools    {
+    my ($self) = @_;
+    my @all = @{ $self->{tools} };
+    return @all unless $self->{tool_filter};
+    my %allowed = map { $_ => 1 } @{ $self->{tool_filter} };
+    return grep { $allowed{ $_->{name} } } @all;
+}
+sub tool_names { map { $_->{name} } $_[0]->tools }
+
+# Restrict which tools are available in this session.
+# Pass an arrayref of tool names, or undef to clear the filter.
+sub set_tool_filter {
+    my ($self, $names) = @_;
+    $self->{tool_filter} = $names;
+}
 
 sub system_prompt {
     my ($self) = @_;

@@ -25,6 +25,7 @@ sub new {
         tracer    => $o{tracer},
         cache     => $o{cache},
         metrics   => $o{metrics},
+        max_tools => $o{max_tools},    # RATS: max tools to send to LLM (undef = all)
 
         aborted   => 0,
     }, $class;
@@ -97,7 +98,22 @@ sub run_prompt {
         }
 
         # 4) build provider payload; before_provider_request may replace it.
-        my @schemas = map { $_->openai_schema } $session->tools;
+        # RATS: select relevant tools based on the current prompt.
+        my @all_tools = $session->tools;
+        my @schemas;
+        if ($self->{max_tools} && @all_tools > $self->{max_tools}) {
+            require Clam::ToolSelector;
+            my $last_msg = $msgs->[-1]{content} // '';
+            my $selected = Clam::ToolSelector->select(
+                tools  => \@all_tools,
+                prompt => $last_msg,
+                max    => $self->{max_tools},
+            );
+            @schemas = map { $_->openai_schema } @$selected;
+            $self->{metrics}->inc('tools.rats_filtered') if $self->{metrics};
+        } else {
+            @schemas = map { $_->openai_schema } @all_tools;
+        }
         my $payload = $self->_provider->chat_payload(
             messages => [ { role => 'system', content => $sp }, @$msgs ],
             tools    => \@schemas,
@@ -360,6 +376,85 @@ sub _find_tool {
         return $t if $t->{name} eq $name;
     }
     return undef;
+}
+
+# ---------------------------------------------------------------------------
+# Subagent spawning: create a child loop with its own session, shared bus/store.
+# ---------------------------------------------------------------------------
+
+# Spawn a subagent that runs a prompt in an isolated session.
+# Returns { ok, output, session_id, turns } on completion.
+sub spawn {
+    my ($self, %args) = @_;
+    my $prompt = $args{prompt} or die "spawn requires prompt\n";
+    my $bus    = $self->_bus;
+    my $store  = $self->{session}{store};
+    my $parent = $self->{session};
+
+    # Create child session with same store/bus/provider but new ID.
+    require Clam::Session;
+    my $child_session = Clam::Session->new(
+        store    => $store,
+        bus      => $bus,
+        provider => $parent->{provider},
+        name     => $args{name} // "subagent_" . time(),
+    );
+
+    # Copy tools from parent to child.
+    for my $tool ($parent->tools) {
+        $child_session->add_tool($tool);
+    }
+
+    # Copy skills and context files.
+    $child_session->{skills}        = [ @{ $parent->{skills}        // [] } ];
+    $child_session->{context_files} = [ @{ $parent->{context_files} // [] } ];
+
+    # Publish subagent.spawn event.
+    $bus->publish('subagent.spawn', {
+        parent_session_id => $parent->id,
+        child_session_id  => $child_session->id,
+        prompt            => $prompt,
+    });
+
+    # Create child loop with same primitives.
+    my $child_loop = ref($self)->new(
+        session   => $child_session,
+        stream    => 0,   # subagents are non-streaming
+        max_turns => $args{max_turns} // 30,
+        governor  => $self->{governor},
+        tracer    => $self->{tracer},
+        cache     => $self->{cache},
+        metrics   => $self->{metrics},
+    );
+
+    # Run the prompt.
+    my $result = $child_loop->run_prompt($prompt);
+
+    # Publish subagent.done event.
+    $bus->publish('subagent.done', {
+        parent_session_id => $parent->id,
+        child_session_id  => $child_session->id,
+        ok                => $result->{ok},
+        turns             => $result->{turns},
+        error             => $result->{error},
+    });
+
+    # Return child's last assistant message as output.
+    my $output = '';
+    if ($result->{ok}) {
+        my $leaf = $store->get_message($store->leaf_message($child_session->id));
+        if ($leaf && $leaf->{role} eq 'assistant' && ref $leaf->{content} eq 'HASH') {
+            $output = $leaf->{content}{text} // '';
+        }
+    }
+
+    return {
+        ok         => $result->{ok},
+        output     => $output,
+        session_id => $child_session->id,
+        turns      => $result->{turns},
+        error      => $result->{error},
+    };
 }
 
 1;
