@@ -32,7 +32,7 @@ time.
 
 ## 2. What We Built
 
-### 2.1 The World Model (`lib/Clam/WorldModel.pm`)
+### 2.1 The World Model (`lib/AI/Clam/WorldModel.pm`)
 
 A structured knowledge base backed by SQLite, with five tables:
 
@@ -58,7 +58,7 @@ semantics, confidence propagation, and counterfactual reasoning.
 - **Belief revision** — confidence propagation through dependency graphs
 - **FTS5 integration** — full-text search over entities, beliefs, and facts
 
-### 2.2 The Rules Engine (`lib/Clam/Rules/`)
+### 2.2 The Rules Engine (`lib/AI/Clam/Rules/`)
 
 A complete rule evaluation system:
 
@@ -75,7 +75,7 @@ A complete rule evaluation system:
 The engine supports backward chaining, negation as failure, rule composition,
 and incremental re-evaluation when facts change.
 
-### 2.3 The Bidirectional Integration (`lib/Clam/NeuroIntegration.pm`)
+### 2.3 The Bidirectional Integration (`lib/AI/Clam/NeuroIntegration.pm`)
 
 Three-phase pipeline that makes the LLM and world model talk to each other:
 
@@ -94,7 +94,7 @@ grows from every interaction.
 
 All three phases hook into the bus — no changes to Loop.pm required.
 
-### 2.4 Crystallization (`lib/Clam/Crystallizer.pm`)
+### 2.4 Crystallization (`lib/AI/Clam/Crystallizer.pm`)
 
 When the LLM solves a problem, the solution is captured as a deterministic
 rule. The system gets cheaper and faster the more it's used.
@@ -103,7 +103,7 @@ Pipeline: conversation → pattern extraction (heuristic or LLM) → validate
 against world model → register rule in engine. The Crystallizer hooks into
 `agent_end` to analyze completed conversations automatically.
 
-### 2.5 Output Constraints (`lib/Clam/Constraints.pm`)
+### 2.5 Output Constraints (`lib/AI/Clam/Constraints.pm`)
 
 A registry of validation schemas that check LLM output before emission:
 
@@ -117,7 +117,7 @@ Custom constraints are trivial to add — register a name, description,
 severity, and validation function. Constraints hook into `message_end` via
 the bus.
 
-### 2.6 Goal Planning (`lib/Clam/Logic/GoalPlanner.pm`)
+### 2.6 Goal Planning (`lib/AI/Clam/Logic/GoalPlanner.pm`)
 
 Decomposes goals into subgoals with dependency tracking and relevance scoring.
 Uses the world model's belief graph to prioritize: beliefs that are close to a
@@ -126,7 +126,7 @@ goal in the dependency graph and have high confidence score highest.
 Supports topological execution planning, automatic subgoal completion
 detection, and hierarchical goal structures.
 
-### 2.7 Taxonomy (`lib/Clam/Logic/Taxonomy.pm`)
+### 2.7 Taxonomy (`lib/AI/Clam/Logic/Taxonomy.pm`)
 
 Hierarchical classification for entities, beliefs, and goals. Categories form
 trees with inherited properties. Enables category-aware queries across the
@@ -229,9 +229,9 @@ crystallized rules speed up repeated tasks.
 ### 4.2 As a Reasoning System
 
 ```perl
-use Clam::App;
+use AI::Clam::App;
 
-my $app = Clam::App->new(provider => 'ollama', model => 'llama3');
+my $app = AI::Clam::App->new(provider => 'ollama', model => 'llama3');
 $app->start_session;
 
 # The world model is automatically available.
@@ -246,7 +246,7 @@ my $facts = $wm->query_facts(entity_id => 'perl');
 my $beliefs = $wm->query_beliefs(min_confidence => 0.7);
 
 # Use goal planning:
-my $gp = Clam::Logic::GoalPlanner->new(world_model => $wm);
+my $gp = AI::Clam::Logic::GoalPlanner->new(world_model => $wm);
 my $goal_id = $gp->set_goal(statement => 'Learn Perl', priority => 1);
 $gp->add_subgoal(goal_id => $goal_id, statement => 'Read perldoc');
 $gp->add_subgoal(goal_id => $goal_id, statement => 'Write a script', depends_on => [$subgoal_id]);
@@ -270,9 +270,9 @@ $wm->add_relation(source_id => 'perl', target_id => 'project_x', type => 'used_b
 ### 4.4 Extending with Custom Constraints
 
 ```perl
-use Clam::Constraints;
+use AI::Clam::Constraints;
 
-my $c = Clam::Constraints->new(world_model => $wm);
+my $c = AI::Clam::Constraints->new(world_model => $wm);
 $c->add_constraint(
     name     => 'no_jargon',
     desc     => 'Avoid technical jargon for non-technical users',
@@ -381,10 +381,10 @@ Every rule is a Perl expression you can debug.
 
 ### Module Count
 
-- Core modules: 32 (lib/Clam/)
-- Logic modules: 7 (lib/Clam/Logic/)
-- Rules modules: 7 (lib/Clam/Rules/)
-- Provider modules: 8 (lib/Clam/Provider/)
+- Core modules: 32 (lib/AI/Clam/)
+- Logic modules: 7 (lib/AI/Clam/Logic/)
+- Rules modules: 7 (lib/AI/Clam/Rules/)
+- Provider modules: 8 (lib/AI/Clam/Provider/)
 - Wit decks: 10 (wits/)
 
 ## 7. What Comes Next

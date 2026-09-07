@@ -36,14 +36,14 @@ Three layers. Nothing calls anything else directly — everything goes through t
 └──────────────────┬──────────────────────────┘
                    │
 ┌──────────────────▼──────────────────────────┐
-│              Clam::App                       │
+│              AI::Clam::App                       │
 │  ┌─────────┐  ┌─────────┐  ┌────────────┐  │
 │  │  Store  │  │   Bus   │  │  Provider   │  │
 │  │ (SQLite)│◄─┤(pub/sub)│  │ (LLM HTTP)  │  │
 │  └─────────┘  └────┬────┘  └────────────┘  │
 │                     │                        │
 │  ┌──────────────────▼─────────────────────┐  │
-│  │         Clam::Loop (Pi port)           │  │
+│  │         AI::Clam::Loop (Pi port)           │  │
 │  │  prompt → tools → LLM → tools → ...   │  │
 │  └──────────────────┬─────────────────────┘  │
 │                     │                        │
@@ -112,11 +112,11 @@ Clam v1 had six reasoning systems. Clam v2 correctly distilled these into two:
 
 | Engine | Purpose | Status |
 |--------|---------|--------|
-| **Clam::Logic** (Datalog) | What follows necessarily — formal reasoning | ✅ In logic deck |
-| **Clam::Rules** (heuristic) | What matches, and how confidently | ✅ In logic deck |
-| **Clam::Rules::FSM** | State-dependent behavior | ✅ In logic deck |
-| **Clam::Rules::BehaviorTree** | Prioritized fallback decisions | ✅ In logic deck |
-| **Clam::Rules::DecisionTree** | Rule chains with branching | ✅ In logic deck |
+| **AI::Clam::Logic** (Datalog) | What follows necessarily — formal reasoning | ✅ In logic deck |
+| **AI::Clam::Rules** (heuristic) | What matches, and how confidently | ✅ In logic deck |
+| **AI::Clam::Rules::FSM** | State-dependent behavior | ✅ In logic deck |
+| **AI::Clam::Rules::BehaviorTree** | Prioritized fallback decisions | ✅ In logic deck |
+| **AI::Clam::Rules::DecisionTree** | Rule chains with branching | ✅ In logic deck |
 | **SAT (picosat)** | Constraint satisfaction | ✅ In logic deck |
 
 Division of labor: Logic answers "what follows necessarily." Rules answers "what matches." They compose at the wit layer.
@@ -181,7 +181,7 @@ REPL slash commands, and event hooks on the bus.
 
 | Concern | Mechanism | Custom code? |
 |---------|-----------|-------------|
-| Distribution | `cpanm Clam::Wits::Foo` | No |
+| Distribution | `cpanm AI::Clam::Wits::Foo` | No |
 | Discovery | `grep -r "# CLAM-WIT:" @INC/Clam/Wits/` | No |
 | Metadata | `# CLAM-WIT:` comment in module file | No |
 | Dependencies | `META.json` + cpanm | No |
@@ -203,7 +203,7 @@ the module.
 # CLAM-WIT: hint=Git safety: vetoes rm, reset --hard, push -f, force
 # CLAM-WIT: author=you
 # CLAM-WIT: license=Artistic-2.0
-package Clam::Wits::Foo;
+package AI::Clam::Wits::Foo;
 use strict;
 use warnings;
 
@@ -244,11 +244,11 @@ The wit registers:
 1. Scan: `grep -r "# CLAM-WIT:" @INC/Clam/Wits/`
 2. Cache: Store metadata in SQLite DB
 3. Select: Query DB to decide which wits to load
-4. Load: `require Clam::Wits::Foo` (Perl finds it in `@INC`)
+4. Load: `require AI::Clam::Wits::Foo` (Perl finds it in `@INC`)
 5. Register: Call `$wit->register($api)`
 
 **Development** (in-tree wits):
-1. Scan: `grep -r "# CLAM-WIT:" wits/*/lib/Clam/Wits/`
+1. Scan: `grep -r "# CLAM-WIT:" wits/*/lib/AI/Clam/Wits/`
 2. Select: Same as production
 3. Load: Add each wit's `lib/` to `@INC`, then `require`
 4. Register: Same as production
@@ -278,15 +278,15 @@ restart — honest Unix answer: disable + restart clamd.
 ```
 Clam/
   lib/Clam.pm
-  lib/Clam/App.pm
-  lib/Clam/Loop.pm
-  lib/Clam/Bus.pm
-  lib/Clam/Store.pm
-  lib/Clam/Provider/*.pm
-  lib/Clam/Tool.pm
-  lib/Clam/Tools/*.pm
-  lib/Clam/Wit/API.pm
-  lib/Clam/Wit/Session.pm
+  lib/AI/Clam/App.pm
+  lib/AI/Clam/Loop.pm
+  lib/AI/Clam/Bus.pm
+  lib/AI/Clam/Store.pm
+  lib/AI/Clam/Provider/*.pm
+  lib/AI/Clam/Tool.pm
+  lib/AI/Clam/Tools/*.pm
+  lib/AI/Clam/Wit/API.pm
+  lib/AI/Clam/Wit/Session.pm
   bin/clam
   bin/clamd
   META.json
@@ -299,8 +299,8 @@ All other wits are separate dists.
 
 ```
 Clam-Wits-Foo/
-  lib/Clam/Wits/Foo.pm
-  lib/Clam/Wits/Foo/Helper.pm
+  lib/AI/Clam/Wits/Foo.pm
+  lib/AI/Clam/Wits/Foo/Helper.pm
   META.json
   t/
 ```
@@ -355,47 +355,47 @@ Trigger: `est_tokens(context) > context_window - reserve` (default 16384). Check
 bin/clam                  CLI + Term::ReadLine REPL (unified command dispatch)
 bin/clamd                 NDJSON daemon front-end
 lib/Clam.pm               version, facade
-lib/Clam/Util.pm          uuid4, now_ms, json, truncate_head/tail
-lib/Clam/Store.pm         DBI/SQLite: sessions, messages, events, kv, rag+FTS5
-lib/Clam/Bus.pm           pub/sub over Store; glob topics; request/reply
-lib/Clam/Provider.pm      base class (stream_chat iterator)
-lib/Clam/Provider/OpenAICompat.pm   SSE chat-completions client
-lib/Clam/Provider/LMStudio.pm       OpenAICompat @ localhost:1234/v1
-lib/Clam/Provider/OpenAI.pm         OpenAI API
-lib/Clam/Provider/Anthropic.pm      Anthropic Messages API
-lib/Clam/Provider/Gemini.pm         Google Gemini API
-lib/Clam/Provider/Azure.pm          Azure OpenAI wrapper
-lib/Clam/Provider/Ollama.pm         Ollama local API
-lib/Clam/Provider/Mock.pm           deterministic offline provider (tests)
-lib/Clam/Providers.pm     registry + config/key resolution
-lib/Clam/Tool.pm          tool base class (schema + execute)
-lib/Clam/Session.pm       session tree over Store
-lib/Clam/Session/Messages.pm       message tree ops
-lib/Clam/Session/Compaction.pm     threshold compaction (Pi semantics)
-lib/Clam/Session/SystemPrompt.pm   prompt building
-lib/Clam/Loop.pm          agent loop = Pi runLoop port
-lib/Clam/Wit/API.pm       what Wits receive: on/register_tool/command/ui/help
-lib/Clam/Wit/Dispatch.pm  inter-wit execution
-lib/Clam/Wit/Scanner.pm   discovers user wits via # CLAM-WIT: grep
-lib/Clam/PluginManager.pm discovery + load + error isolation
-lib/Clam/Skills.pm        SKILL.md discovery + prompt section
-lib/Clam/REPL.pm          interactive loop, slash commands, streaming
-lib/Clam/Driver.pm        NDJSON protocol driver
-lib/Clam/Logic/*.pm       Datalog engine (Term, Unify, Solver, KB, Parser)
-lib/Clam/Logic/GoalPlanner.pm      goal decomposition with belief graph scoring
-lib/Clam/Logic/Taxonomy.pm         hierarchical classification with inheritance
-lib/Clam/Rules.pm         rule-engine facade
-lib/Clam/Rules/{Rule,Engine,DSL,Parser}.pm
-lib/Clam/Rules/{DecisionTree,FSM,BehaviorTree}.pm
-lib/Clam/WorldModel.pm    neurosymbolic world model (entities, relations, facts, beliefs)
-lib/Clam/NeuroIntegration.pm  bidirectional LLM ↔ world model (3 phases)
-lib/Clam/Crystallizer.pm  LLM solutions → deterministic rules
-lib/Clam/Constraints.pm   output validation schemas
-lib/Clam/Governor.pm      rate limiter, budget cap, circuit breaker
-lib/Clam/Tracer.pm        event-trace log for observability
-lib/Clam/Cache.pm         TTL cache for LLM responses
-lib/Clam/Metrics.pm       counters for LLM calls, tokens, rules
-lib/Clam/EventSourcing.pm immutable state-change log
+lib/AI/Clam/Util.pm          uuid4, now_ms, json, truncate_head/tail
+lib/AI/Clam/Store.pm         DBI/SQLite: sessions, messages, events, kv, rag+FTS5
+lib/AI/Clam/Bus.pm           pub/sub over Store; glob topics; request/reply
+lib/AI/Clam/Provider.pm      base class (stream_chat iterator)
+lib/AI/Clam/Provider/OpenAICompat.pm   SSE chat-completions client
+lib/AI/Clam/Provider/LMStudio.pm       OpenAICompat @ localhost:1234/v1
+lib/AI/Clam/Provider/OpenAI.pm         OpenAI API
+lib/AI/Clam/Provider/Anthropic.pm      Anthropic Messages API
+lib/AI/Clam/Provider/Gemini.pm         Google Gemini API
+lib/AI/Clam/Provider/Azure.pm          Azure OpenAI wrapper
+lib/AI/Clam/Provider/Ollama.pm         Ollama local API
+lib/AI/Clam/Provider/Mock.pm           deterministic offline provider (tests)
+lib/AI/Clam/Providers.pm     registry + config/key resolution
+lib/AI/Clam/Tool.pm          tool base class (schema + execute)
+lib/AI/Clam/Session.pm       session tree over Store
+lib/AI/Clam/Session/Messages.pm       message tree ops
+lib/AI/Clam/Session/Compaction.pm     threshold compaction (Pi semantics)
+lib/AI/Clam/Session/SystemPrompt.pm   prompt building
+lib/AI/Clam/Loop.pm          agent loop = Pi runLoop port
+lib/AI/Clam/Wit/API.pm       what Wits receive: on/register_tool/command/ui/help
+lib/AI/Clam/Wit/Dispatch.pm  inter-wit execution
+lib/AI/Clam/Wit/Scanner.pm   discovers user wits via # CLAM-WIT: grep
+lib/AI/Clam/PluginManager.pm discovery + load + error isolation
+lib/AI/Clam/Skills.pm        SKILL.md discovery + prompt section
+lib/AI/Clam/REPL.pm          interactive loop, slash commands, streaming
+lib/AI/Clam/Driver.pm        NDJSON protocol driver
+lib/AI/Clam/Logic/*.pm       Datalog engine (Term, Unify, Solver, KB, Parser)
+lib/AI/Clam/Logic/GoalPlanner.pm      goal decomposition with belief graph scoring
+lib/AI/Clam/Logic/Taxonomy.pm         hierarchical classification with inheritance
+lib/AI/Clam/Rules.pm         rule-engine facade
+lib/AI/Clam/Rules/{Rule,Engine,DSL,Parser}.pm
+lib/AI/Clam/Rules/{DecisionTree,FSM,BehaviorTree}.pm
+lib/AI/Clam/WorldModel.pm    neurosymbolic world model (entities, relations, facts, beliefs)
+lib/AI/Clam/NeuroIntegration.pm  bidirectional LLM ↔ world model (3 phases)
+lib/AI/Clam/Crystallizer.pm  LLM solutions → deterministic rules
+lib/AI/Clam/Constraints.pm   output validation schemas
+lib/AI/Clam/Governor.pm      rate limiter, budget cap, circuit breaker
+lib/AI/Clam/Tracer.pm        event-trace log for observability
+lib/AI/Clam/Cache.pm         TTL cache for LLM responses
+lib/AI/Clam/Metrics.pm       counters for LLM calls, tokens, rules
+lib/AI/Clam/EventSourcing.pm immutable state-change log
 ```
 
 ---
@@ -500,7 +500,7 @@ The core harness is done and working (705 tests, all passing).
 - SQLite store + pub/sub bus
 - LLM providers: Ollama, OpenAI, Anthropic, Gemini, Azure, LMStudio, Mock (8 providers)
 - REPL with streaming, slash commands (unified command dispatch)
-- Clam::Driver + clamd daemon (NDJSON)
+- AI::Clam::Driver + clamd daemon (NDJSON)
 - Wit system (CPAN modules, grep discovery, eval isolation)
 - Session wit (built-in, registers core commands)
 - 10 wit decks (125 wits total), 705 tests offline
@@ -571,8 +571,8 @@ Clam v2 is what you show to Perl greybeards:
 > Four tools, 125 curated wits across 10 decks, Datalog engine, rules DSL, database shell,
 > Perl development suite (syntax check, code review, POD, test generation).
 > 705 tests, all offline. `prove -l t/` green.
-> A wit is a CPAN module in Clam::Wits::* with a register() method.
-> `cpanm Clam::Wits::Foo` and it works.
+> A wit is a CPAN module in AI::Clam::Wits::* with a register() method.
+> `cpanm AI::Clam::Wits::Foo` and it works.
 > `grep -r "# CLAM-WIT:" @INC/Clam/Wits/` finds all installed wits.
 >
 > Supports Ollama, OpenAI, Anthropic, Gemini, Azure out of the box.
@@ -606,7 +606,7 @@ These are decisions to make as we proceed, not blockers:
 | `docs/ROADMAP.md` | This document — vision, architecture, decisions | **Primary source of truth** |
 | `docs/AGI.md` | Neurosymbolic AI: theory, components, usage, aspirations | **Keep — neurosymbolic reference** |
 | `docs/Wits.md` | Wit system spec (CPAN modules, `# CLAM-WIT:`, discovery, registration) | **Keep — detailed how-to** |
-| `docs/DRIVER.md` | Clam::Driver and clamd operational docs | **Keep — user-facing reference** |
+| `docs/DRIVER.md` | AI::Clam::Driver and clamd operational docs | **Keep — user-facing reference** |
 | `_tmp/minsky.txt` (clam-old) | 300+ agent types, Society of Mind exploration | **Historical — ideas folded into §3.1** |
 
 

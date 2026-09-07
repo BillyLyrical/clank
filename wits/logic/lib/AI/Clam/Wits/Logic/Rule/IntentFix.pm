@@ -1,0 +1,27 @@
+# CLAM-WIT: name=IntentFix
+# CLAM-WIT: version=1.0.0
+# CLAM-WIT: about=Classify fix intent
+# CLAM-WIT: usage=Classify fix intent
+# CLAM-WIT: hint=intent, fix, bug, repair, patch
+# CLAM-WIT: author=CLAM
+# CLAM-WIT: license=Artistic-2.0
+package AI::Clam::Wits::Logic::Rule::IntentFix;
+use strict;
+use warnings;
+
+sub register {
+    my ($self, $api) = @_;
+    $api->register_tool(
+        name        => 'intent_fix',
+        description => 'Classify fix intent',
+        parameters  => { type => 'object', properties => { text => { type => 'string' } }, required => ['text'] },
+        execute     => sub {
+            my ($args) = @_;
+            my $text = $args->{text} // '';
+            # TODO: implement classification logic
+            return undef;
+        },
+    );
+}
+
+1;

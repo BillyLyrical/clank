@@ -11,7 +11,7 @@ GetOptions('clean' => \$CLEAN) or usage();
 
 my $ROOT = find_root();
 my $WITS_DIR = "$ROOT/wits";
-my $LIB_WITS = "$ROOT/lib/Clam/Wits";
+my $LIB_WITS = "$ROOT/lib/AI/Clam/Wits";
 
 die "Cannot find wits/ directory at $WITS_DIR\n" unless -d $WITS_DIR;
 
@@ -47,7 +47,7 @@ sub create_symlinks {
         next unless -d $wit_dir;
         my $name = basename($wit_dir);
 
-        my $ns_dir = "$wit_dir/lib/Clam/Wits";
+        my $ns_dir = "$wit_dir/lib/AI/Clam/Wits";
         next unless -d $ns_dir;
 
         my @ns_entries = glob("$ns_dir/*");
@@ -114,7 +114,7 @@ sub usage {
     print STDERR <<'EOF';
 Usage: $0 [OPTIONS]
 
-Create relative symlinks from lib/Clam/Wits/* to wits/*/lib/Clam/Wits/*.
+Create relative symlinks from lib/AI/Clam/Wits/* to wits/*/lib/AI/Clam/Wits/*.
 
 This makes the dev tree behave like an installed CPAN tree, so tests
 and IDEs can find all wit modules from a single @INC path.

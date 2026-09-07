@@ -5,18 +5,18 @@
   "license": "Artistic-2.0",
   "requires": {
     "perl": "5.040001",
-    "Clam": "1.0"
+    "AI::Clam": "1.0"
   },
   "provides": {
-    "Clam::Wits::Git::Status":  { "file": "lib/Clam/Wits/Git/Status.pm",  "version": "1.0.0" },
-    "Clam::Wits::Git::Commit":  { "file": "lib/Clam/Wits/Git/Commit.pm",  "version": "1.0.0" },
-    "Clam::Wits::Git::Stash":   { "file": "lib/Clam/Wits/Git/Stash.pm",   "version": "1.0.0" },
-    "Clam::Wits::Git::Grep":    { "file": "lib/Clam/Wits/Git/Grep.pm",    "version": "1.0.0" },
-    "Clam::Wits::Git::Bisect":  { "file": "lib/Clam/Wits/Git/Bisect.pm",  "version": "1.0.0" },
-    "Clam::Wits::Git::Diff":    { "file": "lib/Clam/Wits/Git/Diff.pm",    "version": "1.0.0" },
-    "Clam::Wits::Git::Ignore":  { "file": "lib/Clam/Wits/Git/Ignore.pm",  "version": "1.0.0" },
-    "Clam::Wits::Git::Blame":   { "file": "lib/Clam/Wits/Git/Blame.pm",   "version": "1.0.0" },
-    "Clam::Wits::Git::Branch":  { "file": "lib/Clam/Wits/Git/Branch.pm",  "version": "1.0.0" },
-    "Clam::Wits::Git::Log":     { "file": "lib/Clam/Wits/Git/Log.pm",     "version": "1.0.0" }
+    "AI::Clam::Wits::Git::Status":  { "file": "lib/AI/Clam/Wits/Git/Status.pm",  "version": "1.0.0" },
+    "AI::Clam::Wits::Git::Commit":  { "file": "lib/AI/Clam/Wits/Git/Commit.pm",  "version": "1.0.0" },
+    "AI::Clam::Wits::Git::Stash":   { "file": "lib/AI/Clam/Wits/Git/Stash.pm",   "version": "1.0.0" },
+    "AI::Clam::Wits::Git::Grep":    { "file": "lib/AI/Clam/Wits/Git/Grep.pm",    "version": "1.0.0" },
+    "AI::Clam::Wits::Git::Bisect":  { "file": "lib/AI/Clam/Wits/Git/Bisect.pm",  "version": "1.0.0" },
+    "AI::Clam::Wits::Git::Diff":    { "file": "lib/AI/Clam/Wits/Git/Diff.pm",    "version": "1.0.0" },
+    "AI::Clam::Wits::Git::Ignore":  { "file": "lib/AI/Clam/Wits/Git/Ignore.pm",  "version": "1.0.0" },
+    "AI::Clam::Wits::Git::Blame":   { "file": "lib/AI/Clam/Wits/Git/Blame.pm",   "version": "1.0.0" },
+    "AI::Clam::Wits::Git::Branch":  { "file": "lib/AI/Clam/Wits/Git/Branch.pm",  "version": "1.0.0" },
+    "AI::Clam::Wits::Git::Log":     { "file": "lib/AI/Clam/Wits/Git/Log.pm",     "version": "1.0.0" }
   }
 }

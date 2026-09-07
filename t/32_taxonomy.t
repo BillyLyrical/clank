@@ -5,18 +5,18 @@ use Test::More;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use Clam::Store;
-use Clam::WorldModel;
-use Clam::Logic::Taxonomy;
+use AI::Clam::Store;
+use AI::Clam::WorldModel;
+use AI::Clam::Logic::Taxonomy;
 
-my $store = Clam::Store->new(db => ':memory:');
-my $wm    = Clam::WorldModel->new(store => $store);
+my $store = AI::Clam::Store->new(db => ':memory:');
+my $wm    = AI::Clam::WorldModel->new(store => $store);
 
 # === Test 1: Construction ===
 
 subtest 'Construction' => sub {
-    my $tx = Clam::Logic::Taxonomy->new(world_model => $wm);
-    isa_ok($tx, 'Clam::Logic::Taxonomy');
+    my $tx = AI::Clam::Logic::Taxonomy->new(world_model => $wm);
+    isa_ok($tx, 'AI::Clam::Logic::Taxonomy');
     my $s = $tx->stats;
     is($s->{categories}, 0, 'starts empty');
 };
@@ -24,7 +24,7 @@ subtest 'Construction' => sub {
 # === Test 2: Create root category ===
 
 subtest 'Create root category' => sub {
-    my $tx = Clam::Logic::Taxonomy->new(world_model => Clam::WorldModel->new(store => Clam::Store->new(db => ':memory:')));
+    my $tx = AI::Clam::Logic::Taxonomy->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
 
     my $id = $tx->create_category(name => 'language', type => 'entity_type');
     ok($id, 'category created');
@@ -38,7 +38,7 @@ subtest 'Create root category' => sub {
 # === Test 3: Create child category ===
 
 subtest 'Create child category' => sub {
-    my $tx = Clam::Logic::Taxonomy->new(world_model => Clam::WorldModel->new(store => Clam::Store->new(db => ':memory:')));
+    my $tx = AI::Clam::Logic::Taxonomy->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
 
     my $lang = $tx->create_category(name => 'language', type => 'entity_type');
     my $script = $tx->create_category(name => 'scripting', type => 'entity_type', parent_id => $lang);
@@ -54,7 +54,7 @@ subtest 'Create child category' => sub {
 # === Test 4: Ancestors ===
 
 subtest 'Ancestors' => sub {
-    my $tx = Clam::Logic::Taxonomy->new(world_model => Clam::WorldModel->new(store => Clam::Store->new(db => ':memory:')));
+    my $tx = AI::Clam::Logic::Taxonomy->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
 
     my $root = $tx->create_category(name => 'knowledge', type => 'belief_category');
     my $sub = $tx->create_category(name => 'technical', type => 'belief_category', parent_id => $root);
@@ -69,7 +69,7 @@ subtest 'Ancestors' => sub {
 # === Test 5: Descendants ===
 
 subtest 'Descendants' => sub {
-    my $tx = Clam::Logic::Taxonomy->new(world_model => Clam::WorldModel->new(store => Clam::Store->new(db => ':memory:')));
+    my $tx = AI::Clam::Logic::Taxonomy->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
 
     my $root = $tx->create_category(name => 'all', type => 'entity_type');
     my $a = $tx->create_category(name => 'A', type => 'entity_type', parent_id => $root);
@@ -83,7 +83,7 @@ subtest 'Descendants' => sub {
 # === Test 6: Descendants depth limit ===
 
 subtest 'Descendants depth limit' => sub {
-    my $tx = Clam::Logic::Taxonomy->new(world_model => Clam::WorldModel->new(store => Clam::Store->new(db => ':memory:')));
+    my $tx = AI::Clam::Logic::Taxonomy->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
 
     my $root = $tx->create_category(name => 'root', type => 'x');
     my $a = $tx->create_category(name => 'A', type => 'x', parent_id => $root);
@@ -100,7 +100,7 @@ subtest 'Descendants depth limit' => sub {
 # === Test 7: Properties ===
 
 subtest 'Properties' => sub {
-    my $tx = Clam::Logic::Taxonomy->new(world_model => Clam::WorldModel->new(store => Clam::Store->new(db => ':memory:')));
+    my $tx = AI::Clam::Logic::Taxonomy->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
 
     my $id = $tx->create_category(name => 'test', type => 'x');
     $tx->set_property(node_id => $id, key => 'color', value => 'blue');
@@ -115,7 +115,7 @@ subtest 'Properties' => sub {
 # === Test 8: Property inheritance ===
 
 subtest 'Property inheritance' => sub {
-    my $tx = Clam::Logic::Taxonomy->new(world_model => Clam::WorldModel->new(store => Clam::Store->new(db => ':memory:')));
+    my $tx = AI::Clam::Logic::Taxonomy->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
 
     my $root = $tx->create_category(name => 'root', type => 'x');
     $tx->set_property(node_id => $root, key => 'lang', value => 'en');
@@ -132,7 +132,7 @@ subtest 'Property inheritance' => sub {
 # === Test 9: Deep inheritance chain ===
 
 subtest 'Deep inheritance' => sub {
-    my $tx = Clam::Logic::Taxonomy->new(world_model => Clam::WorldModel->new(store => Clam::Store->new(db => ':memory:')));
+    my $tx = AI::Clam::Logic::Taxonomy->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
 
     my $a = $tx->create_category(name => 'A', type => 'x');
     $tx->set_property(node_id => $a, key => 'x', value => '1');
@@ -154,7 +154,7 @@ subtest 'Deep inheritance' => sub {
 # === Test 10: Delete property ===
 
 subtest 'Delete property' => sub {
-    my $tx = Clam::Logic::Taxonomy->new(world_model => Clam::WorldModel->new(store => Clam::Store->new(db => ':memory:')));
+    my $tx = AI::Clam::Logic::Taxonomy->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
 
     my $id = $tx->create_category(name => 'test', type => 'x');
     $tx->set_property(node_id => $id, key => 'k', value => 'v');
@@ -165,7 +165,7 @@ subtest 'Delete property' => sub {
 # === Test 11: Map entity to category ===
 
 subtest 'Map entity' => sub {
-    my $tx = Clam::Logic::Taxonomy->new(world_model => Clam::WorldModel->new(store => Clam::Store->new(db => ':memory:')));
+    my $tx = AI::Clam::Logic::Taxonomy->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
 
     my $lang = $tx->create_category(name => 'language', type => 'entity_type');
     my $perl = $tx->create_category(name => 'Perl', type => 'entity_type', parent_id => $lang);
@@ -183,7 +183,7 @@ subtest 'Map entity' => sub {
 # === Test 12: Map belief to category ===
 
 subtest 'Map belief' => sub {
-    my $tx = Clam::Logic::Taxonomy->new(world_model => Clam::WorldModel->new(store => Clam::Store->new(db => ':memory:')));
+    my $tx = AI::Clam::Logic::Taxonomy->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
 
     my $factual = $tx->create_category(name => 'factual', type => 'belief_category');
     my $tech = $tx->create_category(name => 'technical', type => 'belief_category', parent_id => $factual);
@@ -198,7 +198,7 @@ subtest 'Map belief' => sub {
 # === Test 13: Map goal to category ===
 
 subtest 'Map goal' => sub {
-    my $tx = Clam::Logic::Taxonomy->new(world_model => Clam::WorldModel->new(store => Clam::Store->new(db => ':memory:')));
+    my $tx = AI::Clam::Logic::Taxonomy->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
 
     my $learn = $tx->create_category(name => 'learn', type => 'goal_category');
     $tx->map_goal(goal_id => 'g1', node_id => $learn);
@@ -211,9 +211,9 @@ subtest 'Map goal' => sub {
 # === Test 14: entities_in_category ===
 
 subtest 'entities_in_category' => sub {
-    my $store2 = Clam::Store->new(db => ':memory:');
-    my $wm2 = Clam::WorldModel->new(store => $store2);
-    my $tx = Clam::Logic::Taxonomy->new(world_model => $wm2);
+    my $store2 = AI::Clam::Store->new(db => ':memory:');
+    my $wm2 = AI::Clam::WorldModel->new(store => $store2);
+    my $tx = AI::Clam::Logic::Taxonomy->new(world_model => $wm2);
 
     my $lang = $tx->create_category(name => 'language', type => 'entity_type');
     my $script = $tx->create_category(name => 'scripting', type => 'entity_type', parent_id => $lang);
@@ -230,9 +230,9 @@ subtest 'entities_in_category' => sub {
 # === Test 15: beliefs_in_category ===
 
 subtest 'beliefs_in_category' => sub {
-    my $store2 = Clam::Store->new(db => ':memory:');
-    my $wm2 = Clam::WorldModel->new(store => $store2);
-    my $tx = Clam::Logic::Taxonomy->new(world_model => $wm2);
+    my $store2 = AI::Clam::Store->new(db => ':memory:');
+    my $wm2 = AI::Clam::WorldModel->new(store => $store2);
+    my $tx = AI::Clam::Logic::Taxonomy->new(world_model => $wm2);
 
     my $factual = $tx->create_category(name => 'factual', type => 'belief_category');
     my $tech = $tx->create_category(name => 'tech', type => 'belief_category', parent_id => $factual);
@@ -249,7 +249,7 @@ subtest 'beliefs_in_category' => sub {
 # === Test 16: Delete category re-parents children ===
 
 subtest 'Delete category re-parents' => sub {
-    my $tx = Clam::Logic::Taxonomy->new(world_model => Clam::WorldModel->new(store => Clam::Store->new(db => ':memory:')));
+    my $tx = AI::Clam::Logic::Taxonomy->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
 
     my $root = $tx->create_category(name => 'root', type => 'x');
     my $mid = $tx->create_category(name => 'mid', type => 'x', parent_id => $root);
@@ -264,7 +264,7 @@ subtest 'Delete category re-parents' => sub {
 # === Test 17: Root categories ===
 
 subtest 'Root categories' => sub {
-    my $tx = Clam::Logic::Taxonomy->new(world_model => Clam::WorldModel->new(store => Clam::Store->new(db => ':memory:')));
+    my $tx = AI::Clam::Logic::Taxonomy->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
 
     $tx->create_category(name => 'A', type => 'entity_type');
     $tx->create_category(name => 'B', type => 'belief_category');
@@ -280,7 +280,7 @@ subtest 'Root categories' => sub {
 # === Test 18: Stats ===
 
 subtest 'Stats' => sub {
-    my $tx = Clam::Logic::Taxonomy->new(world_model => Clam::WorldModel->new(store => Clam::Store->new(db => ':memory:')));
+    my $tx = AI::Clam::Logic::Taxonomy->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
 
     my $root = $tx->create_category(name => 'root', type => 'x');
     my $child = $tx->create_category(name => 'child', type => 'x', parent_id => $root);
@@ -299,7 +299,7 @@ subtest 'Stats' => sub {
 # === Test 19: has_property_inherited ===
 
 subtest 'has_property_inherited' => sub {
-    my $tx = Clam::Logic::Taxonomy->new(world_model => Clam::WorldModel->new(store => Clam::Store->new(db => ':memory:')));
+    my $tx = AI::Clam::Logic::Taxonomy->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
 
     my $root = $tx->create_category(name => 'root', type => 'x');
     $tx->set_property(node_id => $root, key => 'constraint', value => 'stoic');
@@ -313,7 +313,7 @@ subtest 'has_property_inherited' => sub {
 # === Test 20: entity_under_category ===
 
 subtest 'entity_under_category' => sub {
-    my $tx = Clam::Logic::Taxonomy->new(world_model => Clam::WorldModel->new(store => Clam::Store->new(db => ':memory:')));
+    my $tx = AI::Clam::Logic::Taxonomy->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
 
     my $lang = $tx->create_category(name => 'language', type => 'entity_type');
     my $script = $tx->create_category(name => 'scripting', type => 'entity_type', parent_id => $lang);
@@ -329,7 +329,7 @@ subtest 'entity_under_category' => sub {
 # === Test 21: Invalid parent dies ===
 
 subtest 'Invalid parent dies' => sub {
-    my $tx = Clam::Logic::Taxonomy->new(world_model => Clam::WorldModel->new(store => Clam::Store->new(db => ':memory:')));
+    my $tx = AI::Clam::Logic::Taxonomy->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
 
     eval { $tx->create_category(name => 'orphan', type => 'x', parent_id => 'nonexistent') };
     like($@, qr/not found/, 'dies on invalid parent');
@@ -338,9 +338,9 @@ subtest 'Invalid parent dies' => sub {
 # === Test 22: beliefs_in_category with min_confidence ===
 
 subtest 'beliefs_in_category confidence filter' => sub {
-    my $store2 = Clam::Store->new(db => ':memory:');
-    my $wm2 = Clam::WorldModel->new(store => $store2);
-    my $tx = Clam::Logic::Taxonomy->new(world_model => $wm2);
+    my $store2 = AI::Clam::Store->new(db => ':memory:');
+    my $wm2 = AI::Clam::WorldModel->new(store => $store2);
+    my $tx = AI::Clam::Logic::Taxonomy->new(world_model => $wm2);
 
     my $cat = $tx->create_category(name => 'facts', type => 'belief_category');
     my $b1 = $wm2->believe(statement => 'High', confidence => 0.9, source => 'user');

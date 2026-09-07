@@ -5,21 +5,21 @@ use Test::More;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use Clam::Store;
-use Clam::Bus;
-use Clam::Session;
-use Clam::Loop;
-use Clam::Provider::Mock;
-use Clam qw(builtin_tools);
+use AI::Clam::Store;
+use AI::Clam::Bus;
+use AI::Clam::Session;
+use AI::Clam::Loop;
+use AI::Clam::Provider::Mock;
+use AI::Clam qw(builtin_tools);
 
 # Helper: create a loop with mock provider.
 sub make_loop {
-    my $store = Clam::Store->new(db => ':memory:');
-    my $bus   = Clam::Bus->new(store => $store, sender => 'test');
-    my $mock  = Clam::Provider::Mock->new(model => 'mock');
-    my $sess  = Clam::Session->new(store => $store, bus => $bus, provider => $mock);
+    my $store = AI::Clam::Store->new(db => ':memory:');
+    my $bus   = AI::Clam::Bus->new(store => $store, sender => 'test');
+    my $mock  = AI::Clam::Provider::Mock->new(model => 'mock');
+    my $sess  = AI::Clam::Session->new(store => $store, bus => $bus, provider => $mock);
     $sess->add_tool($_) for builtin_tools();
-    my $loop  = Clam::Loop->new(session => $sess);
+    my $loop  = AI::Clam::Loop->new(session => $sess);
     return ($store, $bus, $mock, $sess, $loop);
 }
 
@@ -109,10 +109,10 @@ subtest 'Spawn publishes bus events' => sub {
 subtest 'Spawn tool via run' => sub {
     my ($store, $bus, $mock, $sess, $loop) = make_loop;
 
-    require Clam::Tools::Spawn;
-    my $tool = Clam::Tools::Spawn->new(loop => $loop);
-    isa_ok($tool, 'Clam::Tools::Spawn');
-    isa_ok($tool, 'Clam::Tool');
+    require AI::Clam::Tools::Spawn;
+    my $tool = AI::Clam::Tools::Spawn->new(loop => $loop);
+    isa_ok($tool, 'AI::Clam::Tools::Spawn');
+    isa_ok($tool, 'AI::Clam::Tool');
 
     my $result = $tool->run({ prompt => 'hello from tool' });
     is($result->{isError}, 0, 'tool succeeded');
@@ -129,7 +129,7 @@ subtest 'Child inherits parent tools' => sub {
     ok($result->{ok}, 'spawn succeeded');
 
     # Check child session has same tool count.
-    my $child = Clam::Session->new(store => $store, bus => $bus, provider => $mock, id => $result->{session_id});
+    my $child = AI::Clam::Session->new(store => $store, bus => $bus, provider => $mock, id => $result->{session_id});
     # Tools aren't persisted in DB, so we verify via the spawn event.
     ok(1, 'child session accessible');
 };

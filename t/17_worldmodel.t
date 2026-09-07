@@ -1,12 +1,12 @@
 use strict; use warnings;
 use Test::More;
 use lib 'lib';
-use Clam::Store;
-use Clam::WorldModel;
+use AI::Clam::Store;
+use AI::Clam::WorldModel;
 
-my $store = Clam::Store->new(path => ':memory:');
-my $wm = Clam::WorldModel->new(store => $store);
-isa_ok($wm, 'Clam::WorldModel');
+my $store = AI::Clam::Store->new(path => ':memory:');
+my $wm = AI::Clam::WorldModel->new(store => $store);
+isa_ok($wm, 'AI::Clam::WorldModel');
 
 # ---------------------------------------------------------------------------
 # Entities
@@ -155,7 +155,7 @@ SKIP: {
 # Temporal range queries
 # ---------------------------------------------------------------------------
 
-use Clam::Util qw(now_ms);
+use AI::Clam::Util qw(now_ms);
 
 my $t0 = now_ms();
 

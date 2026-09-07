@@ -5,20 +5,20 @@
   "license": "Artistic-2.0",
   "requires": {
     "perl": "5.040001",
-    "Clam": "1.0"
+    "AI::Clam": "1.0"
   },
   "provides": {
-    "Clam::Wits::Critic::Style": { "file": "lib/Clam/Wits/Critic/Style.pm", "version": "1.0.0" },
-    "Clam::Wits::Critic::Security": { "file": "lib/Clam/Wits/Critic/Security.pm", "version": "1.0.0" },
-    "Clam::Wits::Critic::Quality": { "file": "lib/Clam/Wits/Critic/Quality.pm", "version": "1.0.0" },
-    "Clam::Wits::Critic::Accessibility": { "file": "lib/Clam/Wits/Critic/Accessibility.pm", "version": "1.0.0" },
-    "Clam::Wits::Critic::Ethics": { "file": "lib/Clam/Wits/Critic/Ethics.pm", "version": "1.0.0" },
-    "Clam::Wits::Critic::Performance": { "file": "lib/Clam/Wits/Critic/Performance.pm", "version": "1.0.0" },
-    "Clam::Wits::Critic::Safety": { "file": "lib/Clam/Wits/Critic/Safety.pm", "version": "1.0.0" },
-    "Clam::Wits::Critic::Clarity": { "file": "lib/Clam/Wits/Critic/Clarity.pm", "version": "1.0.0" },
-    "Clam::Wits::Critic::Frugality": { "file": "lib/Clam/Wits/Critic/Frugality.pm", "version": "1.0.0" },
-    "Clam::Wits::Critic::Sustainability": { "file": "lib/Clam/Wits/Critic/Sustainability.pm", "version": "1.0.0" },
-    "Clam::Wits::Critic::Architecture": { "file": "lib/Clam/Wits/Critic/Architecture.pm", "version": "1.0.0" },
-    "Clam::Wits::Critic::Usability": { "file": "lib/Clam/Wits/Critic/Usability.pm", "version": "1.0.0" }
+    "AI::Clam::Wits::Critic::Style": { "file": "lib/AI/Clam/Wits/Critic/Style.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Critic::Security": { "file": "lib/AI/Clam/Wits/Critic/Security.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Critic::Quality": { "file": "lib/AI/Clam/Wits/Critic/Quality.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Critic::Accessibility": { "file": "lib/AI/Clam/Wits/Critic/Accessibility.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Critic::Ethics": { "file": "lib/AI/Clam/Wits/Critic/Ethics.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Critic::Performance": { "file": "lib/AI/Clam/Wits/Critic/Performance.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Critic::Safety": { "file": "lib/AI/Clam/Wits/Critic/Safety.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Critic::Clarity": { "file": "lib/AI/Clam/Wits/Critic/Clarity.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Critic::Frugality": { "file": "lib/AI/Clam/Wits/Critic/Frugality.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Critic::Sustainability": { "file": "lib/AI/Clam/Wits/Critic/Sustainability.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Critic::Architecture": { "file": "lib/AI/Clam/Wits/Critic/Architecture.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Critic::Usability": { "file": "lib/AI/Clam/Wits/Critic/Usability.pm", "version": "1.0.0" }
   }
 }

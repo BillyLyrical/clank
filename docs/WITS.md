@@ -6,18 +6,18 @@ lifecycle, and distribution model.
 
 ## 1. What a Wit Is
 
-A wit is a CPAN module in the `Clam::Wits::*` namespace that extends the clam
+A wit is a CPAN module in the `AI::Clam::Wits::*` namespace that extends the clam
 harness: tools the LLM can call, REPL slash commands, and event hooks on the
 blackboard bus.
 
-The `Clam::Wit::*` namespace is harness infrastructure (API, Scanner, etc.).
-User wits live in `Clam::Wits::*`.
+The `AI::Clam::Wit::*` namespace is harness infrastructure (API, Scanner, etc.).
+User wits live in `AI::Clam::Wits::*`.
 
 One system, one source of truth: **wits are CPAN modules.**
 
 | Concern | Mechanism | Custom code? |
 |---------|-----------|-------------|
-| Distribution | `cpanm Clam::Wits::Foo` | No |
+| Distribution | `cpanm AI::Clam::Wits::Foo` | No |
 | Discovery | `grep -r "# CLAM-WIT:" @INC/Clam/Wit/` | No |
 | Metadata | `# CLAM-WIT:` comment in module file | No |
 | Dependencies | `META.json` + cpanm | No |
@@ -27,19 +27,19 @@ One system, one source of truth: **wits are CPAN modules.**
 
 ## 2. Module Layout
 
-A wit is a standard CPAN module in the `Clam::Wits::*` namespace with a
+A wit is a standard CPAN module in the `AI::Clam::Wits::*` namespace with a
 `register($api)` method:
 
     Clam/Wits/Foo.pm           # entry point: register($api)
-    Clam/Wits/Foo/Helper.pm    # optional sub-tree (Clam::Wits::Foo::* only)
+    Clam/Wits/Foo/Helper.pm    # optional sub-tree (AI::Clam::Wits::Foo::* only)
 
 The `# CLAM-WIT:` comment at the top provides grep-able metadata.
 The `register($api)` method integrates the wit at runtime.
 
-Helpers live under the wit's own namespace (`Clam::Wits::Foo::*`).
-No files outside `Clam::Wits::Foo::` — namespace discipline.
+Helpers live under the wit's own namespace (`AI::Clam::Wits::Foo::*`).
+No files outside `AI::Clam::Wits::Foo::` — namespace discipline.
 
-The `Clam::Wit::*` namespace is harness infrastructure (API, Dispatch, Scanner,
+The `AI::Clam::Wit::*` namespace is harness infrastructure (API, Dispatch, Scanner,
 Session). User wits never go there.
 
 ## 3. The `# CLAM-WIT:` Comment Format
@@ -58,7 +58,7 @@ the module.
 # CLAM-WIT: hint=Git safety: vetoes rm, reset --hard, push -f, force
 # CLAM-WIT: author=you
 # CLAM-WIT: license=Artistic-2.0
-package Clam::Wits::Foo;
+package AI::Clam::Wits::Foo;
 use strict;
 use warnings;
 
@@ -81,7 +81,7 @@ sub register {
 
 | Field | Required | Default | Purpose |
 |-------|----------|---------|---------|
-| `name` | no | package suffix (`Clam::Wits::Foo` → `Foo`) | Module identity |
+| `name` | no | package suffix (`AI::Clam::Wits::Foo` → `Foo`) | Module identity |
 | `version` | no | `0.0.1` | Semantic version |
 | `about` | yes | — | One-line human description |
 | `usage` | no | — | When to load, what it changes, what it costs |
@@ -125,7 +125,7 @@ lookups query the DB, not the filesystem. The DB is the runtime view; the
 ## 4. Registration: `register($api)`
 
 The comment is for discovery. The `register($api)` function is for runtime
-integration. After `require`, the PluginManager creates a `Clam::Wit::API`
+integration. After `require`, the PluginManager creates a `AI::Clam::Wit::API`
 object and calls `$wit->register($api)`.
 
 ### What the API provides
@@ -167,7 +167,7 @@ Command handlers receive:
     bus     => $app->bus,      # pub/sub bus
     store   => $app->store,    # SQLite store
     session => $app->session,  # current session
-    app     => $app,           # the Clam::App object
+    app     => $app,           # the AI::Clam::App object
 }
 ```
 
@@ -182,12 +182,12 @@ Bus handlers receive the event hash `{id, correlation_id, topic, sender, payload
 1. **Scan**: `grep -r "# CLAM-WIT:" @INC/Clam/Wits/` finds all installed wits
 2. **Cache**: Store metadata in SQLite DB (one-time scan)
 3. **Select**: Query DB to decide which wits to load (based on config/context)
-4. **Load**: `require Clam::Wits::Foo` → Perl finds it in `@INC` (installed by cpanm)
+4. **Load**: `require AI::Clam::Wits::Foo` → Perl finds it in `@INC` (installed by cpanm)
 5. **Register**: Call `$wit->register($api)`
 
 ### Development (in-tree wits)
 
-1. **Scan**: `grep -r "# CLAM-WIT:" wits/*/lib/Clam/Wits/` finds dev wits
+1. **Scan**: `grep -r "# CLAM-WIT:" wits/*/lib/AI/Clam/Wits/` finds dev wits
 2. **Select**: Same as production
 3. **Load**: Add each wit's `lib/` to `@INC`, then `require`
 4. **Register**: Same as production
@@ -212,7 +212,7 @@ LOADED → ACTIVE ⇄ DISABLED
 
 ### Revertible Effects
 
-Every registration a wit makes goes through `Clam::Wit::API`, which tracks
+Every registration a wit makes goes through `AI::Clam::Wit::API`, which tracks
 tools, commands, and bus subscriptions per wit. Disable runs every reverse:
 
 - `bus->unsubscribe($id)` for each hook
@@ -235,15 +235,15 @@ fully unload.**
 ```
 Clam/
   lib/Clam.pm
-  lib/Clam/App.pm
-  lib/Clam/Loop.pm
-  lib/Clam/Bus.pm
-  lib/Clam/Store.pm
-  lib/Clam/Provider/*.pm
-  lib/Clam/Tool.pm
-  lib/Clam/Tools/*.pm
-  lib/Clam/Wit/API.pm
-  lib/Clam/Wit/Session.pm
+  lib/AI/Clam/App.pm
+  lib/AI/Clam/Loop.pm
+  lib/AI/Clam/Bus.pm
+  lib/AI/Clam/Store.pm
+  lib/AI/Clam/Provider/*.pm
+  lib/AI/Clam/Tool.pm
+  lib/AI/Clam/Tools/*.pm
+  lib/AI/Clam/Wit/API.pm
+  lib/AI/Clam/Wit/Session.pm
   bin/clam
   bin/clamd
   META.json
@@ -256,8 +256,8 @@ harness). All other wits are separate dists.
 
 ```
 Clam-Wits-Foo/
-  lib/Clam/Wits/Foo.pm
-  lib/Clam/Wits/Foo/Helper.pm
+  lib/AI/Clam/Wits/Foo.pm
+  lib/AI/Clam/Wits/Foo/Helper.pm
   META.json
   t/
 ```
@@ -311,15 +311,15 @@ clam/
         API.pm
         Session.pm
       Wits/              # symlinks (created by link_wits.pl)
-        Foo -> ../../../wits/foo/lib/Clam/Wits/Foo
-        Bar -> ../../../wits/bar/lib/Clam/Wits/Bar
+        Foo -> ../../../wits/foo/lib/AI/Clam/Wits/Foo
+        Bar -> ../../../wits/bar/lib/AI/Clam/Wits/Bar
   wits/                 # wit modules (separate dists)
     Foo/
-      lib/Clam/Wits/Foo.pm
+      lib/AI/Clam/Wits/Foo.pm
       META.json
       t/
     Bar/
-      lib/Clam/Wits/Bar.pm
+      lib/AI/Clam/Wits/Bar.pm
       META.json
       t/
   bin/clam
@@ -355,9 +355,9 @@ Declared in `META.json` (standard CPAN). cpanm resolves them. No custom
 {
   "name": "Clam-Wits-Foo",
   "version": "1.0",
-  "requires": { "perl": "5.040001", "Clam": "1.0" },
+  "requires": { "perl": "5.040001", "AI::Clam": "1.0" },
   "provides": {
-    "Clam::Wits::Foo": { "file": "lib/Clam/Wits/Foo.pm", "version": "1.0" }
+    "AI::Clam::Wits::Foo": { "file": "lib/AI/Clam/Wits/Foo.pm", "version": "1.0" }
   }
 }
 ```
@@ -398,4 +398,4 @@ curation catalog).
 - eval isolation — bad modules don't kill the harness
 - Bus, tools, commands — all the runtime behavior
 - SQLite store — runtime state (loaded, enabled, session history)
-- Namespace discipline — `Clam::Wits::Foo` may only ship `Clam::Wits::Foo::*`
+- Namespace discipline — `AI::Clam::Wits::Foo` may only ship `AI::Clam::Wits::Foo::*`

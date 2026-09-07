@@ -5,17 +5,17 @@ use Test::More;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use Clam::Store;
-use Clam::Tracer;
+use AI::Clam::Store;
+use AI::Clam::Tracer;
 use Time::HiRes qw(sleep clock_gettime CLOCK_MONOTONIC);
 
-my $store = Clam::Store->new(db => ':memory:');
+my $store = AI::Clam::Store->new(db => ':memory:');
 
 # === Test 1: Basic construction ===
 
 subtest 'Construction' => sub {
-    my $t = Clam::Tracer->new(store => $store);
-    isa_ok($t, 'Clam::Tracer');
+    my $t = AI::Clam::Tracer->new(store => $store);
+    isa_ok($t, 'AI::Clam::Tracer');
     my $s = $t->stats;
     is($s->{total_spans}, 0, 'starts with zero spans');
 };
@@ -23,7 +23,7 @@ subtest 'Construction' => sub {
 # === Test 2: Start/end span ===
 
 subtest 'Start and end span' => sub {
-    my $t = Clam::Tracer->new(store => Clam::Store->new(db => ':memory:'));
+    my $t = AI::Clam::Tracer->new(store => AI::Clam::Store->new(db => ':memory:'));
 
     my $id = $t->start_span('test-span', key => 'value');
     ok(defined $id, 'start_span returns id');
@@ -38,7 +38,7 @@ subtest 'Start and end span' => sub {
 # === Test 3: Implicit end (pop from stack) ===
 
 subtest 'Implicit end via pop' => sub {
-    my $t = Clam::Tracer->new(store => Clam::Store->new(db => ':memory:'));
+    my $t = AI::Clam::Tracer->new(store => AI::Clam::Store->new(db => ':memory:'));
 
     $t->start_span('outer');
     $t->start_span('inner');
@@ -54,8 +54,8 @@ subtest 'Implicit end via pop' => sub {
 # === Test 4: Nested spans ===
 
 subtest 'Nested spans with parent_id' => sub {
-    my $store2 = Clam::Store->new(db => ':memory:');
-    my $t = Clam::Tracer->new(store => $store2);
+    my $store2 = AI::Clam::Store->new(db => ':memory:');
+    my $t = AI::Clam::Tracer->new(store => $store2);
 
     my $outer = $t->start_span('outer');
     my $inner = $t->start_span('inner');
@@ -72,7 +72,7 @@ subtest 'Nested spans with parent_id' => sub {
 # === Test 5: trace() convenience ===
 
 subtest 'trace() wraps a code block' => sub {
-    my $t = Clam::Tracer->new(store => Clam::Store->new(db => ':memory:'));
+    my $t = AI::Clam::Tracer->new(store => AI::Clam::Store->new(db => ':memory:'));
 
     my $result = $t->trace('compute', sub { sleep(0.01); return 42 }, x => 1);
     is($result, 42, 'trace returns code result');
@@ -84,7 +84,7 @@ subtest 'trace() wraps a code block' => sub {
 };
 
 subtest 'trace() propagates exceptions' => sub {
-    my $t = Clam::Tracer->new(store => Clam::Store->new(db => ':memory:'));
+    my $t = AI::Clam::Tracer->new(store => AI::Clam::Store->new(db => ':memory:'));
 
     eval { $t->trace('fail', sub { die "boom" }) };
     like($@, qr/boom/, 'exception propagated');
@@ -97,8 +97,8 @@ subtest 'trace() propagates exceptions' => sub {
 # === Test 6: Query spans ===
 
 subtest 'Query with filters' => sub {
-    my $store3 = Clam::Store->new(db => ':memory:');
-    my $t = Clam::Tracer->new(store => $store3);
+    my $store3 = AI::Clam::Store->new(db => ':memory:');
+    my $t = AI::Clam::Tracer->new(store => $store3);
 
     $t->start_span('llm.call', topic => 'llm');
     $t->end_span;
@@ -118,8 +118,8 @@ subtest 'Query with filters' => sub {
 };
 
 subtest 'Query with min_duration' => sub {
-    my $store4 = Clam::Store->new(db => ':memory:');
-    my $t = Clam::Tracer->new(store => $store4);
+    my $store4 = AI::Clam::Store->new(db => ':memory:');
+    my $t = AI::Clam::Tracer->new(store => $store4);
 
     $t->trace('fast', sub { }, fast => 1);
     $t->trace('slow', sub { sleep(0.02) }, slow => 1);
@@ -133,8 +133,8 @@ subtest 'Query with min_duration' => sub {
 # === Test 7: Stats ===
 
 subtest 'Stats' => sub {
-    my $store5 = Clam::Store->new(db => ':memory:');
-    my $t = Clam::Tracer->new(store => $store5);
+    my $store5 = AI::Clam::Store->new(db => ':memory:');
+    my $t = AI::Clam::Tracer->new(store => $store5);
 
     $t->trace('a', sub { sleep(0.005) }, topic => 'x');
     $t->trace('b', sub { sleep(0.005) }, topic => 'x');
@@ -149,8 +149,8 @@ subtest 'Stats' => sub {
 # === Test 8: Trace tree ===
 
 subtest 'Trace tree' => sub {
-    my $store6 = Clam::Store->new(db => ':memory:');
-    my $t = Clam::Tracer->new(store => $store6);
+    my $store6 = AI::Clam::Store->new(db => ':memory:');
+    my $t = AI::Clam::Tracer->new(store => $store6);
 
     my $root = $t->start_span('pipeline');
     $t->start_span('llm_call');
@@ -168,11 +168,11 @@ subtest 'Trace tree' => sub {
 # === Test 9: Bus auto-subscribe ===
 
 subtest 'Auto-subscribe traces bus events' => sub {
-    my $store7 = Clam::Store->new(db => ':memory:');
-    require Clam::Bus;
-    my $bus = Clam::Bus->new(store => $store7);
+    my $store7 = AI::Clam::Store->new(db => ':memory:');
+    require AI::Clam::Bus;
+    my $bus = AI::Clam::Bus->new(store => $store7);
 
-    my $t = Clam::Tracer->new(store => $store7, bus => $bus, auto_subscribe => 1);
+    my $t = AI::Clam::Tracer->new(store => $store7, bus => $bus, auto_subscribe => 1);
 
     $bus->publish('test.event', { data => 1 });
     $bus->publish('test.other', { data => 2 });
@@ -187,8 +187,8 @@ subtest 'Auto-subscribe traces bus events' => sub {
 # === Test 10: Metadata persistence ===
 
 subtest 'Metadata persisted and retrieved' => sub {
-    my $store8 = Clam::Store->new(db => ':memory:');
-    my $t = Clam::Tracer->new(store => $store8);
+    my $store8 = AI::Clam::Store->new(db => ':memory:');
+    my $t = AI::Clam::Tracer->new(store => $store8);
 
     my $id = $t->start_span('test', str => 'hello', num => 42, nested => { a => 1 });
     $t->end_span($id);

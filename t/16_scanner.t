@@ -6,8 +6,8 @@ use Test::More;
 use FindBin;
 
 use lib "$FindBin::RealBin/../lib";
-use Clam::Store;
-use Clam::Wit::Scanner;
+use AI::Clam::Store;
+use AI::Clam::Wit::Scanner;
 
 # --- parse_marker tests ----------------------------------------------------
 
@@ -22,7 +22,7 @@ print $fh <<'EOF';
 # CLAM-WIT: hint=testing scanner parsing
 # CLAM-WIT: author=tester
 # CLAM-WIT: license=MIT
-package Clam::Wits::TestWit;
+package AI::Clam::Wits::TestWit;
 use strict;
 use warnings;
 sub register { }
@@ -30,7 +30,7 @@ sub register { }
 EOF
 close $fh;
 
-my $meta = Clam::Wit::Scanner->parse_marker($tmpfile);
+my $meta = AI::Clam::Wit::Scanner->parse_marker($tmpfile);
 ok($meta, 'parse_marker returns metadata');
 is($meta->{name}, 'TestWit', 'name parsed');
 is($meta->{version}, '0.5.0', 'version parsed');
@@ -51,7 +51,7 @@ use strict;
 EOF
 close $fh2;
 
-my $no_meta = Clam::Wit::Scanner->parse_marker($tmpfile2);
+my $no_meta = AI::Clam::Wit::Scanner->parse_marker($tmpfile2);
 ok(!$no_meta, 'parse_marker returns undef for files without marker');
 
 # --- scan tests -----------------------------------------------------------
@@ -66,15 +66,15 @@ File::Path::make_path($wit_dir);
 use File::Copy;
 copy($tmpfile, "$wit_dir/TestWit.pm") or die "copy: $!";
 
-my $wits = Clam::Wit::Scanner->scan(dirs => [$tmpdir]);
+my $wits = AI::Clam::Wit::Scanner->scan(dirs => [$tmpdir]);
 is(scalar @$wits, 1, 'scan finds one wit');
 is($wits->[0]{name}, 'TestWit', 'scan finds correct wit name');
 is($wits->[0]{about}, 'A test wit for scanner tests', 'scan preserves about');
 
 # --- DB registration tests ------------------------------------------------
 
-my $store = Clam::Store->new(path => ':memory:');
-my ($ins, $upd) = Clam::Wit::Scanner->register_in_db($store, $wits);
+my $store = AI::Clam::Store->new(path => ':memory:');
+my ($ins, $upd) = AI::Clam::Wit::Scanner->register_in_db($store, $wits);
 is($ins, 1, 'register_in_db inserts one wit');
 is($upd, 0, 'register_in_db: no updates on first insert');
 
@@ -86,7 +86,7 @@ is($stored->{state}, 'available', 'initial state is available');
 
 # Update the same wit
 $wits->[0]{about} = 'Updated description';
-($ins, $upd) = Clam::Wit::Scanner->register_in_db($store, $wits);
+($ins, $upd) = AI::Clam::Wit::Scanner->register_in_db($store, $wits);
 is($ins, 0, 'register_in_db: no inserts on update');
 is($upd, 1, 'register_in_db: one update');
 

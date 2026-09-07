@@ -2,10 +2,10 @@ use strict; use warnings;
 use Test::More;
 use lib 'lib';
 use File::Temp qw(tempdir);
-use Clam::Store;
-use Clam::Bus;
-use Clam::Session;
-use Clam::PluginManager;
+use AI::Clam::Store;
+use AI::Clam::Bus;
+use AI::Clam::Session;
+use AI::Clam::PluginManager;
 
 my $tmp = tempdir(CLEANUP => 1);
 
@@ -19,13 +19,14 @@ my $hello_dir = "$tmp/wits/hello";
 mkdir "$tmp/wits" or die;
 mkdir "$hello_dir" or die;
 mkdir "$hello_dir/lib" or die;
-mkdir "$hello_dir/lib/Clam" or die;
-mkdir "$hello_dir/lib/Clam/Wits" or die;
-open my $fh, '>', "$hello_dir/lib/Clam/Wits/Hello.pm" or die;
+mkdir "$hello_dir/lib/AI" or die;
+mkdir "$hello_dir/lib/AI/Clam" or die;
+mkdir "$hello_dir/lib/AI/Clam/Wits" or die;
+open my $fh, '>', "$hello_dir/lib/AI/Clam/Wits/Hello.pm" or die;
 print {$fh} <<'WIT';
-package Clam::Wits::Hello;
+package AI::Clam::Wits::Hello;
 use strict; use warnings;
-use parent 'Clam::Wit';
+use parent 'AI::Clam::Wit';
 sub register {
     my ($self, $api) = @_;
     $api->register_tool(
@@ -51,10 +52,11 @@ close $fh;
 my $broken_dir = "$tmp/wits/broken";
 mkdir $broken_dir or die;
 mkdir "$broken_dir/lib" or die;
-mkdir "$broken_dir/lib/Clam" or die;
-mkdir "$broken_dir/lib/Clam/Wit" or die;
-open $fh, '>', "$broken_dir/lib/Clam/Wit/Broken.pm" or die;
-print {$fh} "package Clam::Wit::Broken;\nuse strict; use warnings;\nsub register { die \"intentional failure\\n\" }\n1;\n";
+mkdir "$broken_dir/lib/AI" or die;
+mkdir "$broken_dir/lib/AI/Clam" or die;
+mkdir "$broken_dir/lib/AI/Clam/Wit" or die;
+open $fh, '>', "$broken_dir/lib/AI/Clam/Wit/Broken.pm" or die;
+print {$fh} "package AI::Clam::Wit::Broken;\nuse strict; use warnings;\nsub register { die \"intentional failure\\n\" }\n1;\n";
 close $fh;
 
 # --- single-file wit (no lib/, no base class) ---------------------------------
@@ -63,7 +65,7 @@ mkdir "$tmp/wits2" or die;
 mkdir $loner_dir or die;
 open $fh, '>', "$loner_dir/loner.pm" or die;
 print {$fh} <<'WIT';
-package Clam::Wit::Loner;
+package AI::Clam::Wit::Loner;
 use strict; use warnings;
 sub register {
     my ($self, $api) = @_;
@@ -76,11 +78,11 @@ WIT
 close $fh;
 
 # --- load ---------------------------------------------------------------------
-my $store = Clam::Store->new(path => ':memory:');
-my $bus   = Clam::Bus->new(store => $store);
-my $sess  = Clam::Session->new(store => $store, bus => $bus);
+my $store = AI::Clam::Store->new(path => ':memory:');
+my $bus   = AI::Clam::Bus->new(store => $store);
+my $sess  = AI::Clam::Session->new(store => $store, bus => $bus);
 
-my $pm = Clam::PluginManager->new;
+my $pm = AI::Clam::PluginManager->new;
 $pm->bind(bus => $bus, store => $store, session => $sess);
 my @wits = $pm->load_all(extra_paths => ["$tmp/wits", "$tmp/wits2"]);
 
@@ -89,7 +91,7 @@ is(scalar(@wits), 2, 'hello + loner loaded (broken skipped)');
 my @errs = @{ $pm->errors };
 ok((grep { /broken/ && /intentional failure/ } @errs), 'broken wit error recorded');
 
-# tools from wits are runnable Clam::Tool objects
+# tools from wits are runnable AI::Clam::Tool objects
 my %by_name = map { $_->{name} => $_ } $pm->all_tools();
 ok($by_name{greet},    'greet tool registered');
 ok($by_name{loner_ping}, 'single-file wit tool registered');
@@ -110,7 +112,7 @@ ok((grep { ref $_ eq 'HASH' && $_->{action} eq 'transform' } @{ $pub->{results} 
 
 # api accessors work inside register (session/store/bus reachable)
 my $api = $pm->api_for('hello');
-isa_ok($api, 'Clam::Wit::API');
+isa_ok($api, 'AI::Clam::Wit::API');
 is($api->bus, $bus, 'api->bus is the app bus');
 is($api->store, $store, 'api->store is the app store');
 

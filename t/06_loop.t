@@ -3,12 +3,12 @@ use Test::More;
 use FindBin;
 use lib "$FindBin::RealBin/../lib";   # absolute: test chdirs later
 use File::Temp qw(tempdir);
-use Clam::Store;
-use Clam::Bus;
-use Clam::Session;
-use Clam::Loop;
-use Clam::Session::Messages;
-use Clam qw(builtin_tools);
+use AI::Clam::Store;
+use AI::Clam::Bus;
+use AI::Clam::Session;
+use AI::Clam::Loop;
+use AI::Clam::Session::Messages;
+use AI::Clam qw(builtin_tools);
 
 # --- mock provider: scripted responses, records payloads --------------------
 package MockProvider;
@@ -27,16 +27,16 @@ chdir $dir or die "chdir: $!";
 
 sub make_env {
     my ($script) = @_;
-    my $store = Clam::Store->new(path => ':memory:');
-    my $bus   = Clam::Bus->new(store => $store, sender => 'test');
+    my $store = AI::Clam::Store->new(path => ':memory:');
+    my $bus   = AI::Clam::Bus->new(store => $store, sender => 'test');
     my $mock  = MockProvider->new($script);
-    my $sess  = Clam::Session->new(store => $store, bus => $bus, provider => $mock);
+    my $sess  = AI::Clam::Session->new(store => $store, bus => $bus, provider => $mock);
     $sess->add_tool($_) for builtin_tools();
-    my $loop  = Clam::Loop->new(session => $sess);
+    my $loop  = AI::Clam::Loop->new(session => $sess);
     return ($store, $bus, $mock, $sess, $loop);
 }
 
-sub chain_of { my ($store, $sid) = @_; return Clam::Session::Messages::chain($store, $sid) }
+sub chain_of { my ($store, $sid) = @_; return AI::Clam::Session::Messages::chain($store, $sid) }
 
 # --- 1. basic tool-call round trip ------------------------------------------
 {

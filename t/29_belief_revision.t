@@ -5,14 +5,14 @@ use Test::More;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use Clam::Store;
-use Clam::WorldModel;
+use AI::Clam::Store;
+use AI::Clam::WorldModel;
 
 # === Test 1: Add and query belief dependencies ===
 
 subtest 'Add and query dependencies' => sub {
-    my $store = Clam::Store->new(db => ':memory:');
-    my $wm = Clam::WorldModel->new(store => $store);
+    my $store = AI::Clam::Store->new(db => ':memory:');
+    my $wm = AI::Clam::WorldModel->new(store => $store);
 
     my $id1 = $wm->believe(statement => 'Rain causes wet', confidence => 0.9);
     my $id2 = $wm->believe(statement => 'Wet causes slip', confidence => 0.8);
@@ -34,8 +34,8 @@ subtest 'Add and query dependencies' => sub {
 # === Test 2: Belief graph (BFS) ===
 
 subtest 'Belief graph' => sub {
-    my $store = Clam::Store->new(db => ':memory:');
-    my $wm = Clam::WorldModel->new(store => $store);
+    my $store = AI::Clam::Store->new(db => ':memory:');
+    my $wm = AI::Clam::WorldModel->new(store => $store);
 
     my $a = $wm->believe(statement => 'A', confidence => 1.0);
     my $b = $wm->believe(statement => 'B', confidence => 0.9);
@@ -56,8 +56,8 @@ subtest 'Belief graph' => sub {
 # === Test 3: Belief graph depth limit ===
 
 subtest 'Belief graph depth limit' => sub {
-    my $store = Clam::Store->new(db => ':memory:');
-    my $wm = Clam::WorldModel->new(store => $store);
+    my $store = AI::Clam::Store->new(db => ':memory:');
+    my $wm = AI::Clam::WorldModel->new(store => $store);
 
     my $a = $wm->believe(statement => 'A', confidence => 1.0);
     my $b = $wm->believe(statement => 'B', confidence => 0.9);
@@ -74,8 +74,8 @@ subtest 'Belief graph depth limit' => sub {
 # === Test 4: Confidence propagation — simple chain ===
 
 subtest 'Confidence propagation simple' => sub {
-    my $store = Clam::Store->new(db => ':memory:');
-    my $wm = Clam::WorldModel->new(store => $store);
+    my $store = AI::Clam::Store->new(db => ':memory:');
+    my $wm = AI::Clam::WorldModel->new(store => $store);
 
     my $a = $wm->believe(statement => 'Source belief', confidence => 0.9);
     my $b = $wm->believe(statement => 'Dependent belief', confidence => 0.8);
@@ -102,8 +102,8 @@ subtest 'Confidence propagation simple' => sub {
 # === Test 5: Confidence propagation with weight ===
 
 subtest 'Confidence propagation weighted' => sub {
-    my $store = Clam::Store->new(db => ':memory:');
-    my $wm = Clam::WorldModel->new(store => $store);
+    my $store = AI::Clam::Store->new(db => ':memory:');
+    my $wm = AI::Clam::WorldModel->new(store => $store);
 
     my $a = $wm->believe(statement => 'Source', confidence => 0.9);
     my $b = $wm->believe(statement => 'Weak dep', confidence => 0.8);
@@ -126,8 +126,8 @@ subtest 'Confidence propagation weighted' => sub {
 # === Test 6: Confidence propagation chain ===
 
 subtest 'Confidence propagation chain' => sub {
-    my $store = Clam::Store->new(db => ':memory:');
-    my $wm = Clam::WorldModel->new(store => $store);
+    my $store = AI::Clam::Store->new(db => ':memory:');
+    my $wm = AI::Clam::WorldModel->new(store => $store);
 
     my $a = $wm->believe(statement => 'Root', confidence => 0.9);
     my $b = $wm->believe(statement => 'Mid', confidence => 0.8);
@@ -154,8 +154,8 @@ subtest 'Confidence propagation chain' => sub {
 # === Test 7: Confidence propagation clamps to [0,1] ===
 
 subtest 'Confidence propagation clamping' => sub {
-    my $store = Clam::Store->new(db => ':memory:');
-    my $wm = Clam::WorldModel->new(store => $store);
+    my $store = AI::Clam::Store->new(db => ':memory:');
+    my $wm = AI::Clam::WorldModel->new(store => $store);
 
     my $a = $wm->believe(statement => 'Source', confidence => 0.1);
     my $b = $wm->believe(statement => 'Dep', confidence => 0.8);
@@ -176,8 +176,8 @@ subtest 'Confidence propagation clamping' => sub {
 # === Test 8: revise_belief — supersede and propagate ===
 
 subtest 'revise_belief' => sub {
-    my $store = Clam::Store->new(db => ':memory:');
-    my $wm = Clam::WorldModel->new(store => $store);
+    my $store = AI::Clam::Store->new(db => ':memory:');
+    my $wm = AI::Clam::WorldModel->new(store => $store);
 
     my $a = $wm->believe(statement => 'Old belief', confidence => 0.9, source => 'llm');
     my $b = $wm->believe(statement => 'Dependent', confidence => 0.8);
@@ -206,8 +206,8 @@ subtest 'revise_belief' => sub {
 # === Test 9: revise_belief without confidence change — no propagation ===
 
 subtest 'revise_belief no change' => sub {
-    my $store = Clam::Store->new(db => ':memory:');
-    my $wm = Clam::WorldModel->new(store => $store);
+    my $store = AI::Clam::Store->new(db => ':memory:');
+    my $wm = AI::Clam::WorldModel->new(store => $store);
 
     my $a = $wm->believe(statement => 'A', confidence => 0.5);
     my $b = $wm->believe(statement => 'B', confidence => 0.8);
@@ -224,8 +224,8 @@ subtest 'revise_belief no change' => sub {
 # === Test 10: Remove dependency ===
 
 subtest 'Remove dependency' => sub {
-    my $store = Clam::Store->new(db => ':memory:');
-    my $wm = Clam::WorldModel->new(store => $store);
+    my $store = AI::Clam::Store->new(db => ':memory:');
+    my $wm = AI::Clam::WorldModel->new(store => $store);
 
     my $a = $wm->believe(statement => 'A', confidence => 0.9);
     my $b = $wm->believe(statement => 'B', confidence => 0.8);
@@ -242,8 +242,8 @@ subtest 'Remove dependency' => sub {
 # === Test 11: Dead dependents skipped ===
 
 subtest 'Dead dependents skipped' => sub {
-    my $store = Clam::Store->new(db => ':memory:');
-    my $wm = Clam::WorldModel->new(store => $store);
+    my $store = AI::Clam::Store->new(db => ':memory:');
+    my $wm = AI::Clam::WorldModel->new(store => $store);
 
     my $a = $wm->believe(statement => 'A', confidence => 0.9);
     my $b = $wm->believe(statement => 'B', confidence => 0.0);  # dead
@@ -266,8 +266,8 @@ subtest 'Dead dependents skipped' => sub {
 # === Test 12: Multiple dependents ===
 
 subtest 'Multiple dependents' => sub {
-    my $store = Clam::Store->new(db => ':memory:');
-    my $wm = Clam::WorldModel->new(store => $store);
+    my $store = AI::Clam::Store->new(db => ':memory:');
+    my $wm = AI::Clam::WorldModel->new(store => $store);
 
     my $a = $wm->believe(statement => 'Cause', confidence => 0.9);
     my $b = $wm->believe(statement => 'Effect1', confidence => 0.8);
@@ -294,8 +294,8 @@ subtest 'Multiple dependents' => sub {
 # === Test 13: beliefs_temporal and fact_history still work ===
 
 subtest 'Existing belief queries unaffected' => sub {
-    my $store = Clam::Store->new(db => ':memory:');
-    my $wm = Clam::WorldModel->new(store => $store);
+    my $store = AI::Clam::Store->new(db => ':memory:');
+    my $wm = AI::Clam::WorldModel->new(store => $store);
 
     my $id1 = $wm->believe(statement => 'Old', confidence => 0.5);
     $wm->supersede_belief($id1, statement => 'New', confidence => 0.9);

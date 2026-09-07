@@ -1,9 +1,12 @@
 
-Clam — A Perl Hybrid AI Harness
+Clam - A Perl Hybrid AI Harness
 ================================
 
-LLMs are fat-fingered geniuses. Logic engines are idiot savants.
-Clam bridges them — in Perl.
+Clam is an over-engineered Perl shell for the age of AI.
+
+LLMs are fat-fingered geniuses.
+Logic engines are idiot savants.
+Clam bridges them in Perl.
 
 Clam is a neurosymbolic AI harness that combines LLM pattern
 recognition with explicit world models, symbolic reasoning, and
@@ -17,6 +20,14 @@ language instincts, and LLMs are trained on that text. The harness
 can read, write, and extend its own infrastructure. That's the
 thesis, and the working codebase proves it.
 
+Perl has excellent pattern matching, text manipulation, speed,
+integration with unix, tainting, and a massive CPAN library,
+that is battle tested, carefully curated and trivial to install.
+
+I find that Perls sigils make it easier for LLMs to understand
+the basic syntax of small chunks of code, saving context tokens.
+Perls rich density of meaning, makes the LLM be able to express itself
+more concisely, which preserves context.
 
 What's in the box
 ------------------
@@ -56,8 +67,8 @@ Quick start
 
   # programmatic:
   perl -Ilib -e '
-    use Clam::Driver;
-    my $d = Clam::Driver->new(provider=>"ollama", model=>"codellama");
+    use AI::Clam::Driver;
+    my $d = AI::Clam::Driver->new(provider=>"ollama", model=>"codellama");
     $d->start;
     my $r = $d->ask("list the files in the current directory");
     print $r->{response};
@@ -85,39 +96,25 @@ The symlinks are gitignored. Run link_wits.pl after clone.
 The Perl thesis
 ---------------
 
-Perl is not just the implementation language. It's the foundation
-of a new kind of execution environment.
+Perl is the foundation of a new kind of execution environment.
 
-In a standard AI harness, the LLM generates code and the harness
-runs it. In Clam, the LLM generates Perl, and Perl IS the
-environment. The harness can modify itself. The LLM can extend
-the harness by writing wits. Logic engines can collapse expensive
-LLM calls into fast deterministic rules. The system gets cheaper
-and faster the more it's used.
-
-It's a Perl shell for the age of AI.
+In a standard AI harness, the LLM generates code and the harness runs it.
+In Clam, the LLM generates Perl, and Perl IS the environment.
+The harness can modify itself, it can extend the harness by writing wits.
+Logic engines can collapse expensive LLM calls into fast deterministic rules.
+The system may get cheaper and faster the more it's used?
 
 
 Questions for testers
 ---------------------
 
-Clam is new and we're figuring things out. We need your help
-thinking through these:
+Clam is new and I'm still figuring things out.
+I need your help thinking through these:
 
-Wits vs CPAN — We built a custom plugin system (Wits) with
-deck manifests, install-time testing, and a lockfile. But CPAN
-already solves distribution, dependency resolution, and testing.
-Should we replace Wits with CPAN? Or is a custom runtime layer
-the right call, with CPAN as the distribution backend?
-
-perlbrew — Should Clam manage Perl versions via perlbrew? A
-harness that can switch between Perl 5.36 and 5.40 for different
-projects has real value. But it adds a dependency. Is it worth it?
-
-The UI — What does a great AI harness UI look like? We have a
-REPL (Term::ReadLine) and an NDJSON daemon. Is that enough? Should
-we build a TUI? A web interface? What would make you actually use
-this daily?
+The UI — What does a great AI harness UI look like?
+I have a simple REPL (Term::ReadLine) and an Unix Socket daemon. 
+I'm working on a TUI, & A web interface etc.
+What would make you actually use this daily?
 
 Tools — We ship read, bash, edit, write (Pi parity) plus 88 wits.
 What tools are missing? What would make Clam indispensable for your
@@ -140,11 +137,11 @@ Clam can modify its own wits, rewrite its own tools, and evolve
 during a session. Is this a feature or a footgun? How do we make
 it safe?
 
-What can Clam unlock — We think a Perl AI environment enables
+What can Clam unlock — I think a Perl AI environment enables
 things no other harness can: self-modifying code, deterministic
 reasoning over probabilistic generation, a complete unix shell
 experience with AI assistance. What possibilities do you see that
-we haven't thought of?
+I haven't thought of?
 
 
 Get involved

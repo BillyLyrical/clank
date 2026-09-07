@@ -14,10 +14,10 @@ local $ENV{CLAM_HOME} = "$tmp/clamhome";
 delete $ENV{CLAM_WITS_PATH};
 chdir $tmp or die "chdir: $!";
 
-use Clam::Store;
-use Clam::Bus;
-use Clam::Session;
-use Clam::PluginManager;
+use AI::Clam::Store;
+use AI::Clam::Bus;
+use AI::Clam::Session;
+use AI::Clam::PluginManager;
 
 sub write_file {
     my ($path, $content) = @_;
@@ -36,8 +36,8 @@ version="0.1.0"
 about="Wit fixture with a hook, tool, and command for lifecycle tests"
 usage="Test fixture."
 EOF
-write_file("$UROOT/hookwit/lib/Clam/Wit/Hookwit.pm", <<'EOF');
-package Clam::Wit::Hookwit;
+write_file("$UROOT/hookwit/lib/AI/Clam/Wit/Hookwit.pm", <<'EOF');
+package AI::Clam::Wit::Hookwit;
 use strict; use warnings;
 our $FIRED = 0;    # package var: survives re-registration, counts hook fires
 sub register {
@@ -70,17 +70,17 @@ PERL
 EOF
 
 # ---------------------------------------------------------------------------
-my $store = Clam::Store->new(path => ":memory:");
-my $bus   = Clam::Bus->new(store => $store);
-my $sess  = Clam::Session->new(store => $store, bus => $bus);
-my $pm    = Clam::PluginManager->new;
+my $store = AI::Clam::Store->new(path => ":memory:");
+my $bus   = AI::Clam::Bus->new(store => $store);
+my $sess  = AI::Clam::Session->new(store => $store, bus => $bus);
+my $pm    = AI::Clam::PluginManager->new;
 $pm->bind(bus => $bus, store => $store, session => $sess);
 
 my @wits = $pm->load_all();
 is(scalar(@wits), 2, 'both fixtures loaded');
 is_deeply($pm->errors, [], 'no load errors');
 
-# (all_tools returns Clam::Tool objects — plain hashrefs; read -> {name})
+# (all_tools returns AI::Clam::Tool objects — plain hashrefs; read -> {name})
 sub tools_now  { sort map { $_->{name} } $pm->all_tools }
 sub cmds_now   { sort keys %{ $pm->all_commands } }
 
@@ -93,18 +93,18 @@ $bus->subscribe('result.pong', sub { push @pong_seen, $_[0] });
 
 # --- module wit lifecycle ---------------------------------------------------
 $bus->publish('task.ping', {});
-is($Clam::Wit::Hookwit::FIRED, 1, 'hook fires while active');
+is($AI::Clam::Wit::Hookwit::FIRED, 1, 'hook fires while active');
 
 like($pm->disable_wit('hookwit'), qr/^disabled hookwit — 1 hook subscription/, 'disable reports one sub removed');
 is($pm->wit_state('hookwit'), 'disabled', 'state is disabled');
 $bus->publish('task.ping', {});
-is($Clam::Wit::Hookwit::FIRED, 1, 'hook does NOT fire while disabled');
+is($AI::Clam::Wit::Hookwit::FIRED, 1, 'hook does NOT fire while disabled');
 is_deeply([ tools_now ], [ 'agent.one' ], 'tool hidden while disabled');
 is_deeply([ cmds_now ], [], 'command hidden while disabled');
 
 like($pm->enable_wit('hookwit'), qr/^enabled hookwit/, 'enable succeeds');
 $bus->publish('task.ping', {});
-is($Clam::Wit::Hookwit::FIRED, 2, 'hook fires again after enable (fresh closure)');
+is($AI::Clam::Wit::Hookwit::FIRED, 2, 'hook fires again after enable (fresh closure)');
 is_deeply([ tools_now ], [ 'agent.one', 'hook_tool' ], 'tool visible again');
 
 # --- declarative deck lifecycle ---------------------------------------------

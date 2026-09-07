@@ -2,22 +2,22 @@ use strict; use warnings;
 use Test::More;
 use lib 'lib';
 use File::Temp qw(tempdir);
-use Clam::Tools::Read;
-use Clam::Tools::Write;
-use Clam::Tools::Edit;
-use Clam::Tools::Bash;
+use AI::Clam::Tools::Read;
+use AI::Clam::Tools::Write;
+use AI::Clam::Tools::Edit;
+use AI::Clam::Tools::Bash;
 
 my $dir = tempdir(CLEANUP => 1);
 chdir $dir or die "chdir: $!";
 
 # --- write ---
-my $w = Clam::Tools::Write->new;
+my $w = AI::Clam::Tools::Write->new;
 my $r = $w->run({ path => 'sub/dir/hello.txt', content => "line1\nline2\n" });
 is($r->{isError}, 0, 'write ok');
 ok(-f 'sub/dir/hello.txt', 'parent dirs created + file exists');
 
 # --- read ---
-my $rd = Clam::Tools::Read->new;
+my $rd = AI::Clam::Tools::Read->new;
 $r = $rd->run({ path => 'sub/dir/hello.txt' });
 is($r->{output}, "line1\nline2", 'read full small file');
 $r = $rd->run({ path => 'missing.txt' });
@@ -34,7 +34,7 @@ $r = $rd->run({ path => $bigfile, offset => 5, limit => 3 });
 is($r->{output}, "5\n6\n7", 'read offset+limit');
 
 # --- edit ---
-my $ed = Clam::Tools::Edit->new;
+my $ed = AI::Clam::Tools::Edit->new;
 open $fh, '>', 'editme.txt' or die; print {$fh} "alpha\nbeta\ngamma\n"; close $fh;
 
 $r = $ed->run({ path => 'editme.txt', edits => [ { oldText => 'beta', newText => 'BETA' } ] });
@@ -68,7 +68,7 @@ $r = $ed->run({ path => 'ovl.txt', edits => [
 ok($r->{isError} && $r->{output} =~ /overlap/i, 'overlapping edits rejected');
 
 # --- bash ---
-my $b = Clam::Tools::Bash->new;
+my $b = AI::Clam::Tools::Bash->new;
 $r = $b->run({ command => 'echo hello-bash' });
 like($r->{output}, qr/hello-bash/, 'bash stdout captured');
 like($r->{output}, qr/exit code: 0/, 'exit code reported');

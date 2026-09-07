@@ -1,10 +1,11 @@
 #!/usr/bin/env perl
-# clamd — NDJSON front-end for Clam::Driver: drive a persistent, multi-query
+# clamd — NDJSON front-end for AI::Clam::Driver: drive a persistent, multi-query
 # Clam session from an AI harness or any script.
 #
 # Transports (pick one; stdio is the default and the most portable):
-#   clamd --stdio                 # newline-delimited JSON on stdin/stdout
-#   clamd --socket /tmp/clamd.sock  # same protocol on a UNIX socket
+#   clamd --stdio                    # newline-delimited JSON on stdin/stdout
+#   clamd --socket /tmp/clamd.sock   # same protocol on a UNIX socket
+#   clamd --daemon --socket /tmp/clamd.sock  # background daemon
 #
 # Protocol — one JSON object per line, every response echoes the request id:
 #   -> {"id":1,"command":"ping"}
@@ -17,11 +18,19 @@
 #   -> {"id":5,"command":"tools"}
 #   -> {"id":6,"command":"shutdown"}
 #   <- {"id":6,"ok":1,"bye":1}        (process then exits 0)
+#   -> {"id":7,"command":"status"}
+#   <- {"id":7,"ok":1,"pid":12345,"uptime":42,"session_id":"..."}
 #
-# Teardown guarantees (the old clam-sock leaked zombies):
-#   * stdio mode: EOF on stdin — i.e. the parent closing the pipe or dying —
-#     exits the process cleanly and promptly. No daemon outlives its driver.
-#   * explicit shutdown command, SIGTERM/SIGINT all take the same path.
+# Daemon mode (--daemon):
+#   Double-forks, detaches from terminal, writes PID file.  The socket
+#   persists across client connects/disconnects.  Use --pidfile to control
+#   the PID file location (default ~/.clam/clamd.pid).  Off-line commands:
+#     clamd --status   (check if daemon is running)
+#     clamd --stop     (graceful shutdown via PID file)
+#
+# Teardown guarantees:
+#   * stdio mode: EOF on stdin exits cleanly — no zombie daemons.
+#   * daemon mode: PID file removed on shutdown; SIGTERM/SIGINT are handled.
 #   * socket mode unlinks its socket file on every exit path.
 #
 # Only protocol lines go to stdout; everything else goes to stderr.
@@ -32,8 +41,9 @@ use lib "$FindBin::RealBin/../lib";
 use Getopt::Long qw(:config no_ignore_case bundling);
 use IO::Socket::UNIX;
 use IO::Select;
-use Clam::Driver;
-use Clam::Util qw(jencode jdecode);
+use POSIX qw(setsid);
+use AI::Clam::Driver;
+use AI::Clam::Util qw(jencode jdecode);
 
 sub _usage {
     my ($code) = @_;
@@ -55,11 +65,15 @@ GetOptions(
     'wit|w+'     => $o{wit_paths},
     'socket=s'   => \$o{socket},
     'stdio'      => \$o{stdio},
+    'daemon'     => \$o{daemon},
+    'pidfile=s'  => \$o{pidfile},
+    'status'     => \$o{status},
+    'stop'       => \$o{stop},
     'help'       => \$o{help},
 ) or exit _usage(2);
 
 if ($o{help}) { print <<'USAGE'; exit 0; }
-clamd — NDJSON front-end for Clam::Driver (multi-query Clam sessions).
+clamd — NDJSON front-end for AI::Clam::Driver (multi-query Clam sessions).
 
 Options:
   --provider=NAME   provider name (default lmstudio; 'mock' = offline echo)
@@ -73,12 +87,58 @@ Options:
   -w, --wit DIR     extra wit/deck path (repeatable)
   --socket PATH     listen on a UNIX socket instead of stdio
   --stdio           force stdio transport (the default without --socket)
+  --daemon          fork to background (requires --socket)
+  --pidfile=PATH    PID file (default ~/.clam/clamd.pid)
+  --status          check if a daemon is running, then exit
+  --stop            send shutdown to a running daemon, then exit
 
 Protocol: newline-delimited JSON; see the header comment for commands.
 USAGE
 
+my $pidfile = $o{pidfile} // "$ENV{HOME}/.clam/clamd.pid";
+
+# --- offline commands (--status, --stop) --------------------------------------
+# These operate on the PID file without starting a session.
+
+if ($o{status} || $o{stop}) {
+    open my $fh, '<', $pidfile or do {
+        print jencode({ ok => 0, error => "no PID file at $pidfile" }) . "\n";
+        exit 1;
+    };
+    my $pid = <$fh>;
+    close $fh;
+    chomp $pid if defined $pid;
+
+    if (!defined $pid || $pid !~ /^\d+$/) {
+        print jencode({ ok => 0, error => "corrupt PID file" }) . "\n";
+        exit 1;
+    }
+
+    # Signal 0 checks if the process exists without actually signaling it.
+    if (kill(0, $pid)) {
+        if ($o{stop}) {
+            kill 'TERM', $pid;
+            # Wait briefly for clean shutdown, then verify.
+            for (1 .. 5) { last unless kill(0, $pid); select(undef, undef, undef, 0.2) }
+            if (kill(0, $pid)) {
+                print jencode({ ok => 0, error => "daemon pid $pid did not exit" }) . "\n";
+                exit 1;
+            }
+            unlink $pidfile if -e $pidfile;
+            print jencode({ ok => 1, stopped => 1, pid => $pid }) . "\n";
+        } else {
+            print jencode({ ok => 1, running => 1, pid => $pid }) . "\n";
+        }
+    } else {
+        unlink $pidfile if -e $pidfile;   # stale PID file
+        print jencode({ ok => 0, error => "no running daemon (stale PID file cleaned)" }) . "\n";
+        exit 1;
+    }
+    exit 0;
+}
+
 my $driver = eval {
-    Clam::Driver->new(
+    AI::Clam::Driver->new(
         provider  => $o{provider},
         model     => $o{model},
         base_url  => $o{base_url},
@@ -96,10 +156,42 @@ if ($@) {
 $| = 1;   # autoflush stdout — parents read line-by-line
 
 my $socket_path = $o{socket};
+
+# --- daemonization ------------------------------------------------------------
+# --daemon requires --socket: stdio makes no sense for a detached process.
+if ($o{daemon}) {
+    die "clamd: --daemon requires --socket\n" unless $socket_path;
+
+    # Double-fork: parent exits immediately, grandchild is fully detached.
+    my $pid = fork;
+    die "clamd: fork: $!" unless defined $pid;
+    if ($pid) {
+        # First parent: wait for child to signal readiness, then exit.
+        waitpid($pid, 0);
+        exit 0;
+    }
+    setsid or die "clamd: setsid: $!";
+    my $pid2 = fork;
+    die "clamd: fork: $!" unless defined $pid2;
+    exit 0 if $pid2;   # first child exits
+
+    # Grandchild: fully detached.  Close stdio (nobody listening).
+    open STDIN,  '<', '/dev/null' or die "clamd: reopen stdin: $!";
+    open STDOUT, '>', '/dev/null' or die "clamd: reopen stdout: $!";
+    open STDERR, '>&', \*STDOUT  or die "clamd: redirect stderr: $!";
+
+    # Write PID file.
+    mkdir "$ENV{HOME}/.clam" unless -d "$ENV{HOME}/.clam";
+    open my $pfh, '>', $pidfile or die "clamd: write PID file $pidfile: $!";
+    print $pfh $$, "\n";
+    close $pfh;
+}
+
 unlink $socket_path if $socket_path && -e $socket_path;   # stale socket from a crashed run
 
 sub cleanup {
     unlink $socket_path if $socket_path && -e $socket_path;
+    unlink $pidfile if $o{daemon} && -e $pidfile;
     $driver->close;
 }
 my $SHUTTING_DOWN = 0;   # set by handle_request on the shutdown command
@@ -152,6 +244,14 @@ sub handle_request {
                 tools   => [ sort $driver->tool_names ],
                 wits    => \@wits,
                 skipped => (ref($skipped) eq 'ARRAY') ? $skipped : [],
+            };
+        } elsif ($cmd eq 'status') {
+            $resp = {
+                id         => $msg->{id},
+                ok         => 1,
+                pid        => $$,
+                session_id => $driver->session_id,
+                daemon     => $o{daemon} ? 1 : 0,
             };
         } elsif ($cmd eq 'shutdown') {
             print STDERR "clamd: shutdown requested\n";

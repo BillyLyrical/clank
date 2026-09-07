@@ -13,7 +13,7 @@ use lib "$FindBin::RealBin/../lib";
 use File::Temp qw(tempdir);
 use IPC::Open3;
 use Symbol 'gensym';
-use Clam::Util qw(jencode jdecode);
+use AI::Clam::Util qw(jencode jdecode);
 
 my $base_url = $ENV{CLAM_LIVE_BASE_URL};
 plan skip_all => 'set CLAM_LIVE_BASE_URL (and optionally CLAM_LIVE_MODEL / CLAM_LIVE_PROVIDER) to run the live e2e smoke'

@@ -1,11 +1,11 @@
 # Clam Driver & clamd — programmatic sessions for AI harnesses and scripts
 
-Two layers on top of `Clam::App` for driving **complex multi-query Clam
+Two layers on top of `AI::Clam::App` for driving **complex multi-query Clam
 sessions** from outside:
 
 | Layer | What it is | For whom |
 |---|---|---|
-| `Clam::Driver` (lib/Clam/Driver.pm) | In-process OO wrapper: one session, structured results per prompt, full event capture | Perl code, tests, other harnesses in the same process |
+| `AI::Clam::Driver` (lib/AI/Clam/Driver.pm) | In-process OO wrapper: one session, structured results per prompt, full event capture | Perl code, tests, other harnesses in the same process |
 | `clamd` (bin/clamd) | NDJSON front-end over stdio or a Unix socket; one long-lived daemon process | Any language via pipes/sockets; AI harnesses supervising Clam |
 
 Both are thin: all session state lives in the SQLite store, so sessions can be
@@ -13,12 +13,12 @@ resumed across processes and restarts.
 
 ---
 
-## 1. Clam::Driver (in-process)
+## 1. AI::Clam::Driver (in-process)
 
 ```perl
-use Clam::Driver;
+use AI::Clam::Driver;
 
-my $d = Clam::Driver->new(
+my $d = AI::Clam::Driver->new(
     provider => 'lmstudio',          # registry name ... or a ready-made object
     base_url => 'http://192.168.1.12:1234/v1',
     model    => 'qwen3.8-27b',
@@ -37,7 +37,7 @@ $d->close;                           # idempotent; also runs from DESTROY
 
 ### Constructor options (`new`)
 
-Pass-through to `Clam::App`: `db`, `provider` (name **or object** — objects are
+Pass-through to `AI::Clam::App`: `db`, `provider` (name **or object** — objects are
 how tests inject scripted providers), `model`, `base_url`, `api_key`, `stream`,
 `wit_paths`, `compact`, plus driver-only: `workdir` (chdir before start),
 `events` (1/0, default 1), `timeout` (default per-ask timeout, seconds).
@@ -88,7 +88,7 @@ interception, tool_call vetoing, context rewriting) exactly as wits do.
 
 ### Topic glob conventions
 
-The same matcher as bus subscriptions (`Clam::Bus::topic_matches`):
+The same matcher as bus subscriptions (`AI::Clam::Bus::topic_matches`):
 `.` separates segments, `*` matches within one segment. Lifecycle topics use
 underscores — match them with e.g. `tool_*`, `agent_*`; wit-defined topics use
 dots — `search.*`. SQLite `LIKE` cannot express these patterns, so journal

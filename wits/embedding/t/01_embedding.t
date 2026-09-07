@@ -6,14 +6,14 @@ use FindBin;
 use lib "$FindBin::Bin/../../../lib";
 use lib "$FindBin::Bin/../lib";
 
-use Clam::Store;
-use Clam::WorldModel;
+use AI::Clam::Store;
+use AI::Clam::WorldModel;
 
 # Test the pure Perl math functions directly.
 # Real embedding tests require Ollama/OpenAI — run manually.
 
-my $store = Clam::Store->new(db => ':memory:');
-my $wm = Clam::WorldModel->new(store => $store);
+my $store = AI::Clam::Store->new(db => ':memory:');
+my $wm = AI::Clam::WorldModel->new(store => $store);
 
 # Create the embeddings table (normally done by the wit's register function).
 $store->dbh->do(qq{
@@ -36,56 +36,56 @@ subtest 'Schema creates wm_embeddings table' => sub {
 # === Test 2: Cosine similarity ===
 
 subtest 'Cosine similarity' => sub {
-    require Clam::Wits::Embedding::Embedding;
+    require AI::Clam::Wits::Embedding::Embedding;
 
     # Identical vectors = 1.0
-    my $sim = Clam::Wits::Embedding::Embedding::_cosine_sim([1, 0, 0], [1, 0, 0]);
+    my $sim = AI::Clam::Wits::Embedding::Embedding::_cosine_sim([1, 0, 0], [1, 0, 0]);
     is($sim, 1.0, 'identical vectors');
 
     # Orthogonal vectors = 0.0
-    $sim = Clam::Wits::Embedding::Embedding::_cosine_sim([1, 0, 0], [0, 1, 0]);
+    $sim = AI::Clam::Wits::Embedding::Embedding::_cosine_sim([1, 0, 0], [0, 1, 0]);
     ok(abs($sim) < 1e-10, 'orthogonal vectors');
 
     # Opposite vectors = -1.0
-    $sim = Clam::Wits::Embedding::Embedding::_cosine_sim([1, 0], [-1, 0]);
+    $sim = AI::Clam::Wits::Embedding::Embedding::_cosine_sim([1, 0], [-1, 0]);
     ok(abs($sim + 1) < 1e-10, 'opposite vectors');
 
     # Similar vectors = high score
-    $sim = Clam::Wits::Embedding::Embedding::_cosine_sim([1, 2, 3], [1, 2, 3.1]);
+    $sim = AI::Clam::Wits::Embedding::Embedding::_cosine_sim([1, 2, 3], [1, 2, 3.1]);
     ok($sim > 0.99, 'similar vectors score high');
 
     # Empty vectors = 0
-    $sim = Clam::Wits::Embedding::Embedding::_cosine_sim([], []);
+    $sim = AI::Clam::Wits::Embedding::Embedding::_cosine_sim([], []);
     is($sim, 0, 'empty vectors');
 };
 
 # === Test 3: CSV encoding/parsing ===
 
 subtest 'Vector CSV round-trip' => sub {
-    require Clam::Wits::Embedding::Embedding;
+    require AI::Clam::Wits::Embedding::Embedding;
 
     my $vec = [0.1, 0.2, -0.3, 0.456789];
-    my $csv = Clam::Wits::Embedding::Embedding::_vec_to_csv($vec);
+    my $csv = AI::Clam::Wits::Embedding::Embedding::_vec_to_csv($vec);
     is($csv, '0.1,0.2,-0.3,0.456789', 'CSV encoding');
 
-    my $parsed = Clam::Wits::Embedding::Embedding::_parse_embedding($csv);
+    my $parsed = AI::Clam::Wits::Embedding::Embedding::_parse_embedding($csv);
     is_deeply($parsed, $vec, 'CSV round-trip');
 
-    is(Clam::Wits::Embedding::Embedding::_parse_embedding(undef), undef, 'undef input');
-    is(Clam::Wits::Embedding::Embedding::_parse_embedding(''), undef, 'empty input');
+    is(AI::Clam::Wits::Embedding::Embedding::_parse_embedding(undef), undef, 'undef input');
+    is(AI::Clam::Wits::Embedding::Embedding::_parse_embedding(''), undef, 'empty input');
 };
 
 # === Test 4: Provider detection ===
 
 subtest 'Provider detection' => sub {
-    require Clam::Wits::Embedding::Embedding;
+    require AI::Clam::Wits::Embedding::Embedding;
 
     # With no env vars, should return undef (no provider).
     local $ENV{CLAM_OLLAMA_URL} = 'http://localhost:99999';   # non-existent
     local $ENV{CLAM_EMBEDDING_API} = undef;
     local $ENV{CLAM_EMBEDDING_KEY} = undef;
 
-    my $p = Clam::Wits::Embedding::Embedding::_detect_provider();
+    my $p = AI::Clam::Wits::Embedding::Embedding::_detect_provider();
     is($p, undef, 'no provider when Ollama unreachable and no OpenAI key');
 };
 
@@ -126,7 +126,7 @@ subtest 'Entity embedding storage' => sub {
     my @scored;
     for my $row (@$rows) {
         my $vec = [split /,/, $row->{embedding}];
-        my $score = Clam::Wits::Embedding::Embedding::_cosine_sim($query_vec, $vec);
+        my $score = AI::Clam::Wits::Embedding::Embedding::_cosine_sim($query_vec, $vec);
         push @scored, { name => $row->{name}, score => $score };
     }
 
@@ -146,7 +146,7 @@ subtest 'Ollama embedding (live)' => sub {
     };
     plan skip_all => 'HTTP::Tiny not available' if $@;
 
-    require Clam::Wits::Embedding::Embedding;
+    require AI::Clam::Wits::Embedding::Embedding;
 
     my $provider = {
         name     => 'ollama',
@@ -154,7 +154,7 @@ subtest 'Ollama embedding (live)' => sub {
         model    => 'nomic-embed-text',
     };
 
-    my $vec = eval { Clam::Wits::Embedding::Embedding::_embed_ollama($provider, 'hello world') };
+    my $vec = eval { AI::Clam::Wits::Embedding::Embedding::_embed_ollama($provider, 'hello world') };
     plan skip_all => "Ollama embedding failed: $provider->{error}" unless $vec;
 
     ok(ref $vec eq 'ARRAY', 'returns arrayref');
@@ -162,12 +162,12 @@ subtest 'Ollama embedding (live)' => sub {
     ok(scalar @$vec >= 100, 'reasonable dimension count (' . scalar(@$vec) . ')');
 
     # Cosine similarity test.
-    my $vec2 = Clam::Wits::Embedding::Embedding::_embed_ollama($provider, 'hello world');
-    my $sim = Clam::Wits::Embedding::Embedding::_cosine_sim($vec, $vec2);
+    my $vec2 = AI::Clam::Wits::Embedding::Embedding::_embed_ollama($provider, 'hello world');
+    my $sim = AI::Clam::Wits::Embedding::Embedding::_cosine_sim($vec, $vec2);
     ok($sim > 0.99, 'identical text scores near 1.0');
 
-    my $vec3 = Clam::Wits::Embedding::Embedding::_embed_ollama($provider, 'quantum physics');
-    my $sim2 = Clam::Wits::Embedding::Embedding::_cosine_sim($vec, $vec3);
+    my $vec3 = AI::Clam::Wits::Embedding::Embedding::_embed_ollama($provider, 'quantum physics');
+    my $sim2 = AI::Clam::Wits::Embedding::Embedding::_cosine_sim($vec, $vec3);
     ok($sim2 < $sim, 'different text scores lower');
 };
 

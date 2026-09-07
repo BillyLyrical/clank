@@ -1,4 +1,4 @@
-# Clam::Driver + clamd: programmatic multi-query sessions and the NDJSON
+# AI::Clam::Driver + clamd: programmatic multi-query sessions and the NDJSON
 # front-end, including child-process teardown (the old clam-sock leaked
 # zombies; EOF on stdin must now exit cleanly).
 use strict; use warnings;
@@ -7,8 +7,8 @@ use FindBin;
 use lib "$FindBin::RealBin/../lib";   # absolute: test chdirs later
 use File::Temp qw(tempdir);
 use IPC::Open3;
-use Clam::Driver;
-use Clam::Util qw(jencode jdecode);
+use AI::Clam::Driver;
+use AI::Clam::Util qw(jencode jdecode);
 
 my $tmp = tempdir(CLEANUP => 1);
 local $ENV{HOME} = "$tmp/home";       # isolate from real user wits/config
@@ -44,8 +44,8 @@ my $provider = ScriptedProvider->new(sub {
     return { choices => [ { finish_reason => 'stop', message => { content => 'second answer' } } ] };   # ask #2
 });
 
-my $d = Clam::Driver->new(provider => $provider, db => ':memory:');
-isa_ok($d, 'Clam::Driver');
+my $d = AI::Clam::Driver->new(provider => $provider, db => ':memory:');
+isa_ok($d, 'AI::Clam::Driver');
 is($d->started, 0, 'not started yet');
 $d->start;
 ok($d->started && length($d->session_id), 'started with session id');
@@ -102,7 +102,7 @@ sub post_json {
 
 package main;
 my $slow = SlowProvider->new(5);
-my $d2 = Clam::Driver->new(provider => $slow, db => ':memory:');
+my $d2 = AI::Clam::Driver->new(provider => $slow, db => ':memory:');
 $d2->start;
 my $rt = $d2->ask('hang', timeout => 0.3);
 is($rt->{ok}, 0, 'timed-out ask reports failure');
@@ -137,7 +137,7 @@ my $dbfile = "$tmp/resume.db";
 my $pd1 = ScriptedProvider->new(sub {
     return { choices => [ { finish_reason => 'stop', message => { content => 'persisted answer' } } ] };
 });
-my $d3 = Clam::Driver->new(provider => $pd1, db => $dbfile);
+my $d3 = AI::Clam::Driver->new(provider => $pd1, db => $dbfile);
 $d3->start;
 is($d3->ask('remember this')->{response}, 'persisted answer', 'first session turn');
 my ($sid, $count) = ($d3->session_id, scalar @{ $d3->messages });
@@ -146,7 +146,7 @@ $d3->close;
 my $pd2 = ScriptedProvider->new(sub {
     return { choices => [ { finish_reason => 'stop', message => { content => 'i remember' } } ] };
 });
-my $d4 = Clam::Driver->new(provider => $pd2, db => $dbfile);
+my $d4 = AI::Clam::Driver->new(provider => $pd2, db => $dbfile);
 $d4->start(resume => $sid);
 is($d4->session_id, $sid, 'resumed same session id');
 cmp_ok(scalar(@{ $d4->messages }), '>=', $count, 'history survived the restart');
@@ -162,7 +162,7 @@ $d4->close;
 eval { $d4->close };
 is($@, '', 'second close() is a no-op');
 {
-    my $tmp_driver = Clam::Driver->new(provider => ScriptedProvider->new(sub {
+    my $tmp_driver = AI::Clam::Driver->new(provider => ScriptedProvider->new(sub {
         return { choices => [ { finish_reason => 'stop', message => { content => 'x' } } ] };
     }), db => ':memory:');
     $tmp_driver->start;

@@ -30,8 +30,8 @@ if (@argv && $argv[0] eq 'providers') {
 exit _usage(0) if $opt{help} && !@argv;   # must exit — otherwise App is still constructed below
 
 # One-shot prompt or interactive REPL.
-require Clam::App;
-my $app = Clam::App->new(%opt);
+require AI::Clam::App;
+my $app = AI::Clam::App->new(%opt);
 if (@argv) {
     my $prompt = join(' ', @argv);
     $app->start_session(resume => $opt{resume});
@@ -46,8 +46,8 @@ if (@argv) {
         print $leaf->{content}{text}, "\n" if length($leaf->{content}{text} // '');
     }
 } else {
-    require Clam::REPL;
-    Clam::REPL->new(%opt)->run();
+    require AI::Clam::REPL;
+    AI::Clam::REPL->new(%opt)->run();
 }
 $app->shutdown;
 
@@ -79,7 +79,7 @@ EOF
 # --- providers subcommand ---------------------------------------------------
 sub _cmd_providers {
     my ($opt, @args) = @_;
-    require Clam::Providers;
+    require AI::Clam::Providers;
     my %p = (
         name     => $opt->{provider},
         model    => $opt->{model},
@@ -88,17 +88,17 @@ sub _cmd_providers {
     );
 
     if (($args[0] // '') eq 'test') {
-        my $prov = Clam::Providers->create(%p);
+        my $prov = AI::Clam::Providers->create(%p);
         print "probing ", $prov->log_safe, "\n";
-        my @ids = eval { @{ Clam::Providers::probe_models($prov) } };
+        my @ids = eval { @{ AI::Clam::Providers::probe_models($prov) } };
         if ($@) { print "FAIL: $@"; return 0 }
         if (@ids) { print "models: ", join(', ', @ids), "\n" }
         else      { print "(connected, no models reported)\n" }
         return 1;
     }
 
-    my $active = Clam::Providers->create(%p);
+    my $active = AI::Clam::Providers->create(%p);
     print "active: ", $active->log_safe, "\n";
-    print "known providers: ", join(', ', Clam::Providers::known()), "\n";
+    print "known providers: ", join(', ', AI::Clam::Providers::known()), "\n";
     return 1;
 }

@@ -5,11 +5,11 @@ use Test::More;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use Clam::Store;
-use Clam::WorldModel;
+use AI::Clam::Store;
+use AI::Clam::WorldModel;
 
-my $store = Clam::Store->new(db => ':memory:');
-my $wm = Clam::WorldModel->new(store => $store);
+my $store = AI::Clam::Store->new(db => ':memory:');
+my $wm = AI::Clam::WorldModel->new(store => $store);
 
 # === Test 1: BM25-only hybrid search ===
 
@@ -28,8 +28,8 @@ subtest 'Hybrid search with BM25 only (no embeddings)' => sub {
 # === Test 2: Hybrid search with mock embeddings ===
 
 subtest 'Hybrid search with mock embeddings' => sub {
-    my $store2 = Clam::Store->new(db => ':memory:');
-    my $wm2 = Clam::WorldModel->new(store => $store2);
+    my $store2 = AI::Clam::Store->new(db => ':memory:');
+    my $wm2 = AI::Clam::WorldModel->new(store => $store2);
 
     my $e1 = $wm2->add_entity(type => 'concept', name => 'rain', attributes => {});
     my $e2 = $wm2->add_entity(type => 'concept', name => 'cloud', attributes => {});
@@ -71,8 +71,8 @@ subtest 'Hybrid search with mock embeddings' => sub {
 # === Test 3: Blending weights ===
 
 subtest 'Different weights produce different rankings' => sub {
-    my $store3 = Clam::Store->new(db => ':memory:');
-    my $wm3 = Clam::WorldModel->new(store => $store3);
+    my $store3 = AI::Clam::Store->new(db => ':memory:');
+    my $wm3 = AI::Clam::WorldModel->new(store => $store3);
 
     my $e1 = $wm3->add_entity(type => 'concept', name => 'rain');
     my $e2 = $wm3->add_entity(type => 'concept', name => 'storm');
@@ -104,8 +104,8 @@ subtest 'Different weights produce different rankings' => sub {
 # === Test 4: Type filter ===
 
 subtest 'Type filter in hybrid search' => sub {
-    my $store4 = Clam::Store->new(db => ':memory:');
-    my $wm4 = Clam::WorldModel->new(store => $store4);
+    my $store4 = AI::Clam::Store->new(db => ':memory:');
+    my $wm4 = AI::Clam::WorldModel->new(store => $store4);
 
     $wm4->add_entity(type => 'concept', name => 'Perl');
     $wm4->add_entity(type => 'person', name => 'Larry Wall');
@@ -120,8 +120,8 @@ subtest 'Type filter in hybrid search' => sub {
 # === Test 5: Min score filter ===
 
 subtest 'Min score filter' => sub {
-    my $store5 = Clam::Store->new(db => ':memory:');
-    my $wm5 = Clam::WorldModel->new(store => $store5);
+    my $store5 = AI::Clam::Store->new(db => ':memory:');
+    my $wm5 = AI::Clam::WorldModel->new(store => $store5);
 
     $wm5->add_entity(type => 'concept', name => 'Perl');
     $wm5->add_entity(type => 'concept', name => 'Python');
@@ -133,18 +133,18 @@ subtest 'Min score filter' => sub {
 # === Test 6: Cosine similarity ===
 
 subtest '_cosine_sim correctness' => sub {
-    require Clam::WorldModel;
-    is(Clam::WorldModel::_cosine_sim([1,0,0], [1,0,0]), 1, 'identical');
-    ok(abs(Clam::WorldModel::_cosine_sim([1,0], [0,1])) < 1e-10, 'orthogonal');
-    is(Clam::WorldModel::_cosine_sim([], []), 0, 'empty');
-    ok(Clam::WorldModel::_cosine_sim([1,2,3], [1,2,3.1]) > 0.99, 'similar');
+    require AI::Clam::WorldModel;
+    is(AI::Clam::WorldModel::_cosine_sim([1,0,0], [1,0,0]), 1, 'identical');
+    ok(abs(AI::Clam::WorldModel::_cosine_sim([1,0], [0,1])) < 1e-10, 'orthogonal');
+    is(AI::Clam::WorldModel::_cosine_sim([], []), 0, 'empty');
+    ok(AI::Clam::WorldModel::_cosine_sim([1,2,3], [1,2,3.1]) > 0.99, 'similar');
 };
 
 # === Test 7: Limit ===
 
 subtest 'Limit parameter' => sub {
-    my $store6 = Clam::Store->new(db => ':memory:');
-    my $wm6 = Clam::WorldModel->new(store => $store6);
+    my $store6 = AI::Clam::Store->new(db => ':memory:');
+    my $wm6 = AI::Clam::WorldModel->new(store => $store6);
 
     for my $i (1..20) {
         $wm6->add_entity(type => 'concept', name => "item_$i");

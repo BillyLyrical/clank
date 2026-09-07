@@ -5,11 +5,11 @@ use Test::More;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use Clam::Store;
-use Clam::WorldModel;
+use AI::Clam::Store;
+use AI::Clam::WorldModel;
 
-my $store = Clam::Store->new(db => ':memory:');
-my $wm = Clam::WorldModel->new(store => $store);
+my $store = AI::Clam::Store->new(db => ':memory:');
+my $wm = AI::Clam::WorldModel->new(store => $store);
 
 # Build a test graph:
 #   Alice --knows--> Bob --knows--> Charlie --knows--> Dave

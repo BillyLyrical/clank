@@ -5,13 +5,13 @@ use Test::More;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use Clam::ToolSelector;
-use Clam::Tool;
+use AI::Clam::ToolSelector;
+use AI::Clam::Tool;
 
 # Helper: create a mock tool.
 sub mock_tool {
     my ($name, $desc, $hint) = @_;
-    return Clam::Tool->new(
+    return AI::Clam::Tool->new(
         name        => $name,
         description => $desc,
         hint        => $hint,
@@ -33,21 +33,21 @@ my @tools = (
 # === Test 1: All tools returned when under max ===
 
 subtest 'All tools when under max' => sub {
-    my $result = Clam::ToolSelector->select(tools => \@tools, prompt => 'hello', max => 20);
+    my $result = AI::Clam::ToolSelector->select(tools => \@tools, prompt => 'hello', max => 20);
     is(scalar @$result, 8, 'all 8 tools returned');
 };
 
 # === Test 2: Filters when over max ===
 
 subtest 'Filters when over max' => sub {
-    my $result = Clam::ToolSelector->select(tools => \@tools, prompt => 'read the file', max => 3);
+    my $result = AI::Clam::ToolSelector->select(tools => \@tools, prompt => 'read the file', max => 3);
     is(scalar @$result, 3, 'limited to 3 tools');
 };
 
 # === Test 3: Relevant tools ranked first ===
 
 subtest 'Relevant tools ranked first' => sub {
-    my $result = Clam::ToolSelector->select(tools => \@tools, prompt => 'read the config file', max => 3);
+    my $result = AI::Clam::ToolSelector->select(tools => \@tools, prompt => 'read the config file', max => 3);
     my @names = map { $_->{name} } @$result;
     is($names[0], 'read', 'read tool ranked first');
 };
@@ -55,7 +55,7 @@ subtest 'Relevant tools ranked first' => sub {
 # === Test 4: Git tools for git prompt ===
 
 subtest 'Git tools for git prompt' => sub {
-    my $result = Clam::ToolSelector->select(tools => \@tools, prompt => 'commit my changes to git', max => 3);
+    my $result = AI::Clam::ToolSelector->select(tools => \@tools, prompt => 'commit my changes to git', max => 3);
     my @names = map { $_->{name} } @$result;
     ok(grep { /git/ } @names, 'git tools in results');
 };
@@ -63,7 +63,7 @@ subtest 'Git tools for git prompt' => sub {
 # === Test 5: Database tools for SQL prompt ===
 
 subtest 'Database tools for SQL prompt' => sub {
-    my $result = Clam::ToolSelector->select(tools => \@tools, prompt => 'query the database for users', max => 3);
+    my $result = AI::Clam::ToolSelector->select(tools => \@tools, prompt => 'query the database for users', max => 3);
     my @names = map { $_->{name} } @$result;
     is($names[0], 'db_query', 'db_query ranked first');
 };
@@ -71,7 +71,7 @@ subtest 'Database tools for SQL prompt' => sub {
 # === Test 6: Empty prompt returns all ===
 
 subtest 'Empty prompt returns all' => sub {
-    my $result = Clam::ToolSelector->select(tools => \@tools, prompt => '', max => 3);
+    my $result = AI::Clam::ToolSelector->select(tools => \@tools, prompt => '', max => 3);
     is(scalar @$result, 3, 'returns max tools for empty prompt');
 };
 
@@ -79,14 +79,14 @@ subtest 'Empty prompt returns all' => sub {
 
 subtest 'Single tool list' => sub {
     my $single = [mock_tool('only', 'The only tool', 'unique')];
-    my $result = Clam::ToolSelector->select(tools => $single, prompt => 'anything', max => 10);
+    my $result = AI::Clam::ToolSelector->select(tools => $single, prompt => 'anything', max => 10);
     is(scalar @$result, 1, 'single tool returned');
 };
 
 # === Test 8: No tools ===
 
 subtest 'No tools' => sub {
-    my $result = Clam::ToolSelector->select(tools => [], prompt => 'hello', max => 10);
+    my $result = AI::Clam::ToolSelector->select(tools => [], prompt => 'hello', max => 10);
     is(scalar @$result, 0, 'empty list for no tools');
 };
 

@@ -1,7 +1,7 @@
 use strict; use warnings;
 use Test::More;
 use lib 'lib';
-use Clam::Util qw(uuid4 now_ms jencode jdecode truncate_head truncate_tail estimate_tokens);
+use AI::Clam::Util qw(uuid4 now_ms jencode jdecode truncate_head truncate_tail estimate_tokens);
 
 # uuid4 format + uniqueness
 my %seen;

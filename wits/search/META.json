@@ -5,17 +5,17 @@
   "license": "Artistic-2.0",
   "requires": {
     "perl": "5.040001",
-    "Clam": "1.0"
+    "AI::Clam": "1.0"
   },
   "provides": {
-    "Clam::Wits::Search::Search": { "file": "lib/Clam/Wits/Search/Search.pm", "version": "1.0.0" },
-    "Clam::Wits::Search::Local": { "file": "lib/Clam/Wits/Search/Local.pm", "version": "1.0.0" },
-    "Clam::Wits::Search::Kagi": { "file": "lib/Clam/Wits/Search/Kagi.pm", "version": "1.0.0" },
-    "Clam::Wits::Search::Duckduckgo": { "file": "lib/Clam/Wits/Search/Duckduckgo.pm", "version": "1.0.0" },
-    "Clam::Wits::Search::Yandex": { "file": "lib/Clam/Wits/Search/Yandex.pm", "version": "1.0.0" },
-    "Clam::Wits::Search::Llm": { "file": "lib/Clam/Wits/Search/Llm.pm", "version": "1.0.0" },
-    "Clam::Wits::Search::Bing": { "file": "lib/Clam/Wits/Search/Bing.pm", "version": "1.0.0" },
-    "Clam::Wits::Search::Brave": { "file": "lib/Clam/Wits/Search/Brave.pm", "version": "1.0.0" },
-    "Clam::Wits::Search::Google": { "file": "lib/Clam/Wits/Search/Google.pm", "version": "1.0.0" }
+    "AI::Clam::Wits::Search::Search": { "file": "lib/AI/Clam/Wits/Search/Search.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Search::Local": { "file": "lib/AI/Clam/Wits/Search/Local.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Search::Kagi": { "file": "lib/AI/Clam/Wits/Search/Kagi.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Search::Duckduckgo": { "file": "lib/AI/Clam/Wits/Search/Duckduckgo.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Search::Yandex": { "file": "lib/AI/Clam/Wits/Search/Yandex.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Search::Llm": { "file": "lib/AI/Clam/Wits/Search/Llm.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Search::Bing": { "file": "lib/AI/Clam/Wits/Search/Bing.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Search::Brave": { "file": "lib/AI/Clam/Wits/Search/Brave.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Search::Google": { "file": "lib/AI/Clam/Wits/Search/Google.pm", "version": "1.0.0" }
   }
 }

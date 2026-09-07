@@ -5,24 +5,24 @@
   "license": "Artistic-2.0",
   "requires": {
     "perl": "5.040001",
-    "Clam": "1.0"
+    "AI::Clam": "1.0"
   },
   "provides": {
-    "Clam::Wits::Perl::Syntax": { "file": "lib/Clam/Wits/Perl/Syntax.pm", "version": "1.0.0" },
-    "Clam::Wits::Perl::Test": { "file": "lib/Clam/Wits/Perl/Test.pm", "version": "1.0.0" },
-    "Clam::Wits::Perl::Doc": { "file": "lib/Clam/Wits/Perl/Doc.pm", "version": "1.0.0" },
-    "Clam::Wits::Perl::TestGen": { "file": "lib/Clam/Wits/Perl/TestGen.pm", "version": "1.0.0" },
-    "Clam::Wits::Perl::Dump": { "file": "lib/Clam/Wits/Perl/Dump.pm", "version": "1.0.0" },
-    "Clam::Wits::Perl::Trace": { "file": "lib/Clam/Wits/Perl/Trace.pm", "version": "1.0.0" },
-    "Clam::Wits::Perl::PodRead": { "file": "lib/Clam/Wits/Perl/PodRead.pm", "version": "1.0.0" },
-    "Clam::Wits::Perl::Deps": { "file": "lib/Clam/Wits/Perl/Deps.pm", "version": "1.0.0" },
-    "Clam::Wits::Perl::DocCheck": { "file": "lib/Clam/Wits/Perl/DocCheck.pm", "version": "1.0.0" },
-    "Clam::Wits::Perl::ErrorParse": { "file": "lib/Clam/Wits/Perl/ErrorParse.pm", "version": "1.0.0" },
-    "Clam::Wits::Perl::Explain": { "file": "lib/Clam/Wits/Perl/Explain.pm", "version": "1.0.0" },
-    "Clam::Wits::Perl::Security": { "file": "lib/Clam/Wits/Perl/Security.pm", "version": "1.0.0" },
-    "Clam::Wits::Perl::Refactor": { "file": "lib/Clam/Wits/Perl/Refactor.pm", "version": "1.0.0" },
-    "Clam::Wits::Perl::Review": { "file": "lib/Clam/Wits/Perl/Review.pm", "version": "1.0.0" },
-    "Clam::Wits::Perl::DeadCode": { "file": "lib/Clam/Wits/Perl/DeadCode.pm", "version": "1.0.0" },
-    "Clam::Wits::Perl::WarnCheck": { "file": "lib/Clam/Wits/Perl/WarnCheck.pm", "version": "1.0.0" }
+    "AI::Clam::Wits::Perl::Syntax": { "file": "lib/AI/Clam/Wits/Perl/Syntax.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Perl::Test": { "file": "lib/AI/Clam/Wits/Perl/Test.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Perl::Doc": { "file": "lib/AI/Clam/Wits/Perl/Doc.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Perl::TestGen": { "file": "lib/AI/Clam/Wits/Perl/TestGen.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Perl::Dump": { "file": "lib/AI/Clam/Wits/Perl/Dump.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Perl::Trace": { "file": "lib/AI/Clam/Wits/Perl/Trace.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Perl::PodRead": { "file": "lib/AI/Clam/Wits/Perl/PodRead.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Perl::Deps": { "file": "lib/AI/Clam/Wits/Perl/Deps.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Perl::DocCheck": { "file": "lib/AI/Clam/Wits/Perl/DocCheck.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Perl::ErrorParse": { "file": "lib/AI/Clam/Wits/Perl/ErrorParse.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Perl::Explain": { "file": "lib/AI/Clam/Wits/Perl/Explain.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Perl::Security": { "file": "lib/AI/Clam/Wits/Perl/Security.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Perl::Refactor": { "file": "lib/AI/Clam/Wits/Perl/Refactor.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Perl::Review": { "file": "lib/AI/Clam/Wits/Perl/Review.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Perl::DeadCode": { "file": "lib/AI/Clam/Wits/Perl/DeadCode.pm", "version": "1.0.0" },
+    "AI::Clam::Wits::Perl::WarnCheck": { "file": "lib/AI/Clam/Wits/Perl/WarnCheck.pm", "version": "1.0.0" }
   }
 }
