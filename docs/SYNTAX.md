@@ -227,7 +227,8 @@ format.
 
 ### 2.2 Grammar
 
-The pipeline format uses Opex grammar:
+The pipeline format uses Opex grammar, parsed by `Data::Opex`
+(`Data/Opex.pm` at `/usr/local/lib/site_perl/Data/Opex.pm`):
 
 | First char | Meaning |
 |------------|---------|
