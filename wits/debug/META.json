@@ -1,0 +1,34 @@
+{
+  "name": "Clank-Wits-Debug",
+  "version": "1.0.0",
+  "author": "Clank",
+  "license": "Artistic-2.0",
+  "abstract": "Debugging wits for Clank — stack traces, strace, open files, process info",
+  "provides": {
+    "Clank::Wits::Debug::Stacktrace": {
+      "file": "lib/Clank/Wits/Debug/Stacktrace.pm",
+      "version": "1.0.0"
+    },
+    "Clank::Wits::Debug::Strace": {
+      "file": "lib/Clank/Wits/Debug/Strace.pm",
+      "version": "1.0.0"
+    },
+    "Clank::Wits::Debug::Lsof": {
+      "file": "lib/Clank/Wits/Debug/Lsof.pm",
+      "version": "1.0.0"
+    },
+    "Clank::Wits::Debug::Pstack": {
+      "file": "lib/Clank/Wits/Debug/Pstack.pm",
+      "version": "1.0.0"
+    }
+  },
+  "requires": {
+    "perl": "5.010"
+  },
+  "wits": [
+    { "trigger": "debug_stacktrace", "module": "Clank::Wits::Debug::Stacktrace" },
+    { "trigger": "debug_strace",     "module": "Clank::Wits::Debug::Strace" },
+    { "trigger": "debug_lsof",       "module": "Clank::Wits::Debug::Lsof" },
+    { "trigger": "debug_pstack",     "module": "Clank::Wits::Debug::Pstack" }
+  ]
+}

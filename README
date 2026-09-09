@@ -40,20 +40,24 @@ Core harness:
   - Context engineering: capability manifest, RATS tool selection,
     knowledge bus, context compression, behavioral rules
 
-125 curated wits across 10 decks:
+141 curated wits across 14 decks:
 
-  logic     51 wits   Datalog engine, rules DSL, FSM, behavior trees, SAT
-  critic    12 wits   Code critique heuristics
-  git       10 wits   Git operations (status, log, diff, blame, ...)
-  fs        12 wits   Filesystem operations (read, write, edit, ...)
-  db         8 wits   Database shell (connect, query, execute, ...)
-  perl      16 wits   Perl development (syntax, review, POD, tests)
-  psh        3 wits   Perl Shell REPL (eval, vars, help)
-  search     9 wits   Local + web search
-  embedding  1 wit    Semantic search via embeddings
-  neuro      3 wits   Neurosymbolic integration (world model, crystallizer, constraints)
+  logic      51 wits   Datalog engine, rules DSL, FSM, behavior trees, SAT
+  critic     12 wits   Code critique heuristics
+  git        10 wits   Git operations (status, log, diff, blame, ...)
+  fs         12 wits   Filesystem operations (read, write, edit, ...)
+  db          8 wits   Database shell (connect, query, execute, ...)
+  perl       16 wits   Perl development (syntax, review, POD, tests)
+  psh         3 wits   Perl Shell REPL (eval, vars, help)
+  search      9 wits   Local + web search
+  embedding   1 wit    Semantic search via embeddings
+  neuro       3 wits   Neurosymbolic integration (world model, crystallizer, constraints)
+  web         4 wits   HTTP requests (fetch, post, put, delete)
+  build       4 wits   Build systems (make, perl build, cpanm, test)
+  devops      4 wits   Docker + systemd (ps, run, logs, status)
+  debug       4 wits   Debugging (stacktrace, strace, lsof, pstack)
 
-  768 tests, all offline. prove -l t/ green.
+  997 tests, all offline. prove -l t/ green.
 
 
 Quick start

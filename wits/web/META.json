@@ -1,0 +1,34 @@
+{
+  "name": "Clank-Wits-Web",
+  "version": "1.0.0",
+  "author": "Clank",
+  "license": "Artistic-2.0",
+  "abstract": "HTTP request wits for Clank — fetch, post, put, delete",
+  "provides": {
+    "Clank::Wits::Web::Fetch": {
+      "file": "lib/Clank/Wits/Web/Fetch.pm",
+      "version": "1.0.0"
+    },
+    "Clank::Wits::Web::Post": {
+      "file": "lib/Clank/Wits/Web/Post.pm",
+      "version": "1.0.0"
+    },
+    "Clank::Wits::Web::Put": {
+      "file": "lib/Clank/Wits/Web/Put.pm",
+      "version": "1.0.0"
+    },
+    "Clank::Wits::Web::Delete": {
+      "file": "lib/Clank/Wits/Web/Delete.pm",
+      "version": "1.0.0"
+    }
+  },
+  "requires": {
+    "perl": "5.010"
+  },
+  "wits": [
+    { "trigger": "web_fetch",  "module": "Clank::Wits::Web::Fetch" },
+    { "trigger": "web_post",   "module": "Clank::Wits::Web::Post" },
+    { "trigger": "web_put",    "module": "Clank::Wits::Web::Put" },
+    { "trigger": "web_delete", "module": "Clank::Wits::Web::Delete" }
+  ]
+}

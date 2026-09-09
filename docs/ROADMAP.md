@@ -396,6 +396,17 @@ lib/Clank/Tracer.pm        event-trace log for observability
 lib/Clank/Cache.pm         TTL cache for LLM responses
 lib/Clank/Metrics.pm       counters for LLM calls, tokens, rules
 lib/Clank/EventSourcing.pm immutable state-change log
+lib/Clank/Escalation.pm    computational escalation (cheapest correct tool first)
+lib/Clank/Band.pm           composable societies of wits (bus workflows)
+lib/Clank/Mesh.pm           cross-session communication
+lib/Clank/PerlEnv.pm        Perl execution environment
+lib/Clank/PerlLoop.pm       agent loop connecting LLM to PerlEnv
+lib/Clank/ContextRules.pm   deterministic context rules (DSL)
+lib/Clank/Exec.pm           reusable subprocess execution
+wits/web/lib/Clank/Wits/Web/*.pm        HTTP requests (4 wits)
+wits/build/lib/Clank/Wits/Build/*.pm    Build systems (4 wits)
+wits/devops/lib/Clank/Wits/Devops/*.pm  Docker + systemd (4 wits)
+wits/debug/lib/Clank/Wits/Debug/*.pm    Debugging tools (4 wits)
 ```
 
 ---
@@ -416,6 +427,10 @@ lib/Clank/EventSourcing.pm immutable state-change log
 | `search` | 9 | Local + web search | ✅ Ported, tested |
 | `embedding` | 1 | Semantic search via embeddings | ✅ Built |
 | `neuro` | 3 | Neurosymbolic integration (Constraints, Crystallizer, NeuroIntegration) | ✅ Built |
+| `web` | 4 | HTTP requests (fetch, post, put, delete) | ✅ Built |
+| `build` | 4 | Build systems (make, perl build, cpanm, test) | ✅ Built |
+| `devops` | 4 | Docker + systemd (ps, run, logs, status) | ✅ Built |
+| `debug` | 4 | Debugging (stacktrace, strace, lsof, pstack) | ✅ Built |
 
 ### 6.2 Planned Wits (from clank-old, prioritized)
 
@@ -423,14 +438,14 @@ These are the wits worth porting. Not all 77 old decks — just the ones that se
 
 **High priority** (core coding workflow):
 - `db` — database operations (SQLite, PostgreSQL, MySQL) ✅ done
-- `web` — HTTP requests, API calls ❌ not done
-- `build` — make, cmake, cargo, npm ❌ not done
+- `web` — HTTP requests, API calls ✅ done
+- `build` — make, cmake, cargo, npm ✅ done
 - `perl` — Perl-specific utilities (PPI, perlcritic, perltidy) ✅ done
 
 **Medium priority** (devops/sysadmin):
-- `devops` — Docker, systemd, service management
+- `devops` — Docker, systemd, service management ✅ done
 - `sysadmin` — process management, disk, networking
-- `debug` — debugging tools, profiler integration
+- `debug` — debugging tools, profiler integration ✅ done
 
 **Low priority** (specialist):
 - `email` — send/read email (IMAP/SMTP)
@@ -533,7 +548,7 @@ Make the CPAN-based plugin system real + expand provider coverage.
 | CPAN dist packaging | ⬜ TODO | Build separate tarballs from wits/ directory |
 | P2-3: stdio handler type | ⬜ TODO | Enables untrusted/user code safely. Process boundary. |
 | Bedrock provider | ⬜ TODO | AWS SigV4 signing (deferred). |
-| More wits (web, build) | ⬜ TODO | Grow the curated catalog based on real needs. |
+| More wits (web, build, devops, debug) | ✅ Done | 16 new wits across 4 new decks. |
 
 ### Phase 3: Capabilities
 
