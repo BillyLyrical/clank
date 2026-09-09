@@ -3,11 +3,11 @@ package Clank::Skills;
 use strict;
 use warnings;
 
-# Scan ./.clank/skills and ~/.clank/skills (plus extras) for *.md skill files.
-# Returns list of { name, description, file_path }.
+# Scan skills directories for *.md skill files.
+# Roots: ./skills (project), ./.clank/skills, ~/.clank/skills, plus extras.
 sub discover {
     my (%o) = @_;
-    my @roots = ('.clank/skills');
+    my @roots = ('skills', '.clank/skills');
     push @roots, "$ENV{HOME}/.clank/skills" if defined $ENV{HOME};
     push @roots, @{ $o{extra} // [] };
     my (@skills, %seen);
