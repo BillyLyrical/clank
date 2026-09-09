@@ -10,6 +10,7 @@ package Clank::Loop;
 use strict;
 use warnings;
 use Clank::Util qw(jencode jdecode);
+use Clank::Session::Messages;
 
 sub new {
     my ($class, %o) = @_;
@@ -97,17 +98,54 @@ sub run_prompt {
             $msgs = $r->{messages} if ref $r eq 'HASH' && ref $r->{messages} eq 'ARRAY';
         }
 
+        # 3a) context-aware pruning: drop unreferenced old turns.
+        if (@$msgs > 24) {
+            require Clank::Session::Messages;
+            my $pruned = Clank::Session::Messages::prune_context($msgs, keep_recent => 20);
+            $msgs = $pruned if $pruned != $msgs;
+        }
+
+        # 3b) deterministic context rules: inject behavioral rules via DSL.
+        my $context_rules = $self->{context_rules};
+        unless ($context_rules) {
+            require Clank::ContextRules;
+            $context_rules = Clank::ContextRules->new();
+            $self->{context_rules} = $context_rules;
+        }
+        my $rule_text = $context_rules->format_for_prompt(prompt => $sp);
+        if ($rule_text) {
+            $sp .= "\n\n$rule_text";
+            $session->set_system_prompt($sp);
+        }
+
+        # 3c) knowledge context: query world model + crystallizer for relevant facts.
+        my $last_msg = $msgs->[-1]{content} // '';
+        my $kr = $bus->publish('context.knowledge_request', { prompt => $last_msg });
+        my @knowledge;
+        for my $r (@{ $kr->{results} }) {
+            next unless ref $r eq 'HASH';
+            push @knowledge, @{ $r->{facts} // [] };
+            push @knowledge, @{ $r->{rules} // [] };
+        }
+        if (@knowledge) {
+            my $ktext = join("\n", map { "- $_->{text}" } @knowledge);
+            my $kmsg = { role => 'user', content => "[knowledge context]\n$ktext" };
+            push @$msgs, $kmsg;
+        }
+
         # 4) build provider payload; before_provider_request may replace it.
-        # RATS: select relevant tools based on the current prompt.
+        # RATS: select relevant tools based on the current prompt + context.
         my @all_tools = $session->tools;
         my @schemas;
         if ($self->{max_tools} && @all_tools > $self->{max_tools}) {
             require Clank::ToolSelector;
             my $last_msg = $msgs->[-1]{content} // '';
+            my $ctx = _build_tool_context($self, $session);
             my $selected = Clank::ToolSelector->select(
-                tools  => \@all_tools,
-                prompt => $last_msg,
-                max    => $self->{max_tools},
+                tools   => \@all_tools,
+                prompt  => $last_msg,
+                max     => $self->{max_tools},
+                context => $ctx,
             );
             @schemas = map { $_->openai_schema } @$selected;
             $self->{metrics}->inc('tools.rats_filtered') if $self->{metrics};
@@ -291,6 +329,14 @@ sub run_prompt {
 
             $bus->publish('tool_execution_end',
                 { toolCallId => $tc->{id}, name => $tc->{name}, isError => $is_err });
+
+            # Post-tool-call compression: summarize large outputs before re-entry.
+            # Keeps context manageable without losing essential information.
+            if (!$is_err && defined $output && length($output) > 4000) {
+                my $summary = _summarize_tool_output($self, $tc->{name}, $output);
+                $output = $summary if defined $summary && length($summary) < length($output);
+            }
+
             $session->add_tool_result($tc->{id}, $output, $is_err);
         }
 
@@ -370,12 +416,111 @@ sub _plain {
     return { role => $m->{role}, content => $m->{content} // '' };
 }
 
+# Post-tool-call compression: summarize large tool outputs.
+# Uses the LLM to produce a concise summary that preserves essential info.
+# Returns undef on failure (caller keeps original output).
+sub _summarize_tool_output {
+    my ($self, $tool_name, $output) = @_;
+    return undef unless $self->_provider;
+
+    # Estimate tokens (~4 chars/token). Skip if already small.
+    my $est_tokens = int(length($output) / 4);
+    return undef if $est_tokens < 1000;
+
+    my $truncated = substr($output, 0, 8000);
+    my $resp = eval {
+        $self->_provider->post_json('/chat/completions', {
+            model    => $self->_provider->{model},
+            messages => [
+                { role => 'system', content => 'Summarize this tool output concisely. Keep: key results, errors, file paths, line numbers. Drop: verbose formatting, redundant data. Return ONLY the summary, no preamble.' },
+                { role => 'user',   content => "Tool: $tool_name\n\n$truncated" },
+            ],
+        });
+    };
+    return undef if $@ || !$resp;
+    my $summary = $resp->{choices}[0]{message}{content} // '';
+    return length($summary) > 100 ? $summary : undef;
+}
+
 sub _find_tool {
     my ($session, $name) = @_;
     for my $t (@{ $session->{tools} }) {
         return $t if $t->{name} eq $name;
     }
     return undef;
+}
+
+# Build context signals for ToolSelector from session state.
+# recent_tools: tools used in the last few turns (recency boost)
+# loaded_wits:  deck names from the capability manifest (wit affinity boost)
+# file_types:   file extensions mentioned in recent messages (domain boost)
+# error_msg:    last error message (error recovery boost)
+sub _build_tool_context {
+    my ($self, $session) = @_;
+    my %ctx;
+
+    my $store = $session->{store};
+    my $sid   = $session->id;
+
+    # Recent tools: query events table for recent tool executions.
+    if ($store && $sid) {
+        my $events = $store->query_events(
+            topic => 'tool_execution_end', limit => 20);
+        my %seen;
+        my @recent;
+        for my $ev (reverse @$events) {
+            my $name = $ev->{payload}{name} // '';
+            next unless $name && !$seen{$name}++;
+            push @recent, $name;
+            last if @recent >= 10;
+        }
+        $ctx{recent_tools} = \@recent;
+    }
+
+    # Loaded wits: extract deck names from the manifest.
+    my $manifest = $session->{manifest} // '';
+    if ($manifest) {
+        my @decks;
+        for my $line (split /\n/, $manifest) {
+            if ($line =~ /^\s+(\w+)\s/) {
+                push @decks, $1;
+            }
+        }
+        $ctx{loaded_wits} = \@decks;
+    }
+
+    # File types: scan recent user messages for file extensions.
+    if ($store && $sid) {
+        my $chain = Clank::Session::Messages::chain($store, $sid);
+        my %ft;
+        my $count = 0;
+        for my $m (reverse @$chain) {
+            last if $count++ >= 5;
+            next unless ($m->{role} // '') eq 'user';
+            my $text = ref $m->{content} eq 'HASH' ? $m->{content}{text} // '' : $m->{content} // '';
+            while ($text =~ /\.(\w{2,4})\b/g) {
+                my $ext = lc($1);
+                $ft{$ext} = 1 if $ext =~ /^(?:pm|pl|t|xs|c|h|json|yaml|yml|toml|md|txt|csv|sql|sh|py|js|ts|rb|go|rs)$/;
+            }
+        }
+        $ctx{file_types} = [keys %ft] if %ft;
+    }
+
+    # Last error: scan recent tool results for error output.
+    if ($store && $sid) {
+        my $chain = Clank::Session::Messages::chain($store, $sid);
+        for my $m (reverse @$chain) {
+            next unless ($m->{role} // '') eq 'toolResult';
+            my $c = $m->{content};
+            my $out = ref $c eq 'HASH' ? $c->{output} // '' : '';
+            if ($out && length($out) > 10) {
+                $ctx{error_msg} = substr($out, 0, 200);
+                last;
+            }
+        }
+    }
+
+    return \%ctx;
 }
 
 # ---------------------------------------------------------------------------

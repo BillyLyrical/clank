@@ -64,6 +64,7 @@ sub system_prompt {
         tool_snippets  => \%SNIPPETS,
         skills         => $self->{skills},
         context_files  => $self->{context_files},
+        manifest       => $self->{manifest},
     );
     return $self->{system_prompt};
 }
@@ -71,6 +72,12 @@ sub system_prompt {
 sub set_system_prompt { $_[0]->{system_prompt} = $_[1] }
 sub set_skills        { $_[0]->{skills} = $_[1] }
 sub set_context_files { $_[0]->{context_files} = $_[1] }
+sub set_manifest {
+    my ($self, $manifest) = @_;
+    $self->{manifest} = $manifest;
+    # Invalidate cached system prompt so it rebuilds with the new manifest.
+    delete $self->{system_prompt};
+}
 
 # Provider messages for the current head (pre-hook).
 sub build_context {

@@ -15,6 +15,67 @@ sub new {
 
 sub dbh { $_[0]->{dbh} }
 
+# Subscribe to context.knowledge_request to provide world model facts.
+# This is the bus-driven integration point for the context assembly pipeline.
+sub register {
+    my ($self, $api) = @_;
+    $self->{api} = $api;
+    $api->on('context.knowledge_request', sub { $self->_on_knowledge_request(@_) });
+    return $self;
+}
+
+sub _on_knowledge_request {
+    my ($self, $ev) = @_;
+    my $prompt = $ev->{payload}{prompt} // '';
+    return unless length $prompt;
+
+    my @facts;
+
+    # Search entities matching prompt keywords.
+    my @keywords = grep { length($_) > 2 } split /\s+/, lc($prompt);
+    my %seen_entities;
+    for my $keyword (@keywords) {
+        my $entities = $self->search_entities($keyword, limit => 5);
+        for my $ent (@$entities) {
+            next if $seen_entities{$ent->{id}}++;
+            my $attrs = ref $ent->{attributes} eq 'HASH' ? $ent->{attributes} : {};
+            push @facts, {
+                type  => 'entity',
+                text  => sprintf("%s (%s): %s",
+                    $ent->{name} // $ent->{id},
+                    $ent->{type},
+                    join(', ', map { "$_=$attrs->{$_}" } sort keys %$attrs)),
+            };
+        }
+    }
+
+    # Get facts for top entities.
+    my $count = 0;
+    for my $ent (values %seen_entities) {
+        last if $count++ >= 5;
+        my $facts = $self->query_facts(entity_id => $ent);
+        for my $f (@$facts) {
+            push @facts, {
+                type  => 'fact',
+                text  => sprintf("%s: %s (confidence: %.0f%%)",
+                    $f->{predicate}, $f->{value} // '', ($f->{confidence} // 1) * 100),
+            };
+        }
+    }
+
+    # Get high-confidence beliefs.
+    my $beliefs = $self->query_beliefs(min_confidence => 0.7, limit => 5);
+    for my $b (@$beliefs) {
+        push @facts, {
+            type  => 'belief',
+            text  => sprintf("Belief (%.0f%%): %s", $b->{confidence} * 100, $b->{statement}),
+        };
+    }
+
+    return { facts => \@facts } if @facts;
+    return undef;
+}
+
 sub _init_schema {
     my ($self) = @_;
     my $db = $self->{dbh};

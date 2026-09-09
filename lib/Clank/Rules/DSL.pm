@@ -11,6 +11,7 @@
 package Clank::Rules::DSL;
 use strict;
 use warnings;
+require Clank::Rules::Rule;
 
 # Parse a DSL string into an arrayref of Clank::Rules::Rule.
 sub parse {
@@ -93,6 +94,9 @@ sub _build_rule {
             }
             elsif ($act =~ /^output\s+(.+)/) {
                 $result->{output} = $1;
+            }
+            elsif ($act =~ /^inject\s+(.+)/) {
+                push $result->{inject}->@*, $1;
             }
         }
         return $result;

@@ -227,4 +227,18 @@ sub chain_of { my ($store, $sid) = @_; return Clank::Session::Messages::chain($s
     like($chain[1]{content}, qr/injected note/, 'injected message stored as user message');
 }
 
+# --- manifest in system prompt ------------------------------------------------
+{
+    my ($store, $bus, $mock, $sess, $loop) = make_env(sub {
+        my ($payload, $n) = @_;
+        return { choices => [{ message => { role => 'assistant', content => 'ok' }, finish_reason => 'stop' }] };
+    });
+
+    $sess->set_manifest("CAPABILITIES (5 wits, 2 decks):\n  git  status, log [git]\n  db  query, execute [db]");
+    my $sp = $sess->system_prompt;
+    like($sp, qr/CAPABILITIES/, 'system prompt includes manifest header');
+    like($sp, qr/git  status, log/, 'system prompt includes deck git');
+    like($sp, qr/db  query, execute/, 'system prompt includes deck db');
+}
+
 done_testing();

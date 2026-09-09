@@ -104,8 +104,15 @@ sub start_session {
     $session->set_skills(\@skills);
     $session->set_context_files(\@ctx);
 
+    # Capability manifest: deck-level overview for the system prompt.
+    # Generated after wits are loaded so it reflects actual state.
+    $session->set_manifest($pm->manifest);
+
     # Bus-driven neurosymbolic wits (subscribe to events automatically).
     my $api = _make_api($self);
+
+    # Register world model for knowledge requests.
+    $self->{world_model}->register($api);
 
     Clank::NeuroIntegration->new(
         world_model => $self->{world_model},

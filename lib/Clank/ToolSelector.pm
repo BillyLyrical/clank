@@ -3,24 +3,37 @@
 # Instead of dumping all tools into the LLM prompt, score them by relevance
 # to the current task and return only the most relevant ones.
 #
-# Scoring: keyword overlap between tool hints/descriptions and the prompt.
-# Simple, fast, no external dependencies.
+# Scoring: keyword overlap between tool hints/descriptions and the prompt,
+# plus context signals (recent use, wit affinity, file type, error recovery).
 package Clank::ToolSelector;
 use strict;
 use warnings;
 
 # Select the most relevant tools for a given prompt.
 # Returns arrayref of tool objects, sorted by relevance descending.
+#
+# Optional context hash for secondary signals:
+#   recent_tools => ['git_status', ...]   tools used in recent turns (boost)
+#   loaded_wits  => ['git', 'db']         currently loaded deck names (boost)
+#   file_types   => ['pm', 'pl']          file types being worked on (boost)
+#   error_msg    => 'Can\'t locate ...'   last error message (boost matching tools)
 sub select {
     my ($class, %args) = @_;
-    my $tools  = $args{tools}  // [];    # arrayref of Clank::Tool objects
-    my $prompt = $args{prompt} // '';
-    my $max    = $args{max}    // 30;    # max tools to return
+    my $tools   = $args{tools}   // [];    # arrayref of Clank::Tool objects
+    my $prompt  = $args{prompt}  // '';
+    my $max     = $args{max}     // 30;    # max tools to return
     my $min_score = $args{min_score} // 0;
+    my $context = $args{context} // {};    # secondary signals
 
     return $tools if scalar @$tools <= $max;
 
     my @prompt_words = _tokenize($prompt);
+
+    # Pre-compute context sets for fast lookup.
+    my %recent = map { $_ => 1 } @{ $context->{recent_tools} // [] };
+    my %wits   = map { $_ => 1 } @{ $context->{loaded_wits}  // [] };
+    my %ftypes = map { $_ => 1 } @{ $context->{file_types}   // [] };
+    my @err_words = _tokenize($context->{error_msg} // '');
 
     my @scored;
     for my $tool (@$tools) {
@@ -29,6 +42,35 @@ sub select {
 
         my @tool_words = _tokenize($text);
         my $score = @prompt_words ? _score(\@prompt_words, \@tool_words) : 0;
+
+        # Context boosts (additive, small enough not to overwhelm base score).
+        # Recent tools: boost tools used in the last few turns.
+        $score += 0.3 if $recent{ $tool->{name} };
+
+        # Wit affinity: boost tools from currently loaded decks.
+        # Match tool name prefix against deck names (git_status -> git).
+        if (%wits) {
+            my $tname = $tool->{name} // '';
+            for my $deck (keys %wits) {
+                $score += 0.2 if $tname =~ /^\Q$deck\E/;
+            }
+        }
+
+        # File type: boost tools whose hint/description mentions the file type.
+        if (%ftypes) {
+            my $combined = join(' ', $tool->{hint} // '', $tool->{description} // '');
+            for my $ft (keys %ftypes) {
+                $score += 0.15 if $combined =~ /\Q$ft\E/i;
+            }
+        }
+
+        # Error recovery: boost tools whose hint/description matches error words.
+        if (@err_words) {
+            my @tw = _tokenize(join(' ', $tool->{hint} // '', $tool->{description} // ''));
+            my $err_matches = _count_overlap(\@err_words, \@tw);
+            $score += 0.25 * $err_matches if $err_matches;
+        }
+
         next if $score < $min_score;
         push @scored, { tool => $tool, score => $score };
     }
@@ -56,6 +98,16 @@ sub _tokenize {
         there when where why how all each every both few more most other some
         such no nor not only own same so than too very just don now);
     return grep { length($_) > 1 && !$stop{$_} } @words;
+}
+
+# Count overlap between two word lists.
+sub _count_overlap {
+    my ($a, $b) = @_;
+    my %b_freq;
+    $b_freq{$_}++ for @$b;
+    my $n = 0;
+    $n++ for grep { $b_freq{$_} } @$a;
+    return $n;
 }
 
 # Score overlap between prompt words and tool words.

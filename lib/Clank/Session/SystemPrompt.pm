@@ -37,6 +37,7 @@ sub build {
     my $append       = $o{append_system_prompt};
     my @context_files= @{ $o{context_files} // [] };
     my @skills       = @{ $o{skills} // [] };
+    my $manifest     = $o{manifest};
 
     my $append_section = defined $append ? "\n\n$append" : "";
 
@@ -76,16 +77,16 @@ Available tools:
 $tools_list
 
 In addition to the tools above, you may have access to other custom tools depending on the project.
+EOT
+
+    if (defined $manifest && length $manifest) {
+        $prompt .= "\n$manifest\n";
+    }
+
+    $prompt .= <<"EOT";
 
 Guidelines:
 $guidelines
-
-Clank documentation (read only when the user asks about clank itself, its SDK, wits, skills, or providers):
-- Main documentation: $docs_dir/ROADMAP.md
-- Wits examples: $examples_dir
-- When asked about: wits (docs/ROADMAP.md §5), skills (docs/Wits.md), providers (§2.1), logic (§7)
-- Also read: docs/Wits.md (wit implementation spec), docs/DRIVER.md (daemon/SDK docs)
-- Always read clank .md files completely and follow links to related docs
 EOT
 
     $prompt .= $append_section;

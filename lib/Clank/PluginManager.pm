@@ -396,6 +396,47 @@ sub dwits     { $_[0]->{dwits} }            # name/trigger -> declarative wit re
 sub dispatch  { $_[0]->{dispatch} }         # Clank::Wit::Dispatch (the $ctx{wits} object)
 sub api_for   { $_[0]->{apis}{ $_[1] } }
 
+# Generate a deck-level capability manifest for the system prompt.
+# Groups active wits by deck, collects tool names and hints, formats a
+# compact string the LLM can scan to discover available capabilities.
+# (docs/CONTEXT.md §4.1 — Tier 1 capability manifest)
+sub manifest {
+    my ($self) = @_;
+    my %decks;
+    my $total = 0;
+    for my $rec (@{ $self->{wits} }) {
+        next unless ($rec->{state} // 'active') eq 'active';
+        $total++;
+        # Derive deck name from the wit record name.
+        # Module wits: Clank::Wits::Git::Status -> deck = git
+        # Declarative decks: the directory name is the deck name
+        my $deck = $rec->{name};
+        if ($rec->{pkg} && $rec->{pkg} =~ /^Clank::Wits::(\w+)::/) {
+            $deck = lc($1);
+        }
+        $decks{$deck} //= { tools => [], hints => [] };
+        # Collect tool names from the registered API
+        for my $tool (@{ $rec->{api}->registered_tools }) {
+            push @{ $decks{$deck}{tools} }, $tool->{name};
+        }
+        # Collect hint keywords from # CLANK-WIT: metadata
+        if ($rec->{meta} && $rec->{meta}{hint}) {
+            push @{ $decks{$deck}{hints} }, $rec->{meta}{hint};
+        }
+    }
+    my $ndecks = scalar keys %decks;
+    return "CAPABILITIES ($total wits, $ndecks decks):" unless $ndecks;
+    my @lines = ("CAPABILITIES ($total wits, $ndecks decks):");
+    for my $deck (sort keys %decks) {
+        my $d = $decks{$deck};
+        # Build short tool names: strip deck prefix (git_status -> status)
+        my @short = map { s/^\Q$deck\E[_\-]//r } @{ $d->{tools} };
+        my $tools = join(', ', @short);
+        push @lines, "  $deck  $tools  [$deck]";
+    }
+    return join("\n", @lines);
+}
+
 # All wit-registered tools as Clank::Tool objects (disabled wits excluded).
 sub all_tools {
     my ($self) = @_;

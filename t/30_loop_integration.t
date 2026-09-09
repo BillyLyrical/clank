@@ -14,6 +14,7 @@ use Clank::Governor;
 use Clank::Tracer;
 use Clank::Cache;
 use Clank::Metrics;
+use Clank::Wit::API;
 
 # === Test 1: Loop with no primitives (backwards compatible) ===
 
@@ -192,6 +193,124 @@ subtest 'All primitives together' => sub {
     # Governor records only when resp has usage (mock doesn't), so just verify it's functional.
     my $usage = $gov->usage;
     ok(ref $usage eq 'HASH', 'governor usage returns hashref');
+};
+
+# === Test 5: Knowledge request pipeline ===
+
+subtest 'Knowledge request pipeline' => sub {
+    my $store = Clank::Store->new(db => ':memory:');
+    my $bus   = Clank::Bus->new(store => $store);
+    my $prov  = Clank::Provider::Mock->new(model => 'mock');
+    my $session = Clank::Session->new(store => $store, bus => $bus, provider => $prov);
+
+    # Set up world model with some facts.
+    require Clank::WorldModel;
+    my $wm = Clank::WorldModel->new(store => $store);
+    $wm->add_entity(id => 'perl', type => 'language', name => 'Perl');
+    $wm->assert_fact(entity_id => 'perl', predicate => 'is', value => 'a scripting language', confidence => 0.9);
+    $wm->believe(statement => 'Perl is good for text processing', confidence => 0.8);
+
+    # Register world model on the bus.
+    my $api = Clank::Wit::API->new(bus => $bus, store => $store);
+    $wm->register($api);
+
+    # Publish a knowledge request.
+    my $kr = $bus->publish('context.knowledge_request', { prompt => 'tell me about Perl' });
+    ok(scalar @{ $kr->{results} }, 'knowledge request got results');
+
+    # Check that facts were returned.
+    my $got_facts = 0;
+    for my $r (@{ $kr->{results} }) {
+        next unless ref $r eq 'HASH';
+        if ($r->{facts} && ref $r->{facts} eq 'ARRAY' && @{ $r->{facts} }) {
+            $got_facts = 1;
+            my @types = map { $_->{type} // '' } @{ $r->{facts} };
+            ok(grep { $_ eq 'entity' || $_ eq 'fact' } @types,
+               'knowledge results contain entities or facts');
+        }
+    }
+    ok($got_facts, 'world model contributed facts to knowledge request');
+};
+
+# === Test 6: Context-aware pruning ===
+
+subtest 'Context-aware pruning' => sub {
+    require Clank::Session::Messages;
+
+    # Build a chain with 30 messages.
+    my @chain;
+    for my $i (1..30) {
+        push @chain, {
+            id      => "msg_$i",
+            role    => $i % 2 ? 'user' : 'assistant',
+            content => $i % 2 ? "question $i" : "answer $i",
+        };
+    }
+
+    # Prune: keep last 20.
+    my $pruned = Clank::Session::Messages::prune_context(\@chain, keep_recent => 20);
+    ok(scalar @$pruned < 30, 'pruning reduced message count');
+    ok(scalar @$pruned >= 20, 'pruning kept at least keep_recent messages');
+
+    # Last message should still be there.
+    is($pruned->[-1]{id}, 'msg_30', 'most recent message preserved');
+
+    # First message should be dropped.
+    my @ids = map { $_->{id} } @$pruned;
+    ok(!grep { $_ eq 'msg_1' } @ids, 'oldest message pruned');
+};
+
+# === Test 7: Pruning preserves compaction entries ===
+
+subtest 'Pruning preserves compaction entries' => sub {
+    require Clank::Session::Messages;
+
+    my @chain;
+    # Add a compaction entry at position 5.
+    for my $i (1..30) {
+        if ($i == 5) {
+            push @chain, { id => "comp_5", role => 'compaction', content => { summary => 'old stuff' } };
+        } else {
+            push @chain, {
+                id      => "msg_$i",
+                role    => $i % 2 ? 'user' : 'assistant',
+                content => $i % 2 ? "question $i" : "answer $i",
+            };
+        }
+    }
+
+    my $pruned = Clank::Session::Messages::prune_context(\@chain, keep_recent => 20);
+    my @ids = map { $_->{id} } @$pruned;
+    ok(grep { $_ eq 'comp_5' } @ids, 'compaction entry preserved');
+};
+
+# === Test 8: ContextRules evaluates correctly ===
+
+subtest 'ContextRules evaluation' => sub {
+    require Clank::ContextRules;
+
+    my $cr = Clank::ContextRules->new();
+
+    # Perl edit should inject strict/warnings rule.
+    my $inj = $cr->evaluate(prompt => 'edit Foo.pm to add a function');
+    ok(grep { /strict and warnings/ } @$inj, 'Perl file triggers strict/warnings rule');
+
+    # Database prompt should inject db context.
+    $inj = $cr->evaluate(prompt => 'query the database for users');
+    ok(grep { /Database tools/ } @$inj, 'database prompt triggers db context');
+
+    # Git prompt should inject git context.
+    $inj = $cr->evaluate(prompt => 'commit my changes to git');
+    ok(grep { /Git tools/ } @$inj, 'git prompt triggers git context');
+
+    # Unrelated prompt should not inject anything.
+    $inj = $cr->evaluate(prompt => 'hello world');
+    ok(!@$inj, 'unrelated prompt gets no injections');
+
+    # format_for_prompt returns a block.
+    my $block = $cr->format_for_prompt(prompt => 'edit test.pm');
+    like($block, qr/^Rules for this task:/m, 'format_for_prompt returns rules block');
+    like($block, qr/- /, 'format_for_prompt has bullet points');
 };
 
 done_testing;

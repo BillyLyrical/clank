@@ -116,4 +116,12 @@ isa_ok($api, 'Clank::Wit::API');
 is($api->bus, $bus, 'api->bus is the app bus');
 is($api->store, $store, 'api->store is the app store');
 
+# --- manifest -----------------------------------------------------------------
+my $manifest = $pm->manifest;
+like($manifest, qr/^CAPABILITIES/, 'manifest starts with CAPABILITIES');
+like($manifest, qr/\d+ wits/, 'manifest reports wit count');
+like($manifest, qr/\d+ decks/, 'manifest reports deck count');
+# The hello wit's tool is 'greet' — deck is derived from the wit name
+like($manifest, qr/greet/, 'manifest includes wit tool names');
+
 done_testing();

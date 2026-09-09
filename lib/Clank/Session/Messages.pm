@@ -89,4 +89,68 @@ sub est_tokens {
     return int($n / 4);
 }
 
+# Context-aware pruning: remove old turns that are not referenced by recent
+# messages. Keeps compaction summaries, recent turns, and any turn that is
+# referenced by a tool call or explicit reference.
+#
+# Strategy:
+# - Keep all compaction entries (they're already compressed)
+# - Keep the last $keep_recent turns (default 20)
+# - For older turns: keep if referenced by a tool_call_id in kept messages
+# - Drop unreferenced old turns
+sub prune_context {
+    my ($chain, %args) = @_;
+    my $keep_recent = $args{keep_recent} // 20;
+    return $chain unless @$chain > $keep_recent + 4;
+
+    # Identify tool_call_ids referenced by recent messages.
+    my @recent = @$chain[ -$keep_recent .. -1 ];
+    my %referenced_ids;
+    for my $m (@recent) {
+        # toolResult messages reference a tool_call_id
+        if (($m->{role} // '') eq 'toolResult' && ref $m->{content} eq 'HASH') {
+            $referenced_ids{ $m->{content}{tool_call_id} } = 1 if $m->{content}{tool_call_id};
+        }
+        # assistant messages with tool_calls define the ids
+        if (($m->{role} // '') eq 'assistant' && ref $m->{content} eq 'HASH') {
+            for my $tc (@{ $m->{content}{tool_calls} // [] }) {
+                $referenced_ids{ $tc->{id} } = 1 if $tc->{id};
+            }
+        }
+    }
+
+    # Build pruned chain: keep compaction entries, recent turns, and referenced old turns.
+    my @pruned;
+    for my $m (@$chain) {
+        # Always keep compaction entries.
+        if (($m->{role} // '') eq 'compaction') {
+            push @pruned, $m;
+            next;
+        }
+
+        # Check if this is in the recent window.
+        my $in_recent = 0;
+        for my $r (@recent) {
+            if ($m->{id} eq $r->{id}) { $in_recent = 1; last }
+        }
+        if ($in_recent) {
+            push @pruned, $m;
+            next;
+        }
+
+        # Old turn: keep if it's a toolResult referenced by recent messages.
+        if (($m->{role} // '') eq 'toolResult' && ref $m->{content} eq 'HASH') {
+            my $tcid = $m->{content}{tool_call_id} // '';
+            if ($referenced_ids{$tcid}) {
+                push @pruned, $m;
+                next;
+            }
+        }
+
+        # Drop all other old turns (user, assistant).
+    }
+
+    return @pruned > 4 ? \@pruned : $chain;
+}
+
 1;

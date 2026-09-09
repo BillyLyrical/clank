@@ -90,4 +90,81 @@ subtest 'No tools' => sub {
     is(scalar @$result, 0, 'empty list for no tools');
 };
 
+# === Test 9: Recent tools boost ===
+
+subtest 'Recent tools get boosted' => sub {
+    # Without context: search, read, write (git_status not in top 3)
+    my $no_ctx = Clank::ToolSelector->select(
+        tools => \@tools, prompt => 'search the web', max => 3);
+    my @no_names = map { $_->{name} } @$no_ctx;
+
+    # With context: git_status was recently used, so it gets a boost
+    my $with_ctx = Clank::ToolSelector->select(
+        tools    => \@tools,
+        prompt   => 'search the web',
+        max      => 3,
+        context  => { recent_tools => ['git_status'] },
+    );
+    my @ctx_names = map { $_->{name} } @$with_ctx;
+
+    # git_status should appear in results with the boost (it wasn't there before)
+    ok(grep({ $_ eq 'git_status' } @ctx_names), 'recent tool appears in top results');
+    ok(!grep({ $_ eq 'git_status' } @no_names), 'git_status not in top without boost');
+};
+
+# === Test 10: Wit affinity boost ===
+
+subtest 'Wit affinity boosts matching tools' => sub {
+    my $result = Clank::ToolSelector->select(
+        tools    => \@tools,
+        prompt   => 'do something',
+        max      => 4,
+        context  => { loaded_wits => ['git'] },
+    );
+    my @names = map { $_->{name} } @$result;
+    # git tools should appear in top 4 when git deck is loaded
+    ok(grep { /^git/ } @names, 'git tools boosted by wit affinity');
+};
+
+# === Test 11: File type boost ===
+
+subtest 'File type boost' => sub {
+    my $result = Clank::ToolSelector->select(
+        tools    => \@tools,
+        prompt   => 'modify the file',
+        max      => 3,
+        context  => { file_types => ['pm'] },
+    );
+    my @names = map { $_->{name} } @$result;
+    # edit tool has 'file' in its hint, should be boosted
+    is($names[0], 'edit', 'edit tool boosted by file type context');
+};
+
+# === Test 12: Error recovery boost ===
+
+subtest 'Error recovery boost' => sub {
+    my $result = Clank::ToolSelector->select(
+        tools    => \@tools,
+        prompt   => 'fix the problem',
+        max      => 3,
+        context  => { error_msg => 'Can\'t locate object method "run" via package "Clank::Tool"' },
+    );
+    my @names = map { $_->{name} } @$result;
+    # read tool should help diagnose the error
+    ok(grep { /read/ } @names, 'read tool boosted for error recovery');
+};
+
+# === Test 13: Context with no signals ===
+
+subtest 'Empty context is safe' => sub {
+    my $result = Clank::ToolSelector->select(
+        tools    => \@tools,
+        prompt   => 'read the file',
+        max      => 3,
+        context  => {},
+    );
+    is(scalar @$result, 3, 'empty context does not break selection');
+    is($result->[0]{name}, 'read', 'read still ranked first');
+};
+
 done_testing;

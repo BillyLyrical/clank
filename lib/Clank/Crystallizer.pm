@@ -50,7 +50,43 @@ sub register {
     # Subscribe to agent_end for post-conversation crystallization.
     $api->on('agent_end', sub { $self->_on_agent_end(@_) });
 
+    # Subscribe to context.knowledge_request to provide crystallized rules.
+    $api->on('context.knowledge_request', sub { $self->_on_knowledge_request(@_) });
+
     return $self;
+}
+
+sub _on_knowledge_request {
+    my ($self, $ev) = @_;
+    my $prompt = $ev->{payload}{prompt} // '';
+    return unless length $prompt;
+
+    my @rules;
+    my $all_rules = $self->list_rules(limit => 20);
+    for my $rule (@$all_rules) {
+        # Simple keyword matching: check if rule name or condition matches prompt.
+        my $match = 0;
+        my $text = join(' ', $rule->{name} // '', $rule->{condition_def} // '', $rule->{action_def} // '');
+        my @words = split /\W+/, lc($prompt);
+        for my $w (@words) {
+            next unless length($w) > 2;
+            if ($text =~ /\Q$w\E/i) {
+                $match = 1;
+                last;
+            }
+        }
+        if ($match) {
+            push @rules, {
+                type  => 'crystallized_rule',
+                text  => sprintf("Rule: %s (confidence: %.0f%%, used %d times): %s",
+                    $rule->{name}, ($rule->{confidence} // 1) * 100,
+                    $rule->{use_count} // 0, $rule->{action_def}),
+            };
+        }
+    }
+
+    return { rules => \@rules } if @rules;
+    return undef;
 }
 
 sub _dbh { $_[0]->{store}->dbh }
