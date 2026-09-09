@@ -334,7 +334,7 @@ sub _register_rule {
         name     => $pattern->{name},
         type     => $pattern->{type},
         priority => int($pattern->{confidence} * 100),
-        match    => ref $condition eq 'REGEXP' ? $condition : undef,
+        match => ref $condition eq 'Regexp' ? $condition : undef,
         action   => ref $action eq 'CODE' ? $action : sub { return $action },
         weight   => $pattern->{confidence},
     );

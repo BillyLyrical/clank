@@ -36,21 +36,24 @@ Core harness:
   - Agent loop (ported from Pi)
   - 4 tools: read, bash, edit, write
   - SQLite store + pub/sub bus
-  - LLM providers: Ollama, OpenAI, Anthropic, Gemini, Azure
+  - LLM providers: Ollama, OpenAI, Anthropic, Gemini, Azure, LMStudio
+  - Context engineering: capability manifest, RATS tool selection,
+    knowledge bus, context compression, behavioral rules
 
-88 curated wits across 6 decks:
+125 curated wits across 10 decks:
 
-  logic   33 wits   Datalog engine, rules DSL, FSM, behavior trees
-  git     10 wits   Git operations (status, log, diff, blame, ...)
-  fs      18 wits   Filesystem operations (read, write, edit, ...)
-  db       8 wits   Database shell (connect, query, execute, ...)
-  perl    16 wits   Perl development (syntax, review, POD, tests)
-  psh      3 wits   Perl Shell REPL (eval, vars, help)
+  logic     51 wits   Datalog engine, rules DSL, FSM, behavior trees, SAT
+  critic    12 wits   Code critique heuristics
+  git       10 wits   Git operations (status, log, diff, blame, ...)
+  fs        12 wits   Filesystem operations (read, write, edit, ...)
+  db         8 wits   Database shell (connect, query, execute, ...)
+  perl      16 wits   Perl development (syntax, review, POD, tests)
+  psh        3 wits   Perl Shell REPL (eval, vars, help)
+  search     9 wits   Local + web search
+  embedding  1 wit    Semantic search via embeddings
+  neuro      3 wits   Neurosymbolic integration (world model, crystallizer, constraints)
 
-30 more wits available: search, critic, SAT solver, OS primitives,
-remote SSH. Install on demand.
-
-  527 tests, all offline. prove -l t/ green.
+  768 tests, all offline. prove -l t/ green.
 
 
 Quick start
@@ -65,7 +68,13 @@ Quick start
   # with OpenAI:
   CLANK_PROVIDER=openai CLANK_MODEL=gpt-4o clank
 
-  # programmatic:
+  # with Anthropic:
+  CLANK_PROVIDER=anthropic CLANK_MODEL=claude-sonnet-4-20250514 clank
+
+  # daemon mode (for programmatic access from any language):
+  clankd --stdio --provider lmstudio --model qwen3.8-27b
+
+  # programmatic (in-process):
   perl -Ilib -e '
     use Clank::Driver;
     my $d = Clank::Driver->new(provider=>"ollama", model=>"codellama");
@@ -102,7 +111,13 @@ In a standard AI harness, the LLM generates code and the harness runs it.
 In Clank, the LLM generates Perl, and Perl IS the environment.
 The harness can modify itself, it can extend the harness by writing wits.
 Logic engines can collapse expensive LLM calls into fast deterministic rules.
-The system may get cheaper and faster the more it's used?
+The system gets cheaper and faster the more it's used — crystallization
+turns LLM solutions into deterministic Perl rules that run forever.
+
+Context engineering means Clank scales to hundreds of wits without burning
+50k tokens per call. A capability manifest, retrieval-augmented tool
+selection, a knowledge bus, and behavioral rules compose ~5-8k tokens of
+targeted context instead of dumping everything into the prompt.
 
 
 Questions for testers
@@ -151,11 +166,13 @@ Clank is open source. The repo is at git@psycho:~/clank.git.
 
   git clone git@psycho:~/clank.git
   cd clank
+  perl link_wits.pl
   prove -l t/
 
 Read docs/ROADMAP.md for the full architecture and vision.
 Read docs/Wits.md for the wit system design.
 Read docs/DRIVER.md for the programmatic API.
+Read docs/CONTEXT.md for the context engineering system.
 
 If you're a Perl developer who wants to build the future of
 AI-assisted development, we want to hear from you.

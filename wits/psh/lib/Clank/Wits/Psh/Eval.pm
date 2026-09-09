@@ -1,8 +1,8 @@
 # CLANK-WIT: name=Eval
-# CLANK-WIT: version=1.0.0
-# CLANK-WIT: about=Execute Perl code or shell commands — syntax check, eval, capture result
+# CLANK-WIT: version=1.1.0
+# CLANK-WIT: about=Execute Perl code or shell commands — syntax check, eval, capture result. psh_sandbox runs code in a subprocess for isolation.
 # CLANK-WIT: usage=Input: { code: "use Clank::Auth; my $auth = Clank::Auth->new" } or { code: "!ls -la" } Output: { ok: true, result: "...", type: "perl"|"shell" }
-# CLANK-WIT: hint=psh_eval, eval, execute, shell, perl, REPL
+# CLANK-WIT: hint=psh_eval, psh_sandbox, eval, execute, shell, perl, REPL, sandbox, isolated, subprocess
 # CLANK-WIT: author=Clank
 # CLANK-WIT: license=Artistic-2.0
 package Clank::Wits::Psh::Eval;
@@ -133,6 +133,56 @@ sub register {
                 result => "$final_result",
                 ref    => ref($final_result),
                 type   => 'perl',
+            };
+        },
+    );
+
+    # psh_sandbox: runs Perl code in a subprocess via Clank::Exec.
+    # No state persistence between calls — each execution is isolated.
+    # Use for untrusted code, testing crystallized rules, or anything
+    # that might segfault/infinite-loop/crash.
+    $api->register_tool(
+        name        => 'psh_sandbox',
+        description => 'Execute Perl code in an isolated subprocess. No state persists between calls. Use for untrusted code or testing.',
+        parameters  => {
+            type       => 'object',
+            properties => {
+                code    => { type => 'string', description => 'Perl code to execute' },
+                timeout => { type => 'number', description => 'Timeout in seconds (default 30)' },
+            },
+            required => ['code'],
+        },
+        execute => sub {
+            my ($args) = @_;
+            my $code    = $args->{code}    // '';
+            my $timeout = $args->{timeout} // 30;
+
+            return { ok => 0, error => "No code provided" } unless $code;
+
+            require Clank::Exec;
+            my $r = Clank::Exec::exec_cmd(
+                command => ['perl', '-e', $code],
+                timeout => $timeout,
+            );
+
+            if ($r->{isError}) {
+                return { ok => 0, error => $r->{error} };
+            }
+            if ($r->{timed_out}) {
+                return { ok => 0, error => "timed out after ${timeout}s" };
+            }
+
+            my $stdout = $r->{stdout} // '';
+            my $stderr = $r->{stderr} // '';
+            chomp $stdout;
+            chomp $stderr;
+
+            return {
+                ok       => $r->{exit_code} == 0,
+                result   => $stdout,
+                stderr   => $stderr,
+                exit     => $r->{exit_code},
+                type     => 'perl_sandbox',
             };
         },
     );

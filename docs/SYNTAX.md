@@ -228,7 +228,6 @@ format.
 ### 2.2 Grammar
 
 The pipeline format uses NExT grammar, parsed by `Data::NExT`
-(`Data/Opex.pm` at `/usr/local/lib/site_perl/Data/Opex.pm`):
 
 | First char | Meaning |
 |------------|---------|
