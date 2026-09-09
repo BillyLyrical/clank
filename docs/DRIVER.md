@@ -1,24 +1,24 @@
-# Clam Driver & clamd — programmatic sessions for AI harnesses and scripts
+# Clank Driver & clankd — programmatic sessions for AI harnesses and scripts
 
-Two layers on top of `AI::Clam::App` for driving **complex multi-query Clam
+Two layers on top of `Clank::App` for driving **complex multi-query Clank
 sessions** from outside:
 
 | Layer | What it is | For whom |
 |---|---|---|
-| `AI::Clam::Driver` (lib/AI/Clam/Driver.pm) | In-process OO wrapper: one session, structured results per prompt, full event capture | Perl code, tests, other harnesses in the same process |
-| `clamd` (bin/clamd) | NDJSON front-end over stdio or a Unix socket; one long-lived daemon process | Any language via pipes/sockets; AI harnesses supervising Clam |
+| `Clank::Driver` (lib/Clank/Driver.pm) | In-process OO wrapper: one session, structured results per prompt, full event capture | Perl code, tests, other harnesses in the same process |
+| `clankd` (bin/clankd) | NDJSON front-end over stdio or a Unix socket; one long-lived daemon process | Any language via pipes/sockets; AI harnesses supervising Clank |
 
 Both are thin: all session state lives in the SQLite store, so sessions can be
 resumed across processes and restarts.
 
 ---
 
-## 1. AI::Clam::Driver (in-process)
+## 1. Clank::Driver (in-process)
 
 ```perl
-use AI::Clam::Driver;
+use Clank::Driver;
 
-my $d = AI::Clam::Driver->new(
+my $d = Clank::Driver->new(
     provider => 'lmstudio',          # registry name ... or a ready-made object
     base_url => 'http://192.168.1.12:1234/v1',
     model    => 'qwen3.8-27b',
@@ -37,7 +37,7 @@ $d->close;                           # idempotent; also runs from DESTROY
 
 ### Constructor options (`new`)
 
-Pass-through to `AI::Clam::App`: `db`, `provider` (name **or object** — objects are
+Pass-through to `Clank::App`: `db`, `provider` (name **or object** — objects are
 how tests inject scripted providers), `model`, `base_url`, `api_key`, `stream`,
 `wit_paths`, `compact`, plus driver-only: `workdir` (chdir before start),
 `events` (1/0, default 1), `timeout` (default per-ask timeout, seconds).
@@ -88,7 +88,7 @@ interception, tool_call vetoing, context rewriting) exactly as wits do.
 
 ### Topic glob conventions
 
-The same matcher as bus subscriptions (`AI::Clam::Bus::topic_matches`):
+The same matcher as bus subscriptions (`Clank::Bus::topic_matches`):
 `.` separates segments, `*` matches within one segment. Lifecycle topics use
 underscores — match them with e.g. `tool_*`, `agent_*`; wit-defined topics use
 dots — `search.*`. SQLite `LIKE` cannot express these patterns, so journal
@@ -96,14 +96,14 @@ queries filter in Perl (fetch a wider window first).
 
 ---
 
-## 2. clamd — NDJSON front-end
+## 2. clankd — NDJSON front-end
 
 One request per line on stdin, one response per line on stdout. Every response
 echoes the request's `id`. **stdout carries protocol lines only**; all
 diagnostics go to stderr.
 
 ```
-$ perl bin/clamd --stdio --provider lmstudio \
+$ perl bin/clankd --stdio --provider lmstudio \
       --base_url http://192.168.1.12:1234/v1 --model qwen3.8-27b
 {"id":1,"command":"ping"}
 → {"id":1,"ok":1,"pong":1}
@@ -152,7 +152,7 @@ default transport; `--socket` runs a select-loop server on a Unix socket
 
 ### Teardown guarantees (the zombie fix)
 
-The old clam-sock leaked zombies because nothing owned its lifecycle. clamd:
+The old clank-sock leaked zombies because nothing owned its lifecycle. clankd:
 
 1. **stdio**: the parent's pipe *is* the lifecycle — EOF on stdin (parent
    closed or died) exits cleanly with code 0. No shutdown command needed.
@@ -193,7 +193,7 @@ alarm-bounded `waitpid`.
   when delegating to `_open3`, which is why open2's docs look right. And slot
   3 must be an explicit `gensym`: left undef it silently shares slot 1's
   handle and the child's stderr mixes into your protocol stream. Verified
-  empirically on this box; see `spawn_clamd` in t/09_driver.t.
+  empirically on this box; see `spawn_clankd` in t/09_driver.t.
 
 ---
 
@@ -202,13 +202,13 @@ alarm-bounded `waitpid`.
 ```sh
 prove -l t/                      # offline: scripted providers, full plumbing (t/09)
 
-CLAM_LIVE_BASE_URL=http://192.168.1.12:1234/v1 \
-CLAM_LIVE_MODEL=qwen3.8-27b \
+CLANK_LIVE_BASE_URL=http://192.168.1.12:1234/v1 \
+CLANK_LIVE_MODEL=qwen3.8-27b \
 prove -lv t/10_e2e_live.t        # live smoke against a real model server
 ```
 
-`t/10_e2e_live.t` is skipped unless `CLAM_LIVE_BASE_URL` is set, so the plain
-suite stays offline-safe and CI-friendly. The live test drives clamd over
+`t/10_e2e_live.t` is skipped unless `CLANK_LIVE_BASE_URL` is set, so the plain
+suite stays offline-safe and CI-friendly. The live test drives clankd over
 stdio through the full stack (driver → app → loop → provider → HTTP) and
 asserts multi-query continuity: turn 2 must remember turn 1's exchange.
 
@@ -216,4 +216,4 @@ asserts multi-query continuity: turn 2 must remember turn 1's exchange.
 are independent, LM Studio serializes concurrent generations on a loaded
 model, and `ask()` is synchronous — worst case one side waits for the other's
 generation to finish. (This documentation was written while both this agent
-and clamd were sharing one LM Studio instance.)
+and clankd were sharing one LM Studio instance.)

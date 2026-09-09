@@ -5,42 +5,42 @@ use Test::More;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use AI::Clam::Store;
-use AI::Clam::Bus;
-use AI::Clam::WorldModel;
-use AI::Clam::NeuroIntegration;
-use AI::Clam::Wit::API;
+use Clank::Store;
+use Clank::Bus;
+use Clank::WorldModel;
+use Clank::NeuroIntegration;
+use Clank::Wit::API;
 
 sub _make_api {
     my ($store, $bus) = @_;
-    return AI::Clam::Wit::API->new(bus => $bus, store => $store);
+    return Clank::Wit::API->new(bus => $bus, store => $store);
 }
 
 # === Test 1: Construction ===
 
 subtest 'Construction' => sub {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $bus = AI::Clam::Bus->new(store => $store);
-    my $wm = AI::Clam::WorldModel->new(store => $store);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $bus = Clank::Bus->new(store => $store);
+    my $wm = Clank::WorldModel->new(store => $store);
     my $api = _make_api($store, $bus);
 
-    my $ni = AI::Clam::NeuroIntegration->new(world_model => $wm);
+    my $ni = Clank::NeuroIntegration->new(world_model => $wm);
     $ni->register($api);
-    isa_ok($ni, 'AI::Clam::NeuroIntegration');
+    isa_ok($ni, 'Clank::NeuroIntegration');
 };
 
 # === Test 2: Phase 1 — context injection ===
 
 subtest 'Phase 1: injects world model facts into context' => sub {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $bus = AI::Clam::Bus->new(store => $store);
-    my $wm = AI::Clam::WorldModel->new(store => $store);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $bus = Clank::Bus->new(store => $store);
+    my $wm = Clank::WorldModel->new(store => $store);
     my $api = _make_api($store, $bus);
 
     my $id1 = $wm->add_entity(type => 'concept', name => 'Perl', attributes => { language => 'scripting' });
     my $id2 = $wm->add_entity(type => 'concept', name => 'Python', attributes => { language => 'scripting' });
 
-    my $ni = AI::Clam::NeuroIntegration->new(world_model => $wm);
+    my $ni = Clank::NeuroIntegration->new(world_model => $wm);
     $ni->register($api);
 
     my $result = $bus->publish('context', {
@@ -59,13 +59,13 @@ subtest 'Phase 1: injects world model facts into context' => sub {
 # === Test 3: Phase 1 — no injection for empty query ===
 
 subtest 'Phase 1: no injection for empty conversation' => sub {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $bus = AI::Clam::Bus->new(store => $store);
-    my $wm = AI::Clam::WorldModel->new(store => $store);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $bus = Clank::Bus->new(store => $store);
+    my $wm = Clank::WorldModel->new(store => $store);
     my $api = _make_api($store, $bus);
     $wm->add_entity(type => 'concept', name => 'Perl', attributes => {});
 
-    my $ni = AI::Clam::NeuroIntegration->new(world_model => $wm);
+    my $ni = Clank::NeuroIntegration->new(world_model => $wm);
     $ni->register($api);
 
     my $result = $bus->publish('context', { messages => [] });
@@ -76,15 +76,15 @@ subtest 'Phase 1: no injection for empty conversation' => sub {
 # === Test 4: Phase 2 — validation catches contradictions ===
 
 subtest 'Phase 2: validation catches contradictions' => sub {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $bus = AI::Clam::Bus->new(store => $store);
-    my $wm = AI::Clam::WorldModel->new(store => $store);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $bus = Clank::Bus->new(store => $store);
+    my $wm = Clank::WorldModel->new(store => $store);
     my $api = _make_api($store, $bus);
 
     my $ent_id = $wm->add_entity(type => 'concept', name => 'Perl');
     $wm->assert_fact(entity_id => $ent_id, predicate => 'is', value => 'a scripting language');
 
-    my $ni = AI::Clam::NeuroIntegration->new(world_model => $wm, validate => 1);
+    my $ni = Clank::NeuroIntegration->new(world_model => $wm, validate => 1);
     $ni->register($api);
 
     my $result = $bus->publish('message_end', {
@@ -99,15 +99,15 @@ subtest 'Phase 2: validation catches contradictions' => sub {
 # === Test 5: Phase 2 — no violation for correct output ===
 
 subtest 'Phase 2: no violation for correct output' => sub {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $bus = AI::Clam::Bus->new(store => $store);
-    my $wm = AI::Clam::WorldModel->new(store => $store);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $bus = Clank::Bus->new(store => $store);
+    my $wm = Clank::WorldModel->new(store => $store);
     my $api = _make_api($store, $bus);
 
     my $ent_id = $wm->add_entity(type => 'concept', name => 'Perl');
     $wm->assert_fact(entity_id => $ent_id, predicate => 'is', value => 'a scripting language');
 
-    my $ni = AI::Clam::NeuroIntegration->new(world_model => $wm, validate => 1);
+    my $ni = Clank::NeuroIntegration->new(world_model => $wm, validate => 1);
     $ni->register($api);
 
     my $result = $bus->publish('message_end', {
@@ -122,16 +122,16 @@ subtest 'Phase 2: no violation for correct output' => sub {
 # === Test 6: Phase 3 — knowledge extraction ===
 
 subtest 'Phase 3: extracts entities from conversation' => sub {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $bus = AI::Clam::Bus->new(store => $store);
-    my $wm = AI::Clam::WorldModel->new(store => $store);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $bus = Clank::Bus->new(store => $store);
+    my $wm = Clank::WorldModel->new(store => $store);
     my $api = _make_api($store, $bus);
 
     my $sid = $store->create_session(title => 'test');
     $store->append_message(session_id => $sid, role => 'user', content => 'I like Tokyo very much');
     $store->append_message(session_id => $sid, role => 'assistant', content => 'Tokyo is a great city in Japan');
 
-    my $ni = AI::Clam::NeuroIntegration->new(world_model => $wm, extract => 1);
+    my $ni = Clank::NeuroIntegration->new(world_model => $wm, extract => 1);
     $ni->register($api);
 
     $bus->publish('agent_end', { session_id => $sid });
@@ -145,12 +145,12 @@ subtest 'Phase 3: extracts entities from conversation' => sub {
 # === Test 7: Phase 3 — no extraction when disabled ===
 
 subtest 'Phase 3: no extraction when disabled' => sub {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $bus = AI::Clam::Bus->new(store => $store);
-    my $wm = AI::Clam::WorldModel->new(store => $store);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $bus = Clank::Bus->new(store => $store);
+    my $wm = Clank::WorldModel->new(store => $store);
     my $api = _make_api($store, $bus);
 
-    my $ni = AI::Clam::NeuroIntegration->new(world_model => $wm, extract => 0);
+    my $ni = Clank::NeuroIntegration->new(world_model => $wm, extract => 0);
     $ni->register($api);
 
     my $sid = $store->create_session(title => 'test');
@@ -164,7 +164,7 @@ subtest 'Phase 3: no extraction when disabled' => sub {
 # === Test 8: Entity extraction helpers ===
 
 subtest 'Entity extraction' => sub {
-    my @ents = AI::Clam::NeuroIntegration::_extract_entities(
+    my @ents = Clank::NeuroIntegration::_extract_entities(
         'Alice went to Paris with Bob');
     my @names = map { $_->{name} } @ents;
 
@@ -174,7 +174,7 @@ subtest 'Entity extraction' => sub {
 };
 
 subtest 'Fact extraction' => sub {
-    my @facts = AI::Clam::NeuroIntegration::_extract_facts(
+    my @facts = Clank::NeuroIntegration::_extract_facts(
         'Perl is a scripting language. Python has many libraries.');
     ok(scalar @facts >= 2, 'extracted facts');
     my @values = map { $_->{value} } @facts;
@@ -185,16 +185,16 @@ subtest 'Fact extraction' => sub {
 # === Test 9: Metrics integration ===
 
 subtest 'Metrics tracking' => sub {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $bus = AI::Clam::Bus->new(store => $store);
-    my $wm = AI::Clam::WorldModel->new(store => $store);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $bus = Clank::Bus->new(store => $store);
+    my $wm = Clank::WorldModel->new(store => $store);
     my $api = _make_api($store, $bus);
 
-    require AI::Clam::Metrics;
-    my $metrics = AI::Clam::Metrics->new(store => $store);
+    require Clank::Metrics;
+    my $metrics = Clank::Metrics->new(store => $store);
     $wm->add_entity(type => 'concept', name => 'Test', attributes => {});
 
-    my $ni = AI::Clam::NeuroIntegration->new(
+    my $ni = Clank::NeuroIntegration->new(
         world_model => $wm, metrics => $metrics);
     $ni->register($api);
 
@@ -207,11 +207,11 @@ subtest 'Metrics tracking' => sub {
 # === Test 10: Graceful degradation without world model ===
 
 subtest 'Works without world model or rules' => sub {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $bus = AI::Clam::Bus->new(store => $store);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $bus = Clank::Bus->new(store => $store);
     my $api = _make_api($store, $bus);
 
-    my $ni = AI::Clam::NeuroIntegration->new;
+    my $ni = Clank::NeuroIntegration->new;
     $ni->register($api);
 
     $bus->publish('context', { messages => [{ role => 'user', content => 'hello' }] });

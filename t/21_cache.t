@@ -5,16 +5,16 @@ use Test::More;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use AI::Clam::Store;
-use AI::Clam::Cache;
+use Clank::Store;
+use Clank::Cache;
 
-my $store = AI::Clam::Store->new(db => ':memory:');
+my $store = Clank::Store->new(db => ':memory:');
 
 # === Test 1: Construction ===
 
 subtest 'Construction with defaults' => sub {
-    my $cache = AI::Clam::Cache->new(store => $store);
-    isa_ok($cache, 'AI::Clam::Cache');
+    my $cache = Clank::Cache->new(store => $store);
+    isa_ok($cache, 'Clank::Cache');
     my $s = $cache->stats;
     is($s->{hits}, 0, 'starts with zero hits');
     is($s->{entries}, 0, 'starts with zero entries');
@@ -23,7 +23,7 @@ subtest 'Construction with defaults' => sub {
 # === Test 2: Set and get ===
 
 subtest 'Set and get basic' => sub {
-    my $c = AI::Clam::Cache->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $c = Clank::Cache->new(store => Clank::Store->new(db => ':memory:'));
 
     $c->set('key1', { answer => 42 });
     my $val = $c->get('key1');
@@ -31,7 +31,7 @@ subtest 'Set and get basic' => sub {
 };
 
 subtest 'Get miss returns undef' => sub {
-    my $c = AI::Clam::Cache->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $c = Clank::Cache->new(store => Clank::Store->new(db => ':memory:'));
     my $val = $c->get('nonexistent');
     is($val, undef, 'miss returns undef');
 };
@@ -39,21 +39,21 @@ subtest 'Get miss returns undef' => sub {
 # === Test 3: Key generation ===
 
 subtest 'make_key is deterministic' => sub {
-    my $k1 = AI::Clam::Cache->make_key(model => 'gpt-4o', messages => [{ role => 'user', content => 'hi' }]);
-    my $k2 = AI::Clam::Cache->make_key(model => 'gpt-4o', messages => [{ role => 'user', content => 'hi' }]);
+    my $k1 = Clank::Cache->make_key(model => 'gpt-4o', messages => [{ role => 'user', content => 'hi' }]);
+    my $k2 = Clank::Cache->make_key(model => 'gpt-4o', messages => [{ role => 'user', content => 'hi' }]);
     is($k1, $k2, 'same input produces same key');
 
-    my $k3 = AI::Clam::Cache->make_key(model => 'gpt-4o', messages => [{ role => 'user', content => 'bye' }]);
+    my $k3 = Clank::Cache->make_key(model => 'gpt-4o', messages => [{ role => 'user', content => 'bye' }]);
     ok($k1 ne $k3, 'different input produces different key');
 
-    my $k4 = AI::Clam::Cache->make_key(model => 'gpt-4o-mini', messages => [{ role => 'user', content => 'hi' }]);
+    my $k4 = Clank::Cache->make_key(model => 'gpt-4o-mini', messages => [{ role => 'user', content => 'hi' }]);
     ok($k1 ne $k4, 'different model produces different key');
 };
 
 # === Test 4: TTL expiration ===
 
 subtest 'Entry expires after TTL' => sub {
-    my $c = AI::Clam::Cache->new(store => AI::Clam::Store->new(db => ':memory:'), ttl_ms => 1);
+    my $c = Clank::Cache->new(store => Clank::Store->new(db => ':memory:'), ttl_ms => 1);
 
     $c->set('expire_me', 'value', ttl_ms => 1);
     ok(defined $c->get('expire_me'), 'immediately available');
@@ -66,9 +66,9 @@ subtest 'Entry expires after TTL' => sub {
 # === Test 5: Namespace isolation ===
 
 subtest 'Namespaces are isolated' => sub {
-    my $store2 = AI::Clam::Store->new(db => ':memory:');
-    my $c_llm = AI::Clam::Cache->new(store => $store2, namespace => 'llm');
-    my $c_wm  = AI::Clam::Cache->new(store => $store2, namespace => 'worldmodel');
+    my $store2 = Clank::Store->new(db => ':memory:');
+    my $c_llm = Clank::Cache->new(store => $store2, namespace => 'llm');
+    my $c_wm  = Clank::Cache->new(store => $store2, namespace => 'worldmodel');
 
     $c_llm->set('key1', 'llm_value');
     $c_wm->set('key1', 'wm_value');
@@ -84,7 +84,7 @@ subtest 'Namespaces are isolated' => sub {
 # === Test 6: Invalidate ===
 
 subtest 'Invalidate specific key' => sub {
-    my $c = AI::Clam::Cache->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $c = Clank::Cache->new(store => Clank::Store->new(db => ':memory:'));
     $c->set('a', 1);
     $c->set('b', 2);
 
@@ -96,7 +96,7 @@ subtest 'Invalidate specific key' => sub {
 # === Test 7: Purge ===
 
 subtest 'Purge removes expired entries' => sub {
-    my $c = AI::Clam::Cache->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $c = Clank::Cache->new(store => Clank::Store->new(db => ':memory:'));
     $c->set('keep', 'forever', ttl_ms => 100_000);
     $c->set('drop', 'soon', ttl_ms => 1);
 
@@ -110,7 +110,7 @@ subtest 'Purge removes expired entries' => sub {
 # === Test 8: Stats ===
 
 subtest 'Stats tracking' => sub {
-    my $c = AI::Clam::Cache->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $c = Clank::Cache->new(store => Clank::Store->new(db => ':memory:'));
     $c->set('x', 1);
     $c->get('x');    # hit
     $c->get('y');    # miss
@@ -125,7 +125,7 @@ subtest 'Stats tracking' => sub {
 # === Test 9: Overwrite ===
 
 subtest 'Set overwrites existing key' => sub {
-    my $c = AI::Clam::Cache->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $c = Clank::Cache->new(store => Clank::Store->new(db => ':memory:'));
     $c->set('k', 'old');
     $c->set('k', 'new');
     is($c->get('k'), 'new', 'value overwritten');
@@ -134,7 +134,7 @@ subtest 'Set overwrites existing key' => sub {
 # === Test 10: Max entries eviction ===
 
 subtest 'Eviction when max_entries exceeded' => sub {
-    my $c = AI::Clam::Cache->new(store => AI::Clam::Store->new(db => ':memory:'), max_entries => 5);
+    my $c = Clank::Cache->new(store => Clank::Store->new(db => ':memory:'), max_entries => 5);
 
     for my $i (1..6) {
         $c->set("k$i", $i);
@@ -148,11 +148,11 @@ subtest 'Eviction when max_entries exceeded' => sub {
 # === Test 11: Bus events ===
 
 subtest 'Cache publishes events to bus' => sub {
-    my $store3 = AI::Clam::Store->new(db => ':memory:');
-    require AI::Clam::Bus;
-    my $bus = AI::Clam::Bus->new(store => $store3);
+    my $store3 = Clank::Store->new(db => ':memory:');
+    require Clank::Bus;
+    my $bus = Clank::Bus->new(store => $store3);
 
-    my $c = AI::Clam::Cache->new(store => $store3, bus => $bus);
+    my $c = Clank::Cache->new(store => $store3, bus => $bus);
     my @events;
     $bus->subscribe('cache.*', sub { push @events, $_[0]{topic} }, name => 'test');
 
@@ -167,7 +167,7 @@ subtest 'Cache publishes events to bus' => sub {
 # === Test 12: Complex values ===
 
 subtest 'Store complex nested structures' => sub {
-    my $c = AI::Clam::Cache->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $c = Clank::Cache->new(store => Clank::Store->new(db => ':memory:'));
     my $complex = {
         choices => [{ message => { content => 'hello', tool_calls => [] } }],
         usage   => { prompt_tokens => 10, completion_tokens => 5 },

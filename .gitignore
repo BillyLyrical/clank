@@ -6,12 +6,12 @@
 # clam runtime scratch (workdirs, installed wits) — never in-tree
 _work/
 _tmp/
-.clam/
+.clank/
 
 # analysis artifacts
 .tmp-analysis/
 .wit-analysis/
 
 # dev symlinks (created by bin/setup-dev-symlinks)
-lib/AI/Clam/Wits/*
+lib/Clank/Wits/*
 

@@ -1,6 +1,6 @@
 # hello — example wit
 
-The smallest useful clam wit. Use it as a template for your own wits.
+The smallest useful clank wit. Use it as a template for your own wits.
 
 Demonstrates all three registration surfaces (see `docs/ROADMAP.md` §5):
 
@@ -12,18 +12,18 @@ Demonstrates all three registration surfaces (see `docs/ROADMAP.md` §5):
 
 ```
 hello/
-  lib/Clam/Wits/Hello.pm    # the wit module (standard layout)
+  lib/Clank/Wits/Hello.pm    # the wit module (standard layout)
   README.md
 ```
 
 ## Try it
 
 ```sh
-# run clam with this example on the wit path:
-clam -w /path/to/clam/wits.example/hello
+# run clank with this example on the wit path:
+clank -w /path/to/clank/wits.example/hello
 
 # or install it:
-cd /path/to/clam/wits.example/hello
+cd /path/to/clank/wits.example/hello
 cpanm .
 ```
 

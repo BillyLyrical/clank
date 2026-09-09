@@ -5,26 +5,26 @@ use Test::More;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use AI::Clam::Store;
-use AI::Clam::Bus;
-use AI::Clam::Session;
-use AI::Clam::Provider::Mock;
-use AI::Clam::Loop;
-use AI::Clam::Governor;
-use AI::Clam::Tracer;
-use AI::Clam::Cache;
-use AI::Clam::Metrics;
+use Clank::Store;
+use Clank::Bus;
+use Clank::Session;
+use Clank::Provider::Mock;
+use Clank::Loop;
+use Clank::Governor;
+use Clank::Tracer;
+use Clank::Cache;
+use Clank::Metrics;
 
 # === Test 1: Loop with no primitives (backwards compatible) ===
 
 subtest 'Loop without primitives' => sub {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $bus   = AI::Clam::Bus->new(store => $store);
-    my $prov  = AI::Clam::Provider::Mock->new(model => 'mock');
-    my $session = AI::Clam::Session->new(store => $store, bus => $bus, provider => $prov);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $bus   = Clank::Bus->new(store => $store);
+    my $prov  = Clank::Provider::Mock->new(model => 'mock');
+    my $session = Clank::Session->new(store => $store, bus => $bus, provider => $prov);
 
-    my $loop = AI::Clam::Loop->new(session => $session);
-    isa_ok($loop, 'AI::Clam::Loop');
+    my $loop = Clank::Loop->new(session => $session);
+    isa_ok($loop, 'Clank::Loop');
     ok(!$loop->{governor}, 'no governor');
     ok(!$loop->{tracer}, 'no tracer');
     ok(!$loop->{cache}, 'no cache');
@@ -34,17 +34,17 @@ subtest 'Loop without primitives' => sub {
 # === Test 2: Loop with all primitives constructed ===
 
 subtest 'Loop with all primitives' => sub {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $bus   = AI::Clam::Bus->new(store => $store);
-    my $prov  = AI::Clam::Provider::Mock->new(model => 'mock');
-    my $session = AI::Clam::Session->new(store => $store, bus => $bus, provider => $prov);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $bus   = Clank::Bus->new(store => $store);
+    my $prov  = Clank::Provider::Mock->new(model => 'mock');
+    my $session = Clank::Session->new(store => $store, bus => $bus, provider => $prov);
 
-    my $gov = AI::Clam::Governor->new(store => $store, bus => $bus, session_id => 'test');
-    my $trc = AI::Clam::Tracer->new(store => $store);
-    my $cac = AI::Clam::Cache->new(store => $store, namespace => 'llm');
-    my $met = AI::Clam::Metrics->new(store => $store);
+    my $gov = Clank::Governor->new(store => $store, bus => $bus, session_id => 'test');
+    my $trc = Clank::Tracer->new(store => $store);
+    my $cac = Clank::Cache->new(store => $store, namespace => 'llm');
+    my $met = Clank::Metrics->new(store => $store);
 
-    my $loop = AI::Clam::Loop->new(
+    my $loop = Clank::Loop->new(
         session  => $session,
         governor => $gov,
         tracer   => $trc,
@@ -52,27 +52,27 @@ subtest 'Loop with all primitives' => sub {
         metrics  => $met,
     );
 
-    isa_ok($loop->{governor}, 'AI::Clam::Governor');
-    isa_ok($loop->{tracer}, 'AI::Clam::Tracer');
-    isa_ok($loop->{cache}, 'AI::Clam::Cache');
-    isa_ok($loop->{metrics}, 'AI::Clam::Metrics');
+    isa_ok($loop->{governor}, 'Clank::Governor');
+    isa_ok($loop->{tracer}, 'Clank::Tracer');
+    isa_ok($loop->{cache}, 'Clank::Cache');
+    isa_ok($loop->{metrics}, 'Clank::Metrics');
 };
 
 # === Test 3: Loop with governor blocks on budget ===
 
 subtest 'Governor blocks on budget' => sub {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $bus   = AI::Clam::Bus->new(store => $store);
-    my $prov  = AI::Clam::Provider::Mock->new(model => 'mock');
-    my $session = AI::Clam::Session->new(store => $store, bus => $bus, provider => $prov);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $bus   = Clank::Bus->new(store => $store);
+    my $prov  = Clank::Provider::Mock->new(model => 'mock');
+    my $session = Clank::Session->new(store => $store, bus => $bus, provider => $prov);
 
-    my $gov = AI::Clam::Governor->new(
+    my $gov = Clank::Governor->new(
         store => $store, bus => $bus, session_id => 'test',
         budget => 0.0001,   # tiny budget
         pricing => { mock => { input => 1.0, output => 1.0 } },  # expensive mock
     );
 
-    my $loop = AI::Clam::Loop->new(
+    my $loop = Clank::Loop->new(
         session  => $session,
         governor => $gov,
     );
@@ -88,14 +88,14 @@ subtest 'Governor blocks on budget' => sub {
 # === Test 4: Metrics increments on run ===
 
 subtest 'Metrics increments on run' => sub {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $bus   = AI::Clam::Bus->new(store => $store);
-    my $prov  = AI::Clam::Provider::Mock->new(model => 'mock');
-    my $session = AI::Clam::Session->new(store => $store, bus => $bus, provider => $prov);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $bus   = Clank::Bus->new(store => $store);
+    my $prov  = Clank::Provider::Mock->new(model => 'mock');
+    my $session = Clank::Session->new(store => $store, bus => $bus, provider => $prov);
 
-    my $met = AI::Clam::Metrics->new(store => $store);
+    my $met = Clank::Metrics->new(store => $store);
 
-    my $loop = AI::Clam::Loop->new(
+    my $loop = Clank::Loop->new(
         session  => $session,
         metrics  => $met,
     );
@@ -109,14 +109,14 @@ subtest 'Metrics increments on run' => sub {
 # === Test 5: Tracer creates spans ===
 
 subtest 'Tracer creates spans' => sub {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $bus   = AI::Clam::Bus->new(store => $store);
-    my $prov  = AI::Clam::Provider::Mock->new(model => 'mock');
-    my $session = AI::Clam::Session->new(store => $store, bus => $bus, provider => $prov);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $bus   = Clank::Bus->new(store => $store);
+    my $prov  = Clank::Provider::Mock->new(model => 'mock');
+    my $session = Clank::Session->new(store => $store, bus => $bus, provider => $prov);
 
-    my $trc = AI::Clam::Tracer->new(store => $store);
+    my $trc = Clank::Tracer->new(store => $store);
 
-    my $loop = AI::Clam::Loop->new(
+    my $loop = Clank::Loop->new(
         session  => $session,
         tracer   => $trc,
     );
@@ -133,14 +133,14 @@ subtest 'Tracer creates spans' => sub {
 # === Test 6: Cache stores and retrieves ===
 
 subtest 'Cache integration' => sub {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $bus   = AI::Clam::Bus->new(store => $store);
-    my $prov  = AI::Clam::Provider::Mock->new(model => 'mock');
-    my $session = AI::Clam::Session->new(store => $store, bus => $bus, provider => $prov);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $bus   = Clank::Bus->new(store => $store);
+    my $prov  = Clank::Provider::Mock->new(model => 'mock');
+    my $session = Clank::Session->new(store => $store, bus => $bus, provider => $prov);
 
-    my $cac = AI::Clam::Cache->new(store => $store, namespace => 'llm');
+    my $cac = Clank::Cache->new(store => $store, namespace => 'llm');
 
-    my $loop = AI::Clam::Loop->new(
+    my $loop = Clank::Loop->new(
         session  => $session,
         cache    => $cac,
     );
@@ -151,8 +151,8 @@ subtest 'Cache integration' => sub {
     ok($s1->{misses} >= 1, 'cache miss on first call');
 
     # Second call with same prompt: cache hit.
-    my $session2 = AI::Clam::Session->new(store => $store, bus => $bus, provider => $prov);
-    my $loop2 = AI::Clam::Loop->new(
+    my $session2 = Clank::Session->new(store => $store, bus => $bus, provider => $prov);
+    my $loop2 = Clank::Loop->new(
         session  => $session2,
         cache    => $cac,
     );
@@ -164,17 +164,17 @@ subtest 'Cache integration' => sub {
 # === Test 7: All primitives together ===
 
 subtest 'All primitives together' => sub {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $bus   = AI::Clam::Bus->new(store => $store);
-    my $prov  = AI::Clam::Provider::Mock->new(model => 'mock');
-    my $session = AI::Clam::Session->new(store => $store, bus => $bus, provider => $prov);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $bus   = Clank::Bus->new(store => $store);
+    my $prov  = Clank::Provider::Mock->new(model => 'mock');
+    my $session = Clank::Session->new(store => $store, bus => $bus, provider => $prov);
 
-    my $gov = AI::Clam::Governor->new(store => $store, bus => $bus, session_id => 'test');
-    my $trc = AI::Clam::Tracer->new(store => $store);
-    my $cac = AI::Clam::Cache->new(store => $store, namespace => 'llm');
-    my $met = AI::Clam::Metrics->new(store => $store);
+    my $gov = Clank::Governor->new(store => $store, bus => $bus, session_id => 'test');
+    my $trc = Clank::Tracer->new(store => $store);
+    my $cac = Clank::Cache->new(store => $store, namespace => 'llm');
+    my $met = Clank::Metrics->new(store => $store);
 
-    my $loop = AI::Clam::Loop->new(
+    my $loop = Clank::Loop->new(
         session  => $session,
         governor => $gov,
         tracer   => $trc,

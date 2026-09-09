@@ -23,14 +23,14 @@ package main;
 
 my $lib = "$FindBin::RealBin/../lib";
 my @pm;
-find(sub { push @pm, $File::Find::name if /\.pm$/ && -f $_ }, "$lib/AI/Clam/Wits/Git");
+find(sub { push @pm, $File::Find::name if /\.pm$/ && -f $_ }, "$lib/Clank/Wits/Git");
 
 plan tests => scalar(@pm) * 3;
 
 for my $path (sort @pm) {
-    (my $rel = $path) =~ s{.*Clam/Wits/Git/}{};
+    (my $rel = $path) =~ s{.*Clank/Wits/Git/}{};
     $rel =~ s{\.pm$}{};
-    my $mod = "AI::Clam::Wits::Git::" . join("::", split m{/}, $rel);
+    my $mod = "Clank::Wits::Git::" . join("::", split m{/}, $rel);
     eval "require $mod";
     is($@, '', "$mod loads");
     can_ok($mod, 'register');

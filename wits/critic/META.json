@@ -1,24 +1,24 @@
 {
-  "name": "Clam-Wits-Critic",
+  "name": "Clank-Wits-Critic",
   "version": "1.0.0",
-  "author": "CLAM",
+  "author": "Clank",
   "license": "Artistic-2.0",
   "requires": {
     "perl": "5.040001",
-    "AI::Clam": "1.0"
+    "Clank": "1.0"
   },
   "provides": {
-    "AI::Clam::Wits::Critic::Style": { "file": "lib/AI/Clam/Wits/Critic/Style.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Critic::Security": { "file": "lib/AI/Clam/Wits/Critic/Security.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Critic::Quality": { "file": "lib/AI/Clam/Wits/Critic/Quality.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Critic::Accessibility": { "file": "lib/AI/Clam/Wits/Critic/Accessibility.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Critic::Ethics": { "file": "lib/AI/Clam/Wits/Critic/Ethics.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Critic::Performance": { "file": "lib/AI/Clam/Wits/Critic/Performance.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Critic::Safety": { "file": "lib/AI/Clam/Wits/Critic/Safety.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Critic::Clarity": { "file": "lib/AI/Clam/Wits/Critic/Clarity.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Critic::Frugality": { "file": "lib/AI/Clam/Wits/Critic/Frugality.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Critic::Sustainability": { "file": "lib/AI/Clam/Wits/Critic/Sustainability.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Critic::Architecture": { "file": "lib/AI/Clam/Wits/Critic/Architecture.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Critic::Usability": { "file": "lib/AI/Clam/Wits/Critic/Usability.pm", "version": "1.0.0" }
+    "Clank::Wits::Critic::Style": { "file": "lib/Clank/Wits/Critic/Style.pm", "version": "1.0.0" },
+    "Clank::Wits::Critic::Security": { "file": "lib/Clank/Wits/Critic/Security.pm", "version": "1.0.0" },
+    "Clank::Wits::Critic::Quality": { "file": "lib/Clank/Wits/Critic/Quality.pm", "version": "1.0.0" },
+    "Clank::Wits::Critic::Accessibility": { "file": "lib/Clank/Wits/Critic/Accessibility.pm", "version": "1.0.0" },
+    "Clank::Wits::Critic::Ethics": { "file": "lib/Clank/Wits/Critic/Ethics.pm", "version": "1.0.0" },
+    "Clank::Wits::Critic::Performance": { "file": "lib/Clank/Wits/Critic/Performance.pm", "version": "1.0.0" },
+    "Clank::Wits::Critic::Safety": { "file": "lib/Clank/Wits/Critic/Safety.pm", "version": "1.0.0" },
+    "Clank::Wits::Critic::Clarity": { "file": "lib/Clank/Wits/Critic/Clarity.pm", "version": "1.0.0" },
+    "Clank::Wits::Critic::Frugality": { "file": "lib/Clank/Wits/Critic/Frugality.pm", "version": "1.0.0" },
+    "Clank::Wits::Critic::Sustainability": { "file": "lib/Clank/Wits/Critic/Sustainability.pm", "version": "1.0.0" },
+    "Clank::Wits::Critic::Architecture": { "file": "lib/Clank/Wits/Critic/Architecture.pm", "version": "1.0.0" },
+    "Clank::Wits::Critic::Usability": { "file": "lib/Clank/Wits/Critic/Usability.pm", "version": "1.0.0" }
   }
 }

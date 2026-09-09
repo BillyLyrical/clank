@@ -1,14 +1,14 @@
 
-Clam - A Perl Hybrid AI Harness
+Clank - A Perl Hybrid AI Harness
 ================================
 
-Clam is an over-engineered Perl shell for the age of AI.
+Clank is an over-engineered Perl shell for the age of AI.
 
 LLMs are fat-fingered geniuses.
 Logic engines are idiot savants.
-Clam bridges them in Perl.
+Clank bridges them in Perl.
 
-Clam is a neurosymbolic AI harness that combines LLM pattern
+Clank is a neurosymbolic AI harness that combines LLM pattern
 recognition with explicit world models, symbolic reasoning, and
 deterministic rules. Entities, relations, temporal facts, causal
 links, and beliefs live in a shared SQLite blackboard. Datalog,
@@ -57,18 +57,18 @@ Quick start
 -----------
 
   # with LM Studio running locally:
-  clam
+  clank
 
   # with Ollama:
-  CLAM_PROVIDER=ollama CLAM_MODEL=codellama clam
+  CLANK_PROVIDER=ollama CLANK_MODEL=codellama clank
 
   # with OpenAI:
-  CLAM_PROVIDER=openai CLAM_MODEL=gpt-4o clam
+  CLANK_PROVIDER=openai CLANK_MODEL=gpt-4o clank
 
   # programmatic:
   perl -Ilib -e '
-    use AI::Clam::Driver;
-    my $d = AI::Clam::Driver->new(provider=>"ollama", model=>"codellama");
+    use Clank::Driver;
+    my $d = Clank::Driver->new(provider=>"ollama", model=>"codellama");
     $d->start;
     my $r = $d->ask("list the files in the current directory");
     print $r->{response};
@@ -79,12 +79,12 @@ Quick start
 Development setup
 -----------------
 
-  cd clam
+  cd clank
   perl link_wits.pl        # symlink wits/ into lib/
   prove -l t/              # run core tests
   prove -l wits/*/t/       # run wit tests
 
-link_wits.pl creates relative symlinks from lib/Clam/Wits/* to
+link_wits.pl creates relative symlinks from lib/Clank/Wits/* to
 each wit's lib/ directory. This makes the dev tree behave like an
 installed CPAN tree — all modules load from -Ilib.
 
@@ -99,7 +99,7 @@ The Perl thesis
 Perl is the foundation of a new kind of execution environment.
 
 In a standard AI harness, the LLM generates code and the harness runs it.
-In Clam, the LLM generates Perl, and Perl IS the environment.
+In Clank, the LLM generates Perl, and Perl IS the environment.
 The harness can modify itself, it can extend the harness by writing wits.
 Logic engines can collapse expensive LLM calls into fast deterministic rules.
 The system may get cheaper and faster the more it's used?
@@ -108,7 +108,7 @@ The system may get cheaper and faster the more it's used?
 Questions for testers
 ---------------------
 
-Clam is new and I'm still figuring things out.
+Clank is new and I'm still figuring things out.
 I need your help thinking through these:
 
 The UI — What does a great AI harness UI look like?
@@ -117,7 +117,7 @@ I'm working on a TUI, & A web interface etc.
 What would make you actually use this daily?
 
 Tools — We ship read, bash, edit, write (Pi parity) plus 88 wits.
-What tools are missing? What would make Clam indispensable for your
+What tools are missing? What would make Clank indispensable for your
 workflow? Database migrations? Docker management? CPAN module
 authoring? CPANTEST reporting?
 
@@ -133,11 +133,11 @@ cheaper forever? The logic deck makes this possible. Is it
 actually useful? What would you crystallize?
 
 The Perl hook — LLMs can read and write Perl natively. This means
-Clam can modify its own wits, rewrite its own tools, and evolve
+Clank can modify its own wits, rewrite its own tools, and evolve
 during a session. Is this a feature or a footgun? How do we make
 it safe?
 
-What can Clam unlock — I think a Perl AI environment enables
+What can Clank unlock — I think a Perl AI environment enables
 things no other harness can: self-modifying code, deterministic
 reasoning over probabilistic generation, a complete unix shell
 experience with AI assistance. What possibilities do you see that
@@ -147,10 +147,10 @@ I haven't thought of?
 Get involved
 ------------
 
-Clam is open source. The repo is at git@psycho:~/clam.git.
+Clank is open source. The repo is at git@psycho:~/clank.git.
 
-  git clone git@psycho:~/clam.git
-  cd clam
+  git clone git@psycho:~/clank.git
+  cd clank
   prove -l t/
 
 Read docs/ROADMAP.md for the full architecture and vision.

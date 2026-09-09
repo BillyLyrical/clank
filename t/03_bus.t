@@ -1,11 +1,11 @@
 use strict; use warnings;
 use Test::More;
 use lib 'lib';
-use AI::Clam::Store;
-use AI::Clam::Bus;
+use Clank::Store;
+use Clank::Bus;
 
-my $store = AI::Clam::Store->new(path => ':memory:');
-my $bus   = AI::Clam::Bus->new(store => $store, sender => 'test');
+my $store = Clank::Store->new(path => ':memory:');
+my $bus   = Clank::Bus->new(store => $store, sender => 'test');
 
 # basic pub/sub with result capture
 my @got;

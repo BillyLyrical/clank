@@ -1,13 +1,13 @@
-# Context Engineering for Clam
+# Context Engineering for Clank
 
 Status: design document. Practical architecture for teaching LLMs what's
-available as Clam scales to hundreds of wits.
+available as Clank scales to hundreds of wits.
 
 ---
 
 ## 1. The Problem
 
-Clam ships 88 wits across 6 decks today. The vision is hundreds. At that
+Clank ships 88 wits across 6 decks today. The vision is hundreds. At that
 scale, the naive approach — dump every tool schema into the system prompt —
 fails catastrophically:
 
@@ -74,23 +74,23 @@ window. (HuggingFace CodeAgent approach.)
 
 ---
 
-## 3. What Clam Already Has
+## 3. What Clank Already Has
 
-Clam's architecture maps directly to these patterns:
+Clank's architecture maps directly to these patterns:
 
-| Industry Pattern | Clam Equivalent | Status |
+| Industry Pattern | Clank Equivalent | Status |
 |-----------------|-----------------|--------|
 | Context assembly pipeline | Bus + SystemPrompt | Exists, needs enhancement |
 | Tool selection via retrieval | ToolSelector (RATS) | Exists, keyword-based |
 | Context compression | Compaction (Pi semantics) | Exists, LLM-based |
 | World model (semantic memory) | WorldModel + NeuroIntegration | Exists, bidirectional |
 | Deterministic rules | Logic + Rules + FSM + BT | Exists, full suite |
-| Self-describing tools | `# CLAM-WIT:` comments | Exists, grep-based |
+| Self-describing tools | `# CLANK-WIT:` comments | Exists, grep-based |
 | Crystallization (learn from use) | Crystallizer | Exists, captures patterns |
 | Event-sourced state | Store + Bus + EventSourcing | Exists, journaled |
 | SQLite retrieval | Store (FTS5, RAG) | Exists, fast |
 
-Clam is not starting from zero. The infrastructure is there. What's
+Clank is not starting from zero. The infrastructure is there. What's
 missing is the *orchestration layer* that ties these pieces into a
 coherent context engineering system.
 
@@ -98,7 +98,7 @@ coherent context engineering system.
 
 | Mechanism | What it does | Limitation |
 |-----------|-------------|------------|
-| `# CLAM-WIT:` comments | Grep-able metadata, source of truth | Filesystem-only; LLM can't grep at runtime |
+| `# CLANK-WIT:` comments | Grep-able metadata, source of truth | Filesystem-only; LLM can't grep at runtime |
 | `hint` field | Dense keywords for tool selection | Per-tool, no deck-level awareness |
 | ToolSelector (RATS) | Scores tools by keyword overlap | Tool-level only; no capability overview |
 | System prompt injection | Tool schemas injected into context | Bloats with load count; no hierarchy |
@@ -280,7 +280,7 @@ Before each LLM call, the context is assembled in this order:
 
 ---
 
-## 6. How Clam's Existing Modules Participate
+## 6. How Clank's Existing Modules Participate
 
 ### 6.1 ToolSelector (Enhanced)
 
@@ -289,14 +289,14 @@ Enhanced: add conversation context as additional signal.
 
 ```perl
 # Before (keyword-only):
-my $relevant = AI::Clam::ToolSelector->select(
+my $relevant = Clank::ToolSelector->select(
     tools => \@all_tools,
     prompt => $user_prompt,
     max => 30,
 );
 
 # After (context-aware):
-my $relevant = AI::Clam::ToolSelector->select(
+my $relevant = Clank::ToolSelector->select(
     tools    => \@all_tools,
     prompt   => $user_prompt,
     context  => {
@@ -388,7 +388,7 @@ Enhancement: bus topics for context assembly:
 
 ## 7. The SQLite Advantage
 
-Clam's choice of SQLite as the backbone is a decisive advantage here.
+Clank's choice of SQLite as the backbone is a decisive advantage here.
 Every context source is a SQLite query:
 
 | Context Source | SQLite Table | Query Type |
@@ -413,8 +413,8 @@ coordinates assembly. Perl processes results.
 **What**: Generate a deck-level capability manifest from PluginManager.
 
 **Files to change**:
-- `lib/AI/Clam/PluginManager.pm` — add `manifest()` method
-- `lib/AI/Clam/Session/SystemPrompt.pm` — inject manifest
+- `lib/Clank/PluginManager.pm` — add `manifest()` method
+- `lib/Clank/Session/SystemPrompt.pm` — inject manifest
 
 **Manifest format**:
 ```
@@ -437,8 +437,8 @@ CAPABILITIES (88 wits, 6 decks):
 **What**: Add context signals to tool scoring.
 
 **Files to change**:
-- `lib/AI/Clam/ToolSelector.pm` — accept `context` hash, weight signals
-- `lib/AI/Clam/Loop.pm` — pass context to ToolSelector
+- `lib/Clank/ToolSelector.pm` — accept `context` hash, weight signals
+- `lib/Clank/Loop.pm` — pass context to ToolSelector
 
 **Signals to add**:
 - `recent_tools`: tools used in last 3 turns get a boost
@@ -451,10 +451,10 @@ CAPABILITIES (88 wits, 6 decks):
 **What**: Wire the three-pipeline assembly via bus events.
 
 **Files to change**:
-- `lib/AI/Clam/Session/SystemPrompt.pm` — publish `context.assemble`
-- `lib/AI/Clam/NeuroIntegration.pm` — subscribe, coordinate pipelines
-- `lib/AI/Clam/WorldModel.pm` — subscribe to `context.knowledge_request`
-- `lib/AI/Clam/Crystallizer.pm` — subscribe to `context.knowledge_request`
+- `lib/Clank/Session/SystemPrompt.pm` — publish `context.assemble`
+- `lib/Clank/NeuroIntegration.pm` — subscribe, coordinate pipelines
+- `lib/Clank/WorldModel.pm` — subscribe to `context.knowledge_request`
+- `lib/Clank/Crystallizer.pm` — subscribe to `context.knowledge_request`
 
 **Bus topics**:
 ```
@@ -470,9 +470,9 @@ context.assembled         → final context ready
 **What**: Post-tool-call summarization + context-aware pruning.
 
 **Files to change**:
-- `lib/AI/Clam/Loop.pm` — summarize tool results > 1000 tokens
-- `lib/AI/Clam/Session/Compaction.pm` — add relevance-based pruning
-- `lib/AI/Clam/Session/Messages.pm` — add `estimate_tokens()` refinement
+- `lib/Clank/Loop.pm` — summarize tool results > 1000 tokens
+- `lib/Clank/Session/Compaction.pm` — add relevance-based pruning
+- `lib/Clank/Session/Messages.pm` — add `estimate_tokens()` refinement
 
 **Strategy**:
 - Tool results > 1000 tokens: summarize before re-entry
@@ -484,8 +484,8 @@ context.assembled         → final context ready
 **What**: Use the Rules DSL to select context injection rules.
 
 **Files to change**:
-- `lib/AI/Clam/Rules/DSL.pm` — add context rule patterns
-- `lib/AI/Clam/Session/SystemPrompt.pm` — evaluate rules for context
+- `lib/Clank/Rules/DSL.pm` — add context rule patterns
+- `lib/Clank/Session/SystemPrompt.pm` — evaluate rules for context
 
 **Rule examples**:
 ```perl

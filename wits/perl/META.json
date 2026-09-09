@@ -1,28 +1,28 @@
 {
-  "name": "Clam-Wits-Perl",
+  "name": "Clank-Wits-Perl",
   "version": "1.0.0",
-  "author": "CLAM",
+  "author": "Clank",
   "license": "Artistic-2.0",
   "requires": {
     "perl": "5.040001",
-    "AI::Clam": "1.0"
+    "Clank": "1.0"
   },
   "provides": {
-    "AI::Clam::Wits::Perl::Syntax": { "file": "lib/AI/Clam/Wits/Perl/Syntax.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Perl::Test": { "file": "lib/AI/Clam/Wits/Perl/Test.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Perl::Doc": { "file": "lib/AI/Clam/Wits/Perl/Doc.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Perl::TestGen": { "file": "lib/AI/Clam/Wits/Perl/TestGen.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Perl::Dump": { "file": "lib/AI/Clam/Wits/Perl/Dump.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Perl::Trace": { "file": "lib/AI/Clam/Wits/Perl/Trace.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Perl::PodRead": { "file": "lib/AI/Clam/Wits/Perl/PodRead.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Perl::Deps": { "file": "lib/AI/Clam/Wits/Perl/Deps.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Perl::DocCheck": { "file": "lib/AI/Clam/Wits/Perl/DocCheck.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Perl::ErrorParse": { "file": "lib/AI/Clam/Wits/Perl/ErrorParse.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Perl::Explain": { "file": "lib/AI/Clam/Wits/Perl/Explain.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Perl::Security": { "file": "lib/AI/Clam/Wits/Perl/Security.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Perl::Refactor": { "file": "lib/AI/Clam/Wits/Perl/Refactor.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Perl::Review": { "file": "lib/AI/Clam/Wits/Perl/Review.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Perl::DeadCode": { "file": "lib/AI/Clam/Wits/Perl/DeadCode.pm", "version": "1.0.0" },
-    "AI::Clam::Wits::Perl::WarnCheck": { "file": "lib/AI/Clam/Wits/Perl/WarnCheck.pm", "version": "1.0.0" }
+    "Clank::Wits::Perl::Syntax": { "file": "lib/Clank/Wits/Perl/Syntax.pm", "version": "1.0.0" },
+    "Clank::Wits::Perl::Test": { "file": "lib/Clank/Wits/Perl/Test.pm", "version": "1.0.0" },
+    "Clank::Wits::Perl::Doc": { "file": "lib/Clank/Wits/Perl/Doc.pm", "version": "1.0.0" },
+    "Clank::Wits::Perl::TestGen": { "file": "lib/Clank/Wits/Perl/TestGen.pm", "version": "1.0.0" },
+    "Clank::Wits::Perl::Dump": { "file": "lib/Clank/Wits/Perl/Dump.pm", "version": "1.0.0" },
+    "Clank::Wits::Perl::Trace": { "file": "lib/Clank/Wits/Perl/Trace.pm", "version": "1.0.0" },
+    "Clank::Wits::Perl::PodRead": { "file": "lib/Clank/Wits/Perl/PodRead.pm", "version": "1.0.0" },
+    "Clank::Wits::Perl::Deps": { "file": "lib/Clank/Wits/Perl/Deps.pm", "version": "1.0.0" },
+    "Clank::Wits::Perl::DocCheck": { "file": "lib/Clank/Wits/Perl/DocCheck.pm", "version": "1.0.0" },
+    "Clank::Wits::Perl::ErrorParse": { "file": "lib/Clank/Wits/Perl/ErrorParse.pm", "version": "1.0.0" },
+    "Clank::Wits::Perl::Explain": { "file": "lib/Clank/Wits/Perl/Explain.pm", "version": "1.0.0" },
+    "Clank::Wits::Perl::Security": { "file": "lib/Clank/Wits/Perl/Security.pm", "version": "1.0.0" },
+    "Clank::Wits::Perl::Refactor": { "file": "lib/Clank/Wits/Perl/Refactor.pm", "version": "1.0.0" },
+    "Clank::Wits::Perl::Review": { "file": "lib/Clank/Wits/Perl/Review.pm", "version": "1.0.0" },
+    "Clank::Wits::Perl::DeadCode": { "file": "lib/Clank/Wits/Perl/DeadCode.pm", "version": "1.0.0" },
+    "Clank::Wits::Perl::WarnCheck": { "file": "lib/Clank/Wits/Perl/WarnCheck.pm", "version": "1.0.0" }
   }
 }

@@ -5,24 +5,24 @@ use Test::More;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use AI::Clam::Store;
-use AI::Clam::WorldModel;
-use AI::Clam::Logic::GoalPlanner;
+use Clank::Store;
+use Clank::WorldModel;
+use Clank::Logic::GoalPlanner;
 
-my $store = AI::Clam::Store->new(db => ':memory:');
-my $wm    = AI::Clam::WorldModel->new(store => $store);
+my $store = Clank::Store->new(db => ':memory:');
+my $wm    = Clank::WorldModel->new(store => $store);
 
 # === Test 1: Construction ===
 
 subtest 'Construction' => sub {
-    my $gp = AI::Clam::Logic::GoalPlanner->new(world_model => $wm);
-    isa_ok($gp, 'AI::Clam::Logic::GoalPlanner');
+    my $gp = Clank::Logic::GoalPlanner->new(world_model => $wm);
+    isa_ok($gp, 'Clank::Logic::GoalPlanner');
 };
 
 # === Test 2: Set and get goal ===
 
 subtest 'Set and get goal' => sub {
-    my $gp = AI::Clam::Logic::GoalPlanner->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
+    my $gp = Clank::Logic::GoalPlanner->new(world_model => Clank::WorldModel->new(store => Clank::Store->new(db => ':memory:')));
 
     my $id = $gp->set_goal(statement => 'Build a compiler', priority => 3);
     ok($id, 'goal created');
@@ -36,7 +36,7 @@ subtest 'Set and get goal' => sub {
 # === Test 3: Query goals ===
 
 subtest 'Query goals' => sub {
-    my $gp = AI::Clam::Logic::GoalPlanner->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
+    my $gp = Clank::Logic::GoalPlanner->new(world_model => Clank::WorldModel->new(store => Clank::Store->new(db => ':memory:')));
 
     $gp->set_goal(statement => 'Goal A', priority => 1);
     $gp->set_goal(statement => 'Goal B', priority => 5);
@@ -56,7 +56,7 @@ subtest 'Query goals' => sub {
 # === Test 4: Complete and abandon goals ===
 
 subtest 'Complete and abandon goals' => sub {
-    my $gp = AI::Clam::Logic::GoalPlanner->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
+    my $gp = Clank::Logic::GoalPlanner->new(world_model => Clank::WorldModel->new(store => Clank::Store->new(db => ':memory:')));
 
     my $id1 = $gp->set_goal(statement => 'Do this');
     my $id2 = $gp->set_goal(statement => 'Do that');
@@ -73,7 +73,7 @@ subtest 'Complete and abandon goals' => sub {
 # === Test 5: Add subgoals ===
 
 subtest 'Add subgoals' => sub {
-    my $gp = AI::Clam::Logic::GoalPlanner->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
+    my $gp = Clank::Logic::GoalPlanner->new(world_model => Clank::WorldModel->new(store => Clank::Store->new(db => ':memory:')));
 
     my $gid = $gp->set_goal(statement => 'Build compiler');
     my $s1 = $gp->add_subgoal(goal_id => $gid, statement => 'Write lexer');
@@ -90,7 +90,7 @@ subtest 'Add subgoals' => sub {
 # === Test 6: Plan generation (topological sort) ===
 
 subtest 'Plan generation' => sub {
-    my $gp = AI::Clam::Logic::GoalPlanner->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
+    my $gp = Clank::Logic::GoalPlanner->new(world_model => Clank::WorldModel->new(store => Clank::Store->new(db => ':memory:')));
 
     my $gid = $gp->set_goal(statement => 'Build compiler');
     my $s1 = $gp->add_subgoal(goal_id => $gid, statement => 'Write lexer');
@@ -112,7 +112,7 @@ subtest 'Plan generation' => sub {
 # === Test 7: Plan with subgoals in reverse order ===
 
 subtest 'Plan reverse order' => sub {
-    my $gp = AI::Clam::Logic::GoalPlanner->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
+    my $gp = Clank::Logic::GoalPlanner->new(world_model => Clank::WorldModel->new(store => Clank::Store->new(db => ':memory:')));
 
     my $gid = $gp->set_goal(statement => 'Test');
     my $s1 = $gp->add_subgoal(goal_id => $gid, statement => 'Step C', depends_on => ['s2']);
@@ -131,7 +131,7 @@ subtest 'Plan reverse order' => sub {
 # === Test 8: Complete subgoal makes dependents ready ===
 
 subtest 'Subgoal completion unlocks dependents' => sub {
-    my $gp = AI::Clam::Logic::GoalPlanner->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
+    my $gp = Clank::Logic::GoalPlanner->new(world_model => Clank::WorldModel->new(store => Clank::Store->new(db => ':memory:')));
 
     my $gid = $gp->set_goal(statement => 'Test');
     my $s1 = $gp->add_subgoal(goal_id => $gid, statement => 'First');
@@ -154,7 +154,7 @@ subtest 'Subgoal completion unlocks dependents' => sub {
 # === Test 9: Goal auto-completes when all subgoals done ===
 
 subtest 'Goal auto-completion' => sub {
-    my $gp = AI::Clam::Logic::GoalPlanner->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
+    my $gp = Clank::Logic::GoalPlanner->new(world_model => Clank::WorldModel->new(store => Clank::Store->new(db => ':memory:')));
 
     my $gid = $gp->set_goal(statement => 'Test');
     my $s1 = $gp->add_subgoal(goal_id => $gid, statement => 'A');
@@ -172,7 +172,7 @@ subtest 'Goal auto-completion' => sub {
 # === Test 10: Relevance scoring ===
 
 subtest 'Relevance scoring' => sub {
-    my $wm2 = AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $wm2 = Clank::WorldModel->new(store => Clank::Store->new(db => ':memory:'));
 
     # Create beliefs with a dependency chain.
     my $b1 = $wm2->believe(statement => 'Foundational knowledge', confidence => 1.0);
@@ -183,7 +183,7 @@ subtest 'Relevance scoring' => sub {
     $wm2->add_belief_dependency(from_id => $b1, to_id => $b2, weight => 0.9);
     $wm2->add_belief_dependency(from_id => $b2, to_id => $b3, weight => 0.7);
 
-    my $gp = AI::Clam::Logic::GoalPlanner->new(world_model => $wm2);
+    my $gp = Clank::Logic::GoalPlanner->new(world_model => $wm2);
     my $gid = $gp->set_goal(statement => 'Master the domain');
 
     # Link foundational belief to goal.
@@ -201,14 +201,14 @@ subtest 'Relevance scoring' => sub {
 # === Test 11: Relevance scoring with confidence ===
 
 subtest 'Relevance considers confidence' => sub {
-    my $wm2 = AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $wm2 = Clank::WorldModel->new(store => Clank::Store->new(db => ':memory:'));
 
     my $high = $wm2->believe(statement => 'High confidence', confidence => 0.95);
     my $low  = $wm2->believe(statement => 'Low confidence', confidence => 0.2);
 
     $wm2->add_belief_dependency(from_id => $high, to_id => $low, weight => 0.5);
 
-    my $gp = AI::Clam::Logic::GoalPlanner->new(world_model => $wm2);
+    my $gp = Clank::Logic::GoalPlanner->new(world_model => $wm2);
     my $gid = $gp->set_goal(statement => 'Test');
     $gp->link_belief(goal_id => $gid, belief_id => $high);
 
@@ -222,7 +222,7 @@ subtest 'Relevance considers confidence' => sub {
 # === Test 12: next_subgoal returns ready subgoal ===
 
 subtest 'next_subgoal' => sub {
-    my $gp = AI::Clam::Logic::GoalPlanner->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
+    my $gp = Clank::Logic::GoalPlanner->new(world_model => Clank::WorldModel->new(store => Clank::Store->new(db => ':memory:')));
 
     my $gid = $gp->set_goal(statement => 'Test');
     my $s1 = $gp->add_subgoal(goal_id => $gid, statement => 'First');
@@ -240,10 +240,10 @@ subtest 'next_subgoal' => sub {
 # === Test 13: Linked beliefs ===
 
 subtest 'Linked beliefs' => sub {
-    my $wm2 = AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $wm2 = Clank::WorldModel->new(store => Clank::Store->new(db => ':memory:'));
     my $bid = $wm2->believe(statement => 'Important fact', confidence => 0.9);
 
-    my $gp = AI::Clam::Logic::GoalPlanner->new(world_model => $wm2);
+    my $gp = Clank::Logic::GoalPlanner->new(world_model => $wm2);
     my $gid = $gp->set_goal(statement => 'Test');
     $gp->link_belief(goal_id => $gid, belief_id => $bid);
 
@@ -256,10 +256,10 @@ subtest 'Linked beliefs' => sub {
 # === Test 14: Rescore subgoals ===
 
 subtest 'Rescore subgoals' => sub {
-    my $wm2 = AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $wm2 = Clank::WorldModel->new(store => Clank::Store->new(db => ':memory:'));
     my $bid = $wm2->believe(statement => 'Fact', confidence => 0.5);
 
-    my $gp = AI::Clam::Logic::GoalPlanner->new(world_model => $wm2);
+    my $gp = Clank::Logic::GoalPlanner->new(world_model => $wm2);
     my $gid = $gp->set_goal(statement => 'Test');
     my $sid = $gp->add_subgoal(goal_id => $gid, statement => 'Do something', belief_id => $bid);
 
@@ -279,7 +279,7 @@ subtest 'Rescore subgoals' => sub {
 # === Test 15: Hierarchical goals ===
 
 subtest 'Hierarchical goals' => sub {
-    my $gp = AI::Clam::Logic::GoalPlanner->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
+    my $gp = Clank::Logic::GoalPlanner->new(world_model => Clank::WorldModel->new(store => Clank::Store->new(db => ':memory:')));
 
     my $parent = $gp->set_goal(statement => 'Master programming');
     my $child1 = $gp->set_goal(statement => 'Learn Perl', parent_id => $parent);
@@ -292,7 +292,7 @@ subtest 'Hierarchical goals' => sub {
 # === Test 16: Empty goal plan ===
 
 subtest 'Empty plan' => sub {
-    my $gp = AI::Clam::Logic::GoalPlanner->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
+    my $gp = Clank::Logic::GoalPlanner->new(world_model => Clank::WorldModel->new(store => Clank::Store->new(db => ':memory:')));
 
     my $gid = $gp->set_goal(statement => 'Empty goal');
     my $plan = $gp->plan($gid);
@@ -302,7 +302,7 @@ subtest 'Empty plan' => sub {
 # === Test 17: Disconnected subgoals in plan ===
 
 subtest 'Disconnected subgoals' => sub {
-    my $gp = AI::Clam::Logic::GoalPlanner->new(world_model => AI::Clam::WorldModel->new(store => AI::Clam::Store->new(db => ':memory:')));
+    my $gp = Clank::Logic::GoalPlanner->new(world_model => Clank::WorldModel->new(store => Clank::Store->new(db => ':memory:')));
 
     my $gid = $gp->set_goal(statement => 'Test');
     my $s1 = $gp->add_subgoal(goal_id => $gid, statement => 'Independent A');

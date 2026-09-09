@@ -85,14 +85,14 @@ text in that `?` queries are *informational* — they don't trigger tool
 calls. The LLM responds with explanation, not action.
 
 Implementation: send as a user message with a system-injected instruction:
-"This is a question about the system. Answer from your knowledge of Clam.
+"This is a question about the system. Answer from your knowledge of Clank.
 Do not use tools unless explicitly asked."
 
 **`$` — Perl Eval**
 
 ```
 $ time()
-$ use AI::Clam::Util; uuid4()
+$ use Clank::Util; uuid4()
 $ $store->kv_get('last_session')
 ```
 
@@ -117,7 +117,7 @@ Agent operations: plan decomposition, execution, status checks.
 The `@` sigil is Perl's array prefix — agent dispatch returns a list
 of sub-tasks or results.
 
-Implementation: routes to `AI::Clam::Director` or agent-loop manager.
+Implementation: routes to `Clank::Director` or agent-loop manager.
 `@plan` triggers goal decomposition. `@execute` runs a plan.
 `@status` shows active agents. `@list` shows plans.
 
@@ -132,7 +132,7 @@ Implementation: routes to `AI::Clam::Director` or agent-loop manager.
 Runs a named pipeline (see section 2). `%` is Perl's hash prefix —
 pipelines are keyed by name.
 
-Implementation: loads the pipeline blueprint from `~/.clam/pipelines/`,
+Implementation: loads the pipeline blueprint from `~/.clank/pipelines/`,
 wires up bus subscriptions, and runs the source through the route.
 
 **`>` — Inline Pipe**
@@ -466,12 +466,12 @@ Topic names must match across pipelines for the wiring to connect.
 Pipeline blueprints live in:
 
 ```
-~/.clam/pipelines/           # user pipelines
-.clam/pipelines/          # project pipelines
+~/.clank/pipelines/           # user pipelines
+.clank/pipelines/          # project pipelines
 wits/*/pipelines/     # wit-shipped pipelines
 ```
 
-File extension: `.clam`. The parser is the same LL(1) grammar as
+File extension: `.clank`. The parser is the same LL(1) grammar as
 facade blueprints — uppercase blocks, lowercase properties.
 
 ### 2.11 LLM-Generated Pipelines
@@ -511,7 +511,7 @@ Wits (CPAN modules)
   +-- register tools -> LLM can call them
   +-- register commands -> REPL can dispatch them
   +-- register bus hooks -> participate in pipelines
-  +-- # CLAM-WIT: comments -> manifest generation
+  +-- # CLANK-WIT: comments -> manifest generation
 ```
 
 ### 3.2 Data Flow
@@ -524,7 +524,7 @@ Wits (CPAN modules)
    - "This is an informational query" instruction
 4. LLM sees `critic [analysis]` in manifest, responds with explanation
 5. User types `% code-review`
-6. Sigil `%` loads pipeline blueprint from `~/.clam/pipelines/code-review.clam`
+6. Sigil `%` loads pipeline blueprint from `~/.clank/pipelines/code-review.clank`
 7. Pipeline parser reads agent topic declarations
 8. Bus wires subscribe/publish connections
 9. Source publishes `git.diff.ready` event
@@ -565,7 +565,7 @@ them in its tool calls. The REPL dispatches them uniformly.
 
 ### Phase 3: Pipeline Format (after)
 
-- Define `.clam` file format spec (topic-based routing, see §2)
+- Define `.clank` file format spec (topic-based routing, see §2)
 - Write parser (reuse facade grammar, no extensions)
 - Wire Bus subscriptions from parsed topic declarations
 - Add `%` and `>` handlers

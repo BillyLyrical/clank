@@ -6,20 +6,20 @@ lifecycle, and distribution model.
 
 ## 1. What a Wit Is
 
-A wit is a CPAN module in the `AI::Clam::Wits::*` namespace that extends the clam
+A wit is a CPAN module in the `Clank::Wits::*` namespace that extends the clank
 harness: tools the LLM can call, REPL slash commands, and event hooks on the
 blackboard bus.
 
-The `AI::Clam::Wit::*` namespace is harness infrastructure (API, Scanner, etc.).
-User wits live in `AI::Clam::Wits::*`.
+The `Clank::Wit::*` namespace is harness infrastructure (API, Scanner, etc.).
+User wits live in `Clank::Wits::*`.
 
 One system, one source of truth: **wits are CPAN modules.**
 
 | Concern | Mechanism | Custom code? |
 |---------|-----------|-------------|
-| Distribution | `cpanm AI::Clam::Wits::Foo` | No |
-| Discovery | `grep -r "# CLAM-WIT:" @INC/Clam/Wit/` | No |
-| Metadata | `# CLAM-WIT:` comment in module file | No |
+| Distribution | `cpanm Clank::Wits::Foo` | No |
+| Discovery | `grep -r "# CLANK-WIT:" @INC/Clank/Wit/` | No |
+| Metadata | `# CLANK-WIT:` comment in module file | No |
 | Dependencies | `META.json` + cpanm | No |
 | Runtime state | SQLite DB (loaded, enabled) | Yes (exists) |
 | Loading | `require` + `register($api)` | Yes (exists) |
@@ -27,38 +27,38 @@ One system, one source of truth: **wits are CPAN modules.**
 
 ## 2. Module Layout
 
-A wit is a standard CPAN module in the `AI::Clam::Wits::*` namespace with a
+A wit is a standard CPAN module in the `Clank::Wits::*` namespace with a
 `register($api)` method:
 
-    Clam/Wits/Foo.pm           # entry point: register($api)
-    Clam/Wits/Foo/Helper.pm    # optional sub-tree (AI::Clam::Wits::Foo::* only)
+    Clank/Wits/Foo.pm           # entry point: register($api)
+    Clank/Wits/Foo/Helper.pm    # optional sub-tree (Clank::Wits::Foo::* only)
 
-The `# CLAM-WIT:` comment at the top provides grep-able metadata.
+The `# CLANK-WIT:` comment at the top provides grep-able metadata.
 The `register($api)` method integrates the wit at runtime.
 
-Helpers live under the wit's own namespace (`AI::Clam::Wits::Foo::*`).
-No files outside `AI::Clam::Wits::Foo::` — namespace discipline.
+Helpers live under the wit's own namespace (`Clank::Wits::Foo::*`).
+No files outside `Clank::Wits::Foo::` — namespace discipline.
 
-The `AI::Clam::Wit::*` namespace is harness infrastructure (API, Dispatch, Scanner,
+The `Clank::Wit::*` namespace is harness infrastructure (API, Dispatch, Scanner,
 Session). User wits never go there.
 
-## 3. The `# CLAM-WIT:` Comment Format
+## 3. The `# CLANK-WIT:` Comment Format
 
-Every wit module has a `# CLAM-WIT:` comment block near the top. This is the
+Every wit module has a `# CLANK-WIT:` comment block near the top. This is the
 single source of truth for discovery metadata — grep finds it without loading
 the module.
 
 ### Format
 
 ```perl
-# CLAM-WIT: name=Foo
-# CLAM-WIT: version=1.0
-# CLAM-WIT: about=Blocks dangerous git commands before they run
-# CLAM-WIT: usage=Load in any repo you trust the model with
-# CLAM-WIT: hint=Git safety: vetoes rm, reset --hard, push -f, force
-# CLAM-WIT: author=you
-# CLAM-WIT: license=Artistic-2.0
-package AI::Clam::Wits::Foo;
+# CLANK-WIT: name=Foo
+# CLANK-WIT: version=1.0
+# CLANK-WIT: about=Blocks dangerous git commands before they run
+# CLANK-WIT: usage=Load in any repo you trust the model with
+# CLANK-WIT: hint=Git safety: vetoes rm, reset --hard, push -f, force
+# CLANK-WIT: author=you
+# CLANK-WIT: license=Artistic-2.0
+package Clank::Wits::Foo;
 use strict;
 use warnings;
 
@@ -72,7 +72,7 @@ sub register {
 
 ### Rules
 
-- `# CLAM-WIT:` prefix marks a metadata line
+- `# CLANK-WIT:` prefix marks a metadata line
 - `key=value` after the prefix (split on first `=` only — values can contain `=`)
 - One key per line; continuation lines use the same prefix
 - Unknown keys are ignored by old parsers (forward-compatible)
@@ -81,7 +81,7 @@ sub register {
 
 | Field | Required | Default | Purpose |
 |-------|----------|---------|---------|
-| `name` | no | package suffix (`AI::Clam::Wits::Foo` → `Foo`) | Module identity |
+| `name` | no | package suffix (`Clank::Wits::Foo` → `Foo`) | Module identity |
 | `version` | no | `0.0.1` | Semantic version |
 | `about` | yes | — | One-line human description |
 | `usage` | no | — | When to load, what it changes, what it costs |
@@ -107,25 +107,25 @@ sentences — just keywords the LLM can match against.
 
 ```bash
 # Find all installed user wits
-grep -r "# CLAM-WIT:" $(perl -e 'print join ":", @INC')/Clam/Wits/
+grep -r "# CLANK-WIT:" $(perl -e 'print join ":", @INC')/Clank/Wits/
 
 # List all wits with about text
-grep -h "# CLAM-WIT:.*about=" @INC/Clam/Wits/*.pm
+grep -h "# CLANK-WIT:.*about=" @INC/Clank/Wits/*.pm
 
 # Search for wits matching a keyword
-grep -l "# CLAM-WIT:.*hint=.*git" @INC/Clam/Wits/*.pm
+grep -l "# CLANK-WIT:.*hint=.*git" @INC/Clank/Wits/*.pm
 ```
 
 ### DB Cache
 
 After the first grep scan, metadata is cached in the SQLite DB. Subsequent
 lookups query the DB, not the filesystem. The DB is the runtime view; the
-`# CLAM-WIT:` comment is the source of truth.
+`# CLANK-WIT:` comment is the source of truth.
 
 ## 4. Registration: `register($api)`
 
 The comment is for discovery. The `register($api)` function is for runtime
-integration. After `require`, the PluginManager creates a `AI::Clam::Wit::API`
+integration. After `require`, the PluginManager creates a `Clank::Wit::API`
 object and calls `$wit->register($api)`.
 
 ### What the API provides
@@ -167,7 +167,7 @@ Command handlers receive:
     bus     => $app->bus,      # pub/sub bus
     store   => $app->store,    # SQLite store
     session => $app->session,  # current session
-    app     => $app,           # the AI::Clam::App object
+    app     => $app,           # the Clank::App object
 }
 ```
 
@@ -179,15 +179,15 @@ Bus handlers receive the event hash `{id, correlation_id, topic, sender, payload
 
 ### Production (installed via cpanm)
 
-1. **Scan**: `grep -r "# CLAM-WIT:" @INC/Clam/Wits/` finds all installed wits
+1. **Scan**: `grep -r "# CLANK-WIT:" @INC/Clank/Wits/` finds all installed wits
 2. **Cache**: Store metadata in SQLite DB (one-time scan)
 3. **Select**: Query DB to decide which wits to load (based on config/context)
-4. **Load**: `require AI::Clam::Wits::Foo` → Perl finds it in `@INC` (installed by cpanm)
+4. **Load**: `require Clank::Wits::Foo` → Perl finds it in `@INC` (installed by cpanm)
 5. **Register**: Call `$wit->register($api)`
 
 ### Development (in-tree wits)
 
-1. **Scan**: `grep -r "# CLAM-WIT:" wits/*/lib/AI/Clam/Wits/` finds dev wits
+1. **Scan**: `grep -r "# CLANK-WIT:" wits/*/lib/Clank/Wits/` finds dev wits
 2. **Select**: Same as production
 3. **Load**: Add each wit's `lib/` to `@INC`, then `require`
 4. **Register**: Same as production
@@ -212,7 +212,7 @@ LOADED → ACTIVE ⇄ DISABLED
 
 ### Revertible Effects
 
-Every registration a wit makes goes through `AI::Clam::Wit::API`, which tracks
+Every registration a wit makes goes through `Clank::Wit::API`, which tracks
 tools, commands, and bus subscriptions per wit. Disable runs every reverse:
 
 - `bus->unsubscribe($id)` for each hook
@@ -223,46 +223,46 @@ No leftover listeners, no ghost tools.
 ### What We Do NOT Promise
 
 True hot-unload of a compiled Perl package is fragile (END blocks, circular refs,
-global state in helpers). The honest Unix answer: **disable now, restart clamd to
+global state in helpers). The honest Unix answer: **disable now, restart clankd to
 fully unload.**
 
 ## 7. Distribution Model
 
 ### CPAN Distributions
 
-**Core dist: `Clam`** — the minimum viable harness.
+**Core dist: `Clank`** — the minimum viable harness.
 
 ```
-Clam/
-  lib/Clam.pm
-  lib/AI/Clam/App.pm
-  lib/AI/Clam/Loop.pm
-  lib/AI/Clam/Bus.pm
-  lib/AI/Clam/Store.pm
-  lib/AI/Clam/Provider/*.pm
-  lib/AI/Clam/Tool.pm
-  lib/AI/Clam/Tools/*.pm
-  lib/AI/Clam/Wit/API.pm
-  lib/AI/Clam/Wit/Session.pm
-  bin/clam
-  bin/clamd
+Clank/
+  lib/Clank.pm
+  lib/Clank/App.pm
+  lib/Clank/Loop.pm
+  lib/Clank/Bus.pm
+  lib/Clank/Store.pm
+  lib/Clank/Provider/*.pm
+  lib/Clank/Tool.pm
+  lib/Clank/Tools/*.pm
+  lib/Clank/Wit/API.pm
+  lib/Clank/Wit/Session.pm
+  bin/clank
+  bin/clankd
   META.json
 ```
 
-`cpanm Clam` installs the core. Session wit is included (it's part of the
+`cpanm Clank` installs the core. Session wit is included (it's part of the
 harness). All other wits are separate dists.
 
-**Wit dists: `Clam-Wits-Foo`** — one per wit (or one per related group).
+**Wit dists: `Clank-Wits-Foo`** — one per wit (or one per related group).
 
 ```
-Clam-Wits-Foo/
-  lib/AI/Clam/Wits/Foo.pm
-  lib/AI/Clam/Wits/Foo/Helper.pm
+Clank-Wits-Foo/
+  lib/Clank/Wits/Foo.pm
+  lib/Clank/Wits/Foo/Helper.pm
   META.json
   t/
 ```
 
-`cpanm Clam-Wits-Foo` installs the wit. `META.json` declares `requires => { Clam => '1.0' }`.
+`cpanm Clank-Wits-Foo` installs the wit. `META.json` declares `requires => { Clank => '1.0' }`.
 
 ### Install Tree
 
@@ -270,8 +270,8 @@ After installation, everything lands in one `@INC` tree:
 
 ```
 @INC/
-  Clam.pm
-  Clam/
+  Clank.pm
+  Clank/
     App.pm
     Loop.pm
     Bus.pm
@@ -283,23 +283,23 @@ After installation, everything lands in one `@INC` tree:
       API.pm
       Session.pm
     Wits/
-      Foo.pm          # cpanm Clam-Wits-Foo put this here
+      Foo.pm          # cpanm Clank-Wits-Foo put this here
       Foo/
         Helper.pm
-      Bar.pm          # cpanm Clam-Wits-Bar put this here
+      Bar.pm          # cpanm Clank-Wits-Bar put this here
 ```
 
-One tree. `grep -r "# CLAM-WIT:" @INC/Clam/Wit/` finds everything.
+One tree. `grep -r "# CLANK-WIT:" @INC/Clank/Wit/` finds everything.
 
 ### Dev Tree
 
 In the git repo, wits live in `wits/` as separate dist directories:
 
 ```
-clam/
-  lib/                  # core modules (shipped in Clam dist)
-    Clam.pm
-    Clam/
+clank/
+  lib/                  # core modules (shipped in Clank dist)
+    Clank.pm
+    Clank/
       App.pm
       Loop.pm
       Bus.pm
@@ -311,21 +311,21 @@ clam/
         API.pm
         Session.pm
       Wits/              # symlinks (created by link_wits.pl)
-        Foo -> ../../../wits/foo/lib/AI/Clam/Wits/Foo
-        Bar -> ../../../wits/bar/lib/AI/Clam/Wits/Bar
+        Foo -> ../../../wits/foo/lib/Clank/Wits/Foo
+        Bar -> ../../../wits/bar/lib/Clank/Wits/Bar
   wits/                 # wit modules (separate dists)
     Foo/
-      lib/AI/Clam/Wits/Foo.pm
+      lib/Clank/Wits/Foo.pm
       META.json
       t/
     Bar/
-      lib/AI/Clam/Wits/Bar.pm
+      lib/Clank/Wits/Bar.pm
       META.json
       t/
-  bin/clam
+  bin/clank
 ```
 
-The `Clam` dist's `META.json` lists only core modules. The `wits/` directory
+The `Clank` dist's `META.json` lists only core modules. The `wits/` directory
 is a staging area for development, not shipped in the core dist.
 
 #### Dev symlinks
@@ -344,7 +344,7 @@ IDEs, editors, and tests find all modules from a single `@INC` path.
 ### Packaging
 
 Each wit directory is a separate CPAN dist. The packaging tool reads
-`# CLAM-WIT:` markers and `META.json` to build separate tarballs.
+`# CLANK-WIT:` markers and `META.json` to build separate tarballs.
 
 ### Dependencies
 
@@ -353,11 +353,11 @@ Declared in `META.json` (standard CPAN). cpanm resolves them. No custom
 
 ```json
 {
-  "name": "Clam-Wits-Foo",
+  "name": "Clank-Wits-Foo",
   "version": "1.0",
-  "requires": { "perl": "5.040001", "AI::Clam": "1.0" },
+  "requires": { "perl": "5.040001", "Clank": "1.0" },
   "provides": {
-    "AI::Clam::Wits::Foo": { "file": "lib/AI/Clam/Wits/Foo.pm", "version": "1.0" }
+    "Clank::Wits::Foo": { "file": "lib/Clank/Wits/Foo.pm", "version": "1.0" }
   }
 }
 ```
@@ -377,7 +377,7 @@ The harness always runs.
 
 ### Curation
 
-Trust comes from provenance, not self-declaration. The `# CLAM-WIT:` comment
+Trust comes from provenance, not self-declaration. The `# CLANK-WIT:` comment
 is not a trust signal — it's metadata. Curation is external (maintainer review,
 curation catalog).
 
@@ -385,11 +385,11 @@ curation catalog).
 
 | Old Mechanism | Replaced By |
 |---------------|-------------|
-| `wit.toml` / `deck.toml` | `# CLAM-WIT:` comment + `META.json` |
+| `wit.toml` / `deck.toml` | `# CLANK-WIT:` comment + `META.json` |
 | `wits.lock` | CPAN versioning |
 | `wits.index.json` | SQLite DB cache |
-| `clam wits install/upgrade/uninstall` | `cpanm` |
-| Directory-based discovery | `grep -r "# CLAM-WIT:"` |
+| `clank wits install/upgrade/uninstall` | `cpanm` |
+| Directory-based discovery | `grep -r "# CLANK-WIT:"` |
 | Declarative `.wit` files | CPAN modules |
 
 ## 10. What Stays
@@ -398,4 +398,4 @@ curation catalog).
 - eval isolation — bad modules don't kill the harness
 - Bus, tools, commands — all the runtime behavior
 - SQLite store — runtime state (loaded, enabled, session history)
-- Namespace discipline — `AI::Clam::Wits::Foo` may only ship `AI::Clam::Wits::Foo::*`
+- Namespace discipline — `Clank::Wits::Foo` may only ship `Clank::Wits::Foo::*`

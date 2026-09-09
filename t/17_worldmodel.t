@@ -1,12 +1,12 @@
 use strict; use warnings;
 use Test::More;
 use lib 'lib';
-use AI::Clam::Store;
-use AI::Clam::WorldModel;
+use Clank::Store;
+use Clank::WorldModel;
 
-my $store = AI::Clam::Store->new(path => ':memory:');
-my $wm = AI::Clam::WorldModel->new(store => $store);
-isa_ok($wm, 'AI::Clam::WorldModel');
+my $store = Clank::Store->new(path => ':memory:');
+my $wm = Clank::WorldModel->new(store => $store);
+isa_ok($wm, 'Clank::WorldModel');
 
 # ---------------------------------------------------------------------------
 # Entities
@@ -20,7 +20,7 @@ is($ent->{type}, 'person', 'entity type');
 is_deeply($ent->{attributes}, { role => 'engineer' }, 'entity attributes');
 
 my $e2 = $wm->add_entity(type => 'person', name => 'Bob', attributes => { role => 'manager' });
-my $e3 = $wm->add_entity(type => 'project', name => 'Clam', attributes => { lang => 'Perl' });
+my $e3 = $wm->add_entity(type => 'project', name => 'Clank', attributes => { lang => 'Perl' });
 
 my $people = $wm->query_entities(type => 'person');
 is(scalar @$people, 2, 'query by type');
@@ -78,7 +78,7 @@ is(scalar @$after_facts, 0, 'retracted fact excluded');
 # ---------------------------------------------------------------------------
 
 my $c1 = $wm->add_cause(cause_entity => $e1, effect_entity => $e3,
-    mechanism => 'alice writes code for clam', confidence => 0.9);
+    mechanism => 'alice writes code for clank', confidence => 0.9);
 ok($c1, 'cause added');
 
 my $causes = $wm->trace_causes($e3);
@@ -93,7 +93,7 @@ is($effects->[0]{effect_entity}, $e3, 'effect entity correct');
 # Beliefs
 # ---------------------------------------------------------------------------
 
-my $b1 = $wm->believe(statement => 'Clam will be the best Perl AI harness',
+my $b1 = $wm->believe(statement => 'Clank will be the best Perl AI harness',
     confidence => 0.8, source => 'llm');
 ok($b1, 'belief created');
 
@@ -107,7 +107,7 @@ is($beliefs->[0]{id}, $b1, 'higher confidence belief returned');
 my $all_beliefs = $wm->query_beliefs();
 is(scalar @$all_beliefs, 2, 'all beliefs');
 
-$wm->supersede_belief($b1, statement => 'Clam may be competitive',
+$wm->supersede_belief($b1, statement => 'Clank may be competitive',
     confidence => 0.5, source => 'rule');
 my $after_beliefs = $wm->query_beliefs();
 is(scalar @$after_beliefs, 2, 'superseded belief excluded, new belief added');
@@ -119,10 +119,10 @@ is(scalar @$after_beliefs, 2, 'superseded belief excluded, new belief added');
 # Add a fact for Alice that won't be retracted
 $wm->assert_fact(entity_id => $e1, predicate => 'email', value => 'alice@example.com', source => 'user');
 
-my $ctx = $wm->to_context('Alice works on Clam');
+my $ctx = $wm->to_context('Alice works on Clank');
 like($ctx, qr/World model/, 'context has header');
 like($ctx, qr/Alice/, 'context mentions alice');
-like($ctx, qr/Clam/, 'context mentions clam');
+like($ctx, qr/Clank/, 'context mentions clank');
 
 # ---------------------------------------------------------------------------
 # FTS5 search
@@ -155,7 +155,7 @@ SKIP: {
 # Temporal range queries
 # ---------------------------------------------------------------------------
 
-use AI::Clam::Util qw(now_ms);
+use Clank::Util qw(now_ms);
 
 my $t0 = now_ms();
 

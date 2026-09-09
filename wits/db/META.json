@@ -1,40 +1,40 @@
 {
-  "name": "Clam-Wits-Db",
+  "name": "Clank-Wits-Db",
   "version": "1.0.0",
-  "author": "CLAM",
+  "author": "Clank",
   "license": "Artistic-2.0",
-  "abstract": "Database wits for Clam — connect, query, execute, schema, shell, history, export, import",
+  "abstract": "Database wits for Clank — connect, query, execute, schema, shell, history, export, import",
   "provides": {
-    "AI::Clam::Wits::Db::Connect": {
-      "file": "lib/AI/Clam/Wits/Db/Connect.pm",
+    "Clank::Wits::Db::Connect": {
+      "file": "lib/Clank/Wits/Db/Connect.pm",
       "version": "1.0.0"
     },
-    "AI::Clam::Wits::Db::Query": {
-      "file": "lib/AI/Clam/Wits/Db/Query.pm",
+    "Clank::Wits::Db::Query": {
+      "file": "lib/Clank/Wits/Db/Query.pm",
       "version": "1.0.0"
     },
-    "AI::Clam::Wits::Db::Execute": {
-      "file": "lib/AI/Clam/Wits/Db/Execute.pm",
+    "Clank::Wits::Db::Execute": {
+      "file": "lib/Clank/Wits/Db/Execute.pm",
       "version": "1.0.0"
     },
-    "AI::Clam::Wits::Db::Schema": {
-      "file": "lib/AI/Clam/Wits/Db/Schema.pm",
+    "Clank::Wits::Db::Schema": {
+      "file": "lib/Clank/Wits/Db/Schema.pm",
       "version": "1.0.0"
     },
-    "AI::Clam::Wits::Db::Shell": {
-      "file": "lib/AI/Clam/Wits/Db/Shell.pm",
+    "Clank::Wits::Db::Shell": {
+      "file": "lib/Clank/Wits/Db/Shell.pm",
       "version": "1.0.0"
     },
-    "AI::Clam::Wits::Db::History": {
-      "file": "lib/AI/Clam/Wits/Db/History.pm",
+    "Clank::Wits::Db::History": {
+      "file": "lib/Clank/Wits/Db/History.pm",
       "version": "1.0.0"
     },
-    "AI::Clam::Wits::Db::Export": {
-      "file": "lib/AI/Clam/Wits/Db/Export.pm",
+    "Clank::Wits::Db::Export": {
+      "file": "lib/Clank/Wits/Db/Export.pm",
       "version": "1.0.0"
     },
-    "AI::Clam::Wits::Db::Import": {
-      "file": "lib/AI/Clam/Wits/Db/Import.pm",
+    "Clank::Wits::Db::Import": {
+      "file": "lib/Clank/Wits/Db/Import.pm",
       "version": "1.0.0"
     }
   },
@@ -42,13 +42,13 @@
     "perl": "5.010"
   },
   "wits": [
-    { "trigger": "db_connect",       "module": "AI::Clam::Wits::Db::Connect" },
-    { "trigger": "db_query",         "module": "AI::Clam::Wits::Db::Query" },
-    { "trigger": "db_execute",       "module": "AI::Clam::Wits::Db::Execute" },
-    { "trigger": "db_schema",        "module": "AI::Clam::Wits::Db::Schema" },
-    { "trigger": "db_shell",         "module": "AI::Clam::Wits::Db::Shell" },
-    { "trigger": "dbshell_history",  "module": "AI::Clam::Wits::Db::History" },
-    { "trigger": "dbshell_export",   "module": "AI::Clam::Wits::Db::Export" },
-    { "trigger": "dbshell_import",   "module": "AI::Clam::Wits::Db::Import" }
+    { "trigger": "db_connect",       "module": "Clank::Wits::Db::Connect" },
+    { "trigger": "db_query",         "module": "Clank::Wits::Db::Query" },
+    { "trigger": "db_execute",       "module": "Clank::Wits::Db::Execute" },
+    { "trigger": "db_schema",        "module": "Clank::Wits::Db::Schema" },
+    { "trigger": "db_shell",         "module": "Clank::Wits::Db::Shell" },
+    { "trigger": "dbshell_history",  "module": "Clank::Wits::Db::History" },
+    { "trigger": "dbshell_export",   "module": "Clank::Wits::Db::Export" },
+    { "trigger": "dbshell_import",   "module": "Clank::Wits::Db::Import" }
   ]
 }

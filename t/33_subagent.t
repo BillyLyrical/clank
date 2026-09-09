@@ -5,21 +5,21 @@ use Test::More;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use AI::Clam::Store;
-use AI::Clam::Bus;
-use AI::Clam::Session;
-use AI::Clam::Loop;
-use AI::Clam::Provider::Mock;
-use AI::Clam qw(builtin_tools);
+use Clank::Store;
+use Clank::Bus;
+use Clank::Session;
+use Clank::Loop;
+use Clank::Provider::Mock;
+use Clank qw(builtin_tools);
 
 # Helper: create a loop with mock provider.
 sub make_loop {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $bus   = AI::Clam::Bus->new(store => $store, sender => 'test');
-    my $mock  = AI::Clam::Provider::Mock->new(model => 'mock');
-    my $sess  = AI::Clam::Session->new(store => $store, bus => $bus, provider => $mock);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $bus   = Clank::Bus->new(store => $store, sender => 'test');
+    my $mock  = Clank::Provider::Mock->new(model => 'mock');
+    my $sess  = Clank::Session->new(store => $store, bus => $bus, provider => $mock);
     $sess->add_tool($_) for builtin_tools();
-    my $loop  = AI::Clam::Loop->new(session => $sess);
+    my $loop  = Clank::Loop->new(session => $sess);
     return ($store, $bus, $mock, $sess, $loop);
 }
 
@@ -109,10 +109,10 @@ subtest 'Spawn publishes bus events' => sub {
 subtest 'Spawn tool via run' => sub {
     my ($store, $bus, $mock, $sess, $loop) = make_loop;
 
-    require AI::Clam::Tools::Spawn;
-    my $tool = AI::Clam::Tools::Spawn->new(loop => $loop);
-    isa_ok($tool, 'AI::Clam::Tools::Spawn');
-    isa_ok($tool, 'AI::Clam::Tool');
+    require Clank::Tools::Spawn;
+    my $tool = Clank::Tools::Spawn->new(loop => $loop);
+    isa_ok($tool, 'Clank::Tools::Spawn');
+    isa_ok($tool, 'Clank::Tool');
 
     my $result = $tool->run({ prompt => 'hello from tool' });
     is($result->{isError}, 0, 'tool succeeded');
@@ -129,7 +129,7 @@ subtest 'Child inherits parent tools' => sub {
     ok($result->{ok}, 'spawn succeeded');
 
     # Check child session has same tool count.
-    my $child = AI::Clam::Session->new(store => $store, bus => $bus, provider => $mock, id => $result->{session_id});
+    my $child = Clank::Session->new(store => $store, bus => $bus, provider => $mock, id => $result->{session_id});
     # Tools aren't persisted in DB, so we verify via the spawn event.
     ok(1, 'child session accessible');
 };

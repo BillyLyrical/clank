@@ -5,11 +5,11 @@ use Test::More;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use AI::Clam::Store;
-use AI::Clam::WorldModel;
+use Clank::Store;
+use Clank::WorldModel;
 
-my $store = AI::Clam::Store->new(db => ':memory:');
-my $wm    = AI::Clam::WorldModel->new(store => $store);
+my $store = Clank::Store->new(db => ':memory:');
+my $wm    = Clank::WorldModel->new(store => $store);
 
 # === Test 1: Basic counterfactual — query runs, state unchanged after ===
 
@@ -39,8 +39,8 @@ subtest 'Counterfactual query runs and rolls back' => sub {
 # === Test 2: Retract fact in counterfactual ===
 
 subtest 'Retract fact in counterfactual' => sub {
-    my $store2 = AI::Clam::Store->new(db => ':memory:');
-    my $wm2 = AI::Clam::WorldModel->new(store => $store2);
+    my $store2 = Clank::Store->new(db => ':memory:');
+    my $wm2 = Clank::WorldModel->new(store => $store2);
     $wm2->add_entity(id => 'e1', type => 'thing', name => 'E1');
     my $fid = $wm2->assert_fact(entity_id => 'e1', predicate => 'color', value => 'red');
 
@@ -87,8 +87,8 @@ subtest 'Add entity in counterfactual' => sub {
 # === Test 4: Remove entity in counterfactual ===
 
 subtest 'Remove entity in counterfactual' => sub {
-    my $store2 = AI::Clam::Store->new(db => ':memory:');
-    my $wm2 = AI::Clam::WorldModel->new(store => $store2);
+    my $store2 = Clank::Store->new(db => ':memory:');
+    my $wm2 = Clank::WorldModel->new(store => $store2);
     $wm2->add_entity(id => 'a', type => 'thing', name => 'A');
     $wm2->add_entity(id => 'b', type => 'thing', name => 'B');
 
@@ -112,8 +112,8 @@ subtest 'Remove entity in counterfactual' => sub {
 # === Test 5: Add relation in counterfactual ===
 
 subtest 'Add relation in counterfactual' => sub {
-    my $store2 = AI::Clam::Store->new(db => ':memory:');
-    my $wm2 = AI::Clam::WorldModel->new(store => $store2);
+    my $store2 = Clank::Store->new(db => ':memory:');
+    my $wm2 = Clank::WorldModel->new(store => $store2);
     $wm2->add_entity(id => 'x', type => 'thing', name => 'X');
     $wm2->add_entity(id => 'y', type => 'thing', name => 'Y');
 
@@ -137,8 +137,8 @@ subtest 'Add relation in counterfactual' => sub {
 # === Test 6: Add cause in counterfactual ===
 
 subtest 'Add cause in counterfactual' => sub {
-    my $store2 = AI::Clam::Store->new(db => ':memory:');
-    my $wm2 = AI::Clam::WorldModel->new(store => $store2);
+    my $store2 = Clank::Store->new(db => ':memory:');
+    my $wm2 = Clank::WorldModel->new(store => $store2);
     $wm2->add_entity(id => 'rain', type => 'weather', name => 'Rain');
     $wm2->add_entity(id => 'wet', type => 'state', name => 'Wet');
 
@@ -162,8 +162,8 @@ subtest 'Add cause in counterfactual' => sub {
 # === Test 7: Believe in counterfactual ===
 
 subtest 'Believe in counterfactual' => sub {
-    my $store2 = AI::Clam::Store->new(db => ':memory:');
-    my $wm2 = AI::Clam::WorldModel->new(store => $store2);
+    my $store2 = Clank::Store->new(db => ':memory:');
+    my $wm2 = Clank::WorldModel->new(store => $store2);
 
     my $result = $wm2->counterfactual(
         scenario => [
@@ -185,8 +185,8 @@ subtest 'Believe in counterfactual' => sub {
 # === Test 8: Supersede belief in counterfactual ===
 
 subtest 'Supersede belief in counterfactual' => sub {
-    my $store2 = AI::Clam::Store->new(db => ':memory:');
-    my $wm2 = AI::Clam::WorldModel->new(store => $store2);
+    my $store2 = Clank::Store->new(db => ':memory:');
+    my $wm2 = Clank::WorldModel->new(store => $store2);
     my $bid = $wm2->believe(statement => 'Old belief', confidence => 0.5);
 
     my $result = $wm2->counterfactual(
@@ -209,8 +209,8 @@ subtest 'Supersede belief in counterfactual' => sub {
 # === Test 9: Multiple operations in one scenario ===
 
 subtest 'Multiple operations in scenario' => sub {
-    my $store2 = AI::Clam::Store->new(db => ':memory:');
-    my $wm2 = AI::Clam::WorldModel->new(store => $store2);
+    my $store2 = Clank::Store->new(db => ':memory:');
+    my $wm2 = Clank::WorldModel->new(store => $store2);
     $wm2->add_entity(id => 'a', type => 'thing', name => 'A');
 
     my $result = $wm2->counterfactual(
@@ -235,8 +235,8 @@ subtest 'Multiple operations in scenario' => sub {
 # === Test 10: counterfactual_diff ===
 
 subtest 'counterfactual_diff' => sub {
-    my $store2 = AI::Clam::Store->new(db => ':memory:');
-    my $wm2 = AI::Clam::WorldModel->new(store => $store2);
+    my $store2 = Clank::Store->new(db => ':memory:');
+    my $wm2 = Clank::WorldModel->new(store => $store2);
     $wm2->add_entity(id => 'e1', type => 'thing', name => 'E1');
     $wm2->assert_fact(entity_id => 'e1', predicate => 'x', value => '1');
     $wm2->assert_fact(entity_id => 'e1', predicate => 'y', value => '2');
@@ -263,8 +263,8 @@ subtest 'counterfactual_diff' => sub {
 # === Test 11: counterfactual_diff with retraction ===
 
 subtest 'counterfactual_diff retraction' => sub {
-    my $store2 = AI::Clam::Store->new(db => ':memory:');
-    my $wm2 = AI::Clam::WorldModel->new(store => $store2);
+    my $store2 = Clank::Store->new(db => ':memory:');
+    my $wm2 = Clank::WorldModel->new(store => $store2);
     $wm2->add_entity(id => 'e1', type => 'thing', name => 'E1');
     my $fid = $wm2->assert_fact(entity_id => 'e1', predicate => 'x', value => '1');
     $wm2->assert_fact(entity_id => 'e1', predicate => 'y', value => '2');
@@ -283,8 +283,8 @@ subtest 'counterfactual_diff retraction' => sub {
 # === Test 12: counterfactual_causes ===
 
 subtest 'counterfactual_causes' => sub {
-    my $store2 = AI::Clam::Store->new(db => ':memory:');
-    my $wm2 = AI::Clam::WorldModel->new(store => $store2);
+    my $store2 = Clank::Store->new(db => ':memory:');
+    my $wm2 = Clank::WorldModel->new(store => $store2);
     $wm2->add_entity(id => 'fire', type => 'event', name => 'Fire');
     $wm2->add_entity(id => 'smoke', type => 'event', name => 'Smoke');
     $wm2->add_entity(id => 'heat', type => 'event', name => 'Heat');
@@ -308,8 +308,8 @@ subtest 'counterfactual_causes' => sub {
 # === Test 13: counterfactual_causes trace ===
 
 subtest 'counterfactual_causes trace' => sub {
-    my $store2 = AI::Clam::Store->new(db => ':memory:');
-    my $wm2 = AI::Clam::WorldModel->new(store => $store2);
+    my $store2 = Clank::Store->new(db => ':memory:');
+    my $wm2 = Clank::WorldModel->new(store => $store2);
     $wm2->add_entity(id => 'x', type => 'thing', name => 'X');
     $wm2->add_entity(id => 'y', type => 'thing', name => 'Y');
 
@@ -327,8 +327,8 @@ subtest 'counterfactual_causes trace' => sub {
 # === Test 14: Scenario failure rolls back cleanly ===
 
 subtest 'Failed scenario rolls back cleanly' => sub {
-    my $store2 = AI::Clam::Store->new(db => ':memory:');
-    my $wm2 = AI::Clam::WorldModel->new(store => $store2);
+    my $store2 = Clank::Store->new(db => ':memory:');
+    my $wm2 = Clank::WorldModel->new(store => $store2);
     $wm2->add_entity(id => 'e1', type => 'thing', name => 'E1');
 
     eval {
@@ -349,8 +349,8 @@ subtest 'Failed scenario rolls back cleanly' => sub {
 # === Test 15: Query failure rolls back cleanly ===
 
 subtest 'Failed query rolls back cleanly' => sub {
-    my $store2 = AI::Clam::Store->new(db => ':memory:');
-    my $wm2 = AI::Clam::WorldModel->new(store => $store2);
+    my $store2 = Clank::Store->new(db => ':memory:');
+    my $wm2 = Clank::WorldModel->new(store => $store2);
     $wm2->add_entity(id => 'e1', type => 'thing', name => 'E1');
 
     eval {
@@ -370,8 +370,8 @@ subtest 'Failed query rolls back cleanly' => sub {
 # === Test 16: Empty scenario is no-op ===
 
 subtest 'Empty scenario is no-op' => sub {
-    my $store2 = AI::Clam::Store->new(db => ':memory:');
-    my $wm2 = AI::Clam::WorldModel->new(store => $store2);
+    my $store2 = Clank::Store->new(db => ':memory:');
+    my $wm2 = Clank::WorldModel->new(store => $store2);
     $wm2->add_entity(id => 'e1', type => 'thing', name => 'E1');
     $wm2->assert_fact(entity_id => 'e1', predicate => 'x', value => '1');
 
@@ -390,8 +390,8 @@ subtest 'Empty scenario is no-op' => sub {
 # === Test 17: Nested counterfactuals (savepoint in savepoint) ===
 
 subtest 'Nested counterfactuals' => sub {
-    my $store2 = AI::Clam::Store->new(db => ':memory:');
-    my $wm2 = AI::Clam::WorldModel->new(store => $store2);
+    my $store2 = Clank::Store->new(db => ':memory:');
+    my $wm2 = Clank::WorldModel->new(store => $store2);
     $wm2->add_entity(id => 'e1', type => 'thing', name => 'E1');
 
     # Use different predicates to avoid duplicate fact collision.

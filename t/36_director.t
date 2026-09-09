@@ -5,23 +5,23 @@ use Test::More;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use AI::Clam::Store;
-use AI::Clam::Bus;
-use AI::Clam::Session;
-use AI::Clam::Loop;
-use AI::Clam::Provider::Mock;
-use AI::Clam::Director;
-use AI::Clam::WorldModel;
-use AI::Clam qw(builtin_tools);
+use Clank::Store;
+use Clank::Bus;
+use Clank::Session;
+use Clank::Loop;
+use Clank::Provider::Mock;
+use Clank::Director;
+use Clank::WorldModel;
+use Clank qw(builtin_tools);
 
 sub make_env {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $bus   = AI::Clam::Bus->new(store => $store, sender => 'test');
-    my $mock  = AI::Clam::Provider::Mock->new(model => 'mock');
-    my $sess  = AI::Clam::Session->new(store => $store, bus => $bus, provider => $mock);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $bus   = Clank::Bus->new(store => $store, sender => 'test');
+    my $mock  = Clank::Provider::Mock->new(model => 'mock');
+    my $sess  = Clank::Session->new(store => $store, bus => $bus, provider => $mock);
     $sess->add_tool($_) for builtin_tools();
-    my $loop  = AI::Clam::Loop->new(session => $sess);
-    my $wm    = AI::Clam::WorldModel->new(store => $store);
+    my $loop  = Clank::Loop->new(session => $sess);
+    my $wm    = Clank::WorldModel->new(store => $store);
     return ($store, $bus, $mock, $sess, $loop, $wm);
 }
 
@@ -29,8 +29,8 @@ sub make_env {
 
 subtest 'Construction' => sub {
     my ($store, $bus, $mock, $sess, $loop, $wm) = make_env;
-    my $dir = AI::Clam::Director->new(loop => $loop, world_model => $wm);
-    isa_ok($dir, 'AI::Clam::Director');
+    my $dir = Clank::Director->new(loop => $loop, world_model => $wm);
+    isa_ok($dir, 'Clank::Director');
     ok($dir->{planner}, 'goal planner created');
 };
 
@@ -38,7 +38,7 @@ subtest 'Construction' => sub {
 
 subtest 'Execute single goal' => sub {
     my ($store, $bus, $mock, $sess, $loop, $wm) = make_env;
-    my $dir = AI::Clam::Director->new(loop => $loop, world_model => $wm);
+    my $dir = Clank::Director->new(loop => $loop, world_model => $wm);
 
     my $result = $dir->execute(goal => 'Say hello');
     ok($result->{ok}, 'goal executed');
@@ -51,7 +51,7 @@ subtest 'Execute single goal' => sub {
 
 subtest 'Execute with subgoals' => sub {
     my ($store, $bus, $mock, $sess, $loop, $wm) = make_env;
-    my $dir = AI::Clam::Director->new(loop => $loop, world_model => $wm);
+    my $dir = Clank::Director->new(loop => $loop, world_model => $wm);
 
     my $result = $dir->execute(
         goal => 'Multi-step task',
@@ -68,7 +68,7 @@ subtest 'Execute with subgoals' => sub {
 
 subtest 'Goal created in planner' => sub {
     my ($store, $bus, $mock, $sess, $loop, $wm) = make_env;
-    my $dir = AI::Clam::Director->new(loop => $loop, world_model => $wm);
+    my $dir = Clank::Director->new(loop => $loop, world_model => $wm);
 
     my $result = $dir->execute(goal => 'Test goal');
     ok($result->{goal_id}, 'goal ID returned');
@@ -82,7 +82,7 @@ subtest 'Goal created in planner' => sub {
 
 subtest 'Director publishes events' => sub {
     my ($store, $bus, $mock, $sess, $loop, $wm) = make_env;
-    my $dir = AI::Clam::Director->new(loop => $loop, world_model => $wm);
+    my $dir = Clank::Director->new(loop => $loop, world_model => $wm);
 
     my @events;
     $bus->subscribe('director.done', sub { push @events, $_[0]{payload} }, name => 'watcher');
@@ -98,7 +98,7 @@ subtest 'Director publishes events' => sub {
 
 subtest 'Works without world model' => sub {
     my ($store, $bus, $mock, $sess, $loop, $wm) = make_env;
-    my $dir = AI::Clam::Director->new(loop => $loop);
+    my $dir = Clank::Director->new(loop => $loop);
 
     my $result = $dir->execute(goal => 'No planner');
     ok($result->{ok}, 'executes without planner');
@@ -109,10 +109,10 @@ subtest 'Works without world model' => sub {
 
 subtest 'Metrics tracking' => sub {
     my ($store, $bus, $mock, $sess, $loop, $wm) = make_env;
-    require AI::Clam::Metrics;
-    my $metrics = AI::Clam::Metrics->new(store => $store);
+    require Clank::Metrics;
+    my $metrics = Clank::Metrics->new(store => $store);
 
-    my $dir = AI::Clam::Director->new(loop => $loop, world_model => $wm, metrics => $metrics);
+    my $dir = Clank::Director->new(loop => $loop, world_model => $wm, metrics => $metrics);
     $dir->execute(goal => 'Metrics test');
 
     ok($metrics->get('director.goals') >= 1, 'goals counted');

@@ -1,11 +1,11 @@
 use strict; use warnings;
 use Test::More;
 use lib 'lib';
-use AI::Clam::Store;
-use AI::Clam::Session::Messages;
+use Clank::Store;
+use Clank::Session::Messages;
 
-my $store = AI::Clam::Store->new(path => ':memory:');
-isa_ok($store, 'AI::Clam::Store');
+my $store = Clank::Store->new(path => ':memory:');
+isa_ok($store, 'Clank::Store');
 
 # sessions
 my $sid = $store->create_session(title => 'test', cwd => '/tmp');
@@ -17,29 +17,29 @@ $srow = $store->get_session($sid);
 is($srow->{title}, 'renamed', 'title updated');
 
 # message tree: linear chain then a branch
-my $m1 = AI::Clam::Session::Messages::add($store, $sid, role => 'user', content => 'hello');
-my $m2 = AI::Clam::Session::Messages::add($store, $sid, role => 'assistant', content => { text => 'hi' });
-is(AI::Clam::Session::Messages::head($store, $sid), $m2, 'head is newest');
+my $m1 = Clank::Session::Messages::add($store, $sid, role => 'user', content => 'hello');
+my $m2 = Clank::Session::Messages::add($store, $sid, role => 'assistant', content => { text => 'hi' });
+is(Clank::Session::Messages::head($store, $sid), $m2, 'head is newest');
 
 # branch from m1 (parent_id explicit)
-my $b1 = AI::Clam::Session::Messages::add($store, $sid, role => 'user', content => 'branch?', parent_id => $m1);
-my @chain = @{ AI::Clam::Session::Messages::chain($store, $sid, $b1) };
+my $b1 = Clank::Session::Messages::add($store, $sid, role => 'user', content => 'branch?', parent_id => $m1);
+my @chain = @{ Clank::Session::Messages::chain($store, $sid, $b1) };
 is(scalar(@chain), 2, 'branched chain has 2 messages');
 is($chain[0]{id}, $m1, 'branch root is m1');
 
 # main head still at m2
-my @main = @{ AI::Clam::Session::Messages::chain($store, $sid) };
+my @main = @{ Clank::Session::Messages::chain($store, $sid) };
 is(scalar(@main), 2, 'main chain has 2 messages');
 is($main[1]{id}, $m2, 'main head is m2');
 
 # provider mapping
-my $pm = AI::Clam::Session::Messages::to_provider($main[1]);
+my $pm = Clank::Session::Messages::to_provider($main[1]);
 is($pm->{role}, 'assistant', 'assistant role mapped');
 is($pm->{content}, 'hi', 'assistant text mapped');
 
-my $tr = AI::Clam::Session::Messages::add($store, $sid, role => 'toolResult',
+my $tr = Clank::Session::Messages::add($store, $sid, role => 'toolResult',
     content => { tool_call_id => 'tc1', output => 'ok', isError => 0 });
-my $pmt = AI::Clam::Session::Messages::to_provider({ %{$main[1]}, id => $tr, role => 'toolResult',
+my $pmt = Clank::Session::Messages::to_provider({ %{$main[1]}, id => $tr, role => 'toolResult',
     content => { tool_call_id => 'tc1', output => 'ok' } });
 is($pmt->{role}, 'tool', 'toolResult maps to tool');
 is($pmt->{tool_call_id}, 'tc1', 'tool_call_id preserved');

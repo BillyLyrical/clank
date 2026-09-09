@@ -1,13 +1,13 @@
 {
-  "name": "Clam-Wits-Embedding",
+  "name": "Clank-Wits-Embedding",
   "version": "1.0.0",
-  "author": "CLAM",
+  "author": "Clank",
   "license": "Artistic-2.0",
   "requires": {
     "perl": "5.040001",
-    "AI::Clam": "1.0"
+    "Clank": "1.0"
   },
   "provides": {
-    "AI::Clam::Wits::Embedding::Embedding": { "file": "lib/AI/Clam/Wits/Embedding/Embedding.pm", "version": "1.0.0" }
+    "Clank::Wits::Embedding::Embedding": { "file": "lib/Clank/Wits/Embedding/Embedding.pm", "version": "1.0.0" }
   }
 }

@@ -1,6 +1,6 @@
 name="hello"
 version="0.1.0"
-author="CLAM"
+author="Clank"
 license="Artistic-2.0"
 about="Example wit: a greet tool, a /hello command, and an input hook — the template for your own wits"
-usage="Load with -w or `clam wits install`; in the REPL run /hello [text] and ask the model to 'greet alice' to see the tool called. The commented-out input hook shows how to transform prompts before the LLM sees them."
+usage="Load with -w or `clank wits install`; in the REPL run /hello [text] and ask the model to 'greet alice' to see the tool called. The commented-out input hook shows how to transform prompts before the LLM sees them."

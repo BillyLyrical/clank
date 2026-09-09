@@ -1,28 +1,28 @@
 #!/usr/bin/env perl
-# t/16_scanner.t — test # CLAM-WIT: marker parsing and wit registry DB
+# t/16_scanner.t — test # CLANK-WIT: marker parsing and wit registry DB
 use strict;
 use warnings;
 use Test::More;
 use FindBin;
 
 use lib "$FindBin::RealBin/../lib";
-use AI::Clam::Store;
-use AI::Clam::Wit::Scanner;
+use Clank::Store;
+use Clank::Wit::Scanner;
 
 # --- parse_marker tests ----------------------------------------------------
 
-# Create a temp .pm file with CLAM-WIT markers
+# Create a temp .pm file with CLANK-WIT markers
 use File::Temp qw(tempfile);
 my ($fh, $tmpfile) = tempfile(SUFFIX => '.pm', UNLINK => 1);
 print $fh <<'EOF';
-# CLAM-WIT: name=TestWit
-# CLAM-WIT: version=0.5.0
-# CLAM-WIT: about=A test wit for scanner tests
-# CLAM-WIT: usage=Load during tests only
-# CLAM-WIT: hint=testing scanner parsing
-# CLAM-WIT: author=tester
-# CLAM-WIT: license=MIT
-package AI::Clam::Wits::TestWit;
+# CLANK-WIT: name=TestWit
+# CLANK-WIT: version=0.5.0
+# CLANK-WIT: about=A test wit for scanner tests
+# CLANK-WIT: usage=Load during tests only
+# CLANK-WIT: hint=testing scanner parsing
+# CLANK-WIT: author=tester
+# CLANK-WIT: license=MIT
+package Clank::Wits::TestWit;
 use strict;
 use warnings;
 sub register { }
@@ -30,7 +30,7 @@ sub register { }
 EOF
 close $fh;
 
-my $meta = AI::Clam::Wit::Scanner->parse_marker($tmpfile);
+my $meta = Clank::Wit::Scanner->parse_marker($tmpfile);
 ok($meta, 'parse_marker returns metadata');
 is($meta->{name}, 'TestWit', 'name parsed');
 is($meta->{version}, '0.5.0', 'version parsed');
@@ -41,7 +41,7 @@ is($meta->{author}, 'tester', 'author parsed');
 is($meta->{license}, 'MIT', 'license parsed');
 is($meta->{_path}, $tmpfile, '_path set');
 
-# File without CLAM-WIT marker
+# File without CLANK-WIT marker
 my ($fh2, $tmpfile2) = tempfile(SUFFIX => '.pm', UNLINK => 1);
 print $fh2 <<'EOF';
 # Just a regular module
@@ -51,30 +51,30 @@ use strict;
 EOF
 close $fh2;
 
-my $no_meta = AI::Clam::Wit::Scanner->parse_marker($tmpfile2);
+my $no_meta = Clank::Wit::Scanner->parse_marker($tmpfile2);
 ok(!$no_meta, 'parse_marker returns undef for files without marker');
 
 # --- scan tests -----------------------------------------------------------
 
-# Create a mock @INC dir with Clam/Wit/*.pm
+# Create a mock @INC dir with Clank/Wit/*.pm
 use File::Temp qw(tempdir);
 my $tmpdir = tempdir(CLEANUP => 1);
-my $wit_dir = "$tmpdir/Clam/Wits";
+my $wit_dir = "$tmpdir/Clank/Wits";
 File::Path::make_path($wit_dir);
 
 # Copy our test file there
 use File::Copy;
 copy($tmpfile, "$wit_dir/TestWit.pm") or die "copy: $!";
 
-my $wits = AI::Clam::Wit::Scanner->scan(dirs => [$tmpdir]);
+my $wits = Clank::Wit::Scanner->scan(dirs => [$tmpdir]);
 is(scalar @$wits, 1, 'scan finds one wit');
 is($wits->[0]{name}, 'TestWit', 'scan finds correct wit name');
 is($wits->[0]{about}, 'A test wit for scanner tests', 'scan preserves about');
 
 # --- DB registration tests ------------------------------------------------
 
-my $store = AI::Clam::Store->new(path => ':memory:');
-my ($ins, $upd) = AI::Clam::Wit::Scanner->register_in_db($store, $wits);
+my $store = Clank::Store->new(path => ':memory:');
+my ($ins, $upd) = Clank::Wit::Scanner->register_in_db($store, $wits);
 is($ins, 1, 'register_in_db inserts one wit');
 is($upd, 0, 'register_in_db: no updates on first insert');
 
@@ -86,7 +86,7 @@ is($stored->{state}, 'available', 'initial state is available');
 
 # Update the same wit
 $wits->[0]{about} = 'Updated description';
-($ins, $upd) = AI::Clam::Wit::Scanner->register_in_db($store, $wits);
+($ins, $upd) = Clank::Wit::Scanner->register_in_db($store, $wits);
 is($ins, 0, 'register_in_db: no inserts on update');
 is($upd, 1, 'register_in_db: one update');
 

@@ -5,20 +5,20 @@ use Test::More;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use AI::Clam::Store;
-use AI::Clam::Bus;
-use AI::Clam::Session;
-use AI::Clam::Tool;
-use AI::Clam qw(builtin_tools);
+use Clank::Store;
+use Clank::Bus;
+use Clank::Session;
+use Clank::Tool;
+use Clank qw(builtin_tools);
 
 # Helper: create mock tools.
-sub mock_tool { AI::Clam::Tool->new(name => $_[0], description => $_[0], parameters => { type => 'object', properties => {} }) }
+sub mock_tool { Clank::Tool->new(name => $_[0], description => $_[0], parameters => { type => 'object', properties => {} }) }
 
 # === Test 1: All tools available by default ===
 
 subtest 'All tools by default' => sub {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $sess  = AI::Clam::Session->new(store => $store);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $sess  = Clank::Session->new(store => $store);
     $sess->add_tool(mock_tool('read'));
     $sess->add_tool(mock_tool('write'));
     $sess->add_tool(mock_tool('bash'));
@@ -30,8 +30,8 @@ subtest 'All tools by default' => sub {
 # === Test 2: Filter restricts tools ===
 
 subtest 'Filter restricts tools' => sub {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $sess  = AI::Clam::Session->new(store => $store);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $sess  = Clank::Session->new(store => $store);
     $sess->add_tool(mock_tool('read'));
     $sess->add_tool(mock_tool('write'));
     $sess->add_tool(mock_tool('bash'));
@@ -49,8 +49,8 @@ subtest 'Filter restricts tools' => sub {
 # === Test 3: tool_names respects filter ===
 
 subtest 'tool_names respects filter' => sub {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $sess  = AI::Clam::Session->new(store => $store);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $sess  = Clank::Session->new(store => $store);
     $sess->add_tool(mock_tool('read'));
     $sess->add_tool(mock_tool('write'));
     $sess->add_tool(mock_tool('bash'));
@@ -65,8 +65,8 @@ subtest 'tool_names respects filter' => sub {
 # === Test 4: Clear filter ===
 
 subtest 'Clear filter restores all tools' => sub {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $sess  = AI::Clam::Session->new(store => $store);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $sess  = Clank::Session->new(store => $store);
     $sess->add_tool(mock_tool('read'));
     $sess->add_tool(mock_tool('write'));
     $sess->add_tool(mock_tool('bash'));
@@ -81,8 +81,8 @@ subtest 'Clear filter restores all tools' => sub {
 # === Test 5: Empty filter returns nothing ===
 
 subtest 'Empty filter returns nothing' => sub {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $sess  = AI::Clam::Session->new(store => $store);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $sess  = Clank::Session->new(store => $store);
     $sess->add_tool(mock_tool('read'));
     $sess->add_tool(mock_tool('write'));
 
@@ -93,8 +93,8 @@ subtest 'Empty filter returns nothing' => sub {
 # === Test 6: Filter with nonexistent tool names ===
 
 subtest 'Filter with nonexistent names' => sub {
-    my $store = AI::Clam::Store->new(db => ':memory:');
-    my $sess  = AI::Clam::Session->new(store => $store);
+    my $store = Clank::Store->new(db => ':memory:');
+    my $sess  = Clank::Session->new(store => $store);
     $sess->add_tool(mock_tool('read'));
 
     $sess->set_tool_filter(['read', 'nonexistent', 'also_missing']);

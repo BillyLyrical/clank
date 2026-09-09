@@ -5,23 +5,23 @@ use Test::More;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use AI::Clam::Store;
-use AI::Clam::Metrics;
+use Clank::Store;
+use Clank::Metrics;
 
-my $store = AI::Clam::Store->new(db => ':memory:');
+my $store = Clank::Store->new(db => ':memory:');
 
 # === Test 1: Construction ===
 
 subtest 'Construction' => sub {
-    my $m = AI::Clam::Metrics->new(store => $store);
-    isa_ok($m, 'AI::Clam::Metrics');
+    my $m = Clank::Metrics->new(store => $store);
+    isa_ok($m, 'Clank::Metrics');
     is($m->get('anything'), 0, 'unknown counter returns 0');
 };
 
 # === Test 2: Inc/dec/get ===
 
 subtest 'Increment and decrement' => sub {
-    my $m = AI::Clam::Metrics->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $m = Clank::Metrics->new(store => Clank::Store->new(db => ':memory:'));
 
     $m->inc('counter');
     is($m->get('counter'), 1, 'inc default 1');
@@ -39,7 +39,7 @@ subtest 'Increment and decrement' => sub {
 # === Test 3: Set ===
 
 subtest 'Set absolute value' => sub {
-    my $m = AI::Clam::Metrics->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $m = Clank::Metrics->new(store => Clank::Store->new(db => ':memory:'));
 
     $m->set('gauge', 100);
     is($m->get('gauge'), 100, 'set to 100');
@@ -51,7 +51,7 @@ subtest 'Set absolute value' => sub {
 # === Test 4: Snapshot ===
 
 subtest 'Snapshot returns all counters' => sub {
-    my $m = AI::Clam::Metrics->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $m = Clank::Metrics->new(store => Clank::Store->new(db => ':memory:'));
 
     $m->inc('a');
     $m->inc('b', 3);
@@ -63,20 +63,20 @@ subtest 'Snapshot returns all counters' => sub {
 # === Test 5: Flush and sync ===
 
 subtest 'Flush persists to SQLite, sync loads' => sub {
-    my $store2 = AI::Clam::Store->new(db => ':memory:');
-    my $m1 = AI::Clam::Metrics->new(store => $store2);
+    my $store2 = Clank::Store->new(db => ':memory:');
+    my $m1 = Clank::Metrics->new(store => $store2);
 
     $m1->inc('x', 42);
     $m1->flush;
 
-    my $m2 = AI::Clam::Metrics->new(store => $store2);
+    my $m2 = Clank::Metrics->new(store => $store2);
     is($m2->get('x'), 42, 'new instance loads from SQLite via constructor');
 };
 
 # === Test 6: Reset ===
 
 subtest 'Reset counter' => sub {
-    my $m = AI::Clam::Metrics->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $m = Clank::Metrics->new(store => Clank::Store->new(db => ':memory:'));
 
     $m->inc('a', 10);
     $m->inc('b', 20);
@@ -92,7 +92,7 @@ subtest 'Reset counter' => sub {
 # === Test 7: LLM convenience ===
 
 subtest 'llm_call increments counters' => sub {
-    my $m = AI::Clam::Metrics->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $m = Clank::Metrics->new(store => Clank::Store->new(db => ':memory:'));
 
     $m->llm_call(model => 'gpt-4o', input_tokens => 100, output_tokens => 50, cost => 0.005);
     $m->llm_call(model => 'gpt-4o', input_tokens => 200, output_tokens => 80, cost => 0.01);
@@ -108,7 +108,7 @@ subtest 'llm_call increments counters' => sub {
 # === Test 8: Rule/crystallize convenience ===
 
 subtest 'rule_fired and crystallize' => sub {
-    my $m = AI::Clam::Metrics->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $m = Clank::Metrics->new(store => Clank::Store->new(db => ':memory:'));
 
     $m->rule_fired('ancestor');
     $m->rule_fired('ancestor');
@@ -124,14 +124,14 @@ subtest 'rule_fired and crystallize' => sub {
 # === Test 9: Auto-flush on interval ===
 
 subtest 'Auto-flush when interval exceeded' => sub {
-    my $store3 = AI::Clam::Store->new(db => ':memory:');
-    my $m = AI::Clam::Metrics->new(store => $store3, flush_ms => 1);
+    my $store3 = Clank::Store->new(db => ':memory:');
+    my $m = Clank::Metrics->new(store => $store3, flush_ms => 1);
 
     $m->inc('test', 99);
     select(undef, undef, undef, 0.01);   # sleep 10ms > 1ms
     $m->inc('test');   # triggers auto-flush
 
-    my $m2 = AI::Clam::Metrics->new(store => $store3);
+    my $m2 = Clank::Metrics->new(store => $store3);
     $m2->sync;
     ok($m2->get('test') >= 99, 'auto-flushed to SQLite');
 };
@@ -139,7 +139,7 @@ subtest 'Auto-flush when interval exceeded' => sub {
 # === Test 10: Bus events (optional) ===
 
 subtest 'Works without bus' => sub {
-    my $m = AI::Clam::Metrics->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $m = Clank::Metrics->new(store => Clank::Store->new(db => ':memory:'));
     $m->inc('no_bus');
     is($m->get('no_bus'), 1, 'works without bus');
 };

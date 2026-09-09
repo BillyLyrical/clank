@@ -1,24 +1,24 @@
 {
-  "name": "Clam-Wits-Fs",
+  "name": "Clank-Wits-Fs",
   "version": "1.0.0",
-  "author": "CLAM",
+  "author": "Clank",
   "license": "Artistic-2.0",
   "requires": {
     "perl": "5.040001",
-    "AI::Clam": "1.0"
+    "Clank": "1.0"
   },
   "provides": {
-    "AI::Clam::Wits::Fs::Read":     { "file": "lib/AI/Clam/Wits/Fs/Read.pm",     "version": "1.0.0" },
-    "AI::Clam::Wits::Fs::Write":    { "file": "lib/AI/Clam/Wits/Fs/Write.pm",    "version": "1.0.0" },
-    "AI::Clam::Wits::Fs::Edit":     { "file": "lib/AI/Clam/Wits/Fs/Edit.pm",     "version": "1.0.0" },
-    "AI::Clam::Wits::Fs::Delete":   { "file": "lib/AI/Clam/Wits/Fs/Delete.pm",   "version": "1.0.0" },
-    "AI::Clam::Wits::Fs::Copy":     { "file": "lib/AI/Clam/Wits/Fs/Copy.pm",     "version": "1.0.0" },
-    "AI::Clam::Wits::Fs::Move":     { "file": "lib/AI/Clam/Wits/Fs/Move.pm",     "version": "1.0.0" },
-    "AI::Clam::Wits::Fs::Mkdir":    { "file": "lib/AI/Clam/Wits/Fs/Mkdir.pm",    "version": "1.0.0" },
-    "AI::Clam::Wits::Fs::Search":   { "file": "lib/AI/Clam/Wits/Fs/Search.pm",   "version": "1.0.0" },
-    "AI::Clam::Wits::Fs::Test":     { "file": "lib/AI/Clam/Wits/Fs/Test.pm",     "version": "1.0.0" },
-    "AI::Clam::Wits::Fs::Pipe":     { "file": "lib/AI/Clam/Wits/Fs/Pipe.pm",     "version": "1.0.0" },
-    "AI::Clam::Wits::Fs::Capture":  { "file": "lib/AI/Clam/Wits/Fs/Capture.pm",  "version": "1.0.0" },
-    "AI::Clam::Wits::Fs::Editor":   { "file": "lib/AI/Clam/Wits/Fs/Editor.pm",   "version": "1.0.0" }
+    "Clank::Wits::Fs::Read":     { "file": "lib/Clank/Wits/Fs/Read.pm",     "version": "1.0.0" },
+    "Clank::Wits::Fs::Write":    { "file": "lib/Clank/Wits/Fs/Write.pm",    "version": "1.0.0" },
+    "Clank::Wits::Fs::Edit":     { "file": "lib/Clank/Wits/Fs/Edit.pm",     "version": "1.0.0" },
+    "Clank::Wits::Fs::Delete":   { "file": "lib/Clank/Wits/Fs/Delete.pm",   "version": "1.0.0" },
+    "Clank::Wits::Fs::Copy":     { "file": "lib/Clank/Wits/Fs/Copy.pm",     "version": "1.0.0" },
+    "Clank::Wits::Fs::Move":     { "file": "lib/Clank/Wits/Fs/Move.pm",     "version": "1.0.0" },
+    "Clank::Wits::Fs::Mkdir":    { "file": "lib/Clank/Wits/Fs/Mkdir.pm",    "version": "1.0.0" },
+    "Clank::Wits::Fs::Search":   { "file": "lib/Clank/Wits/Fs/Search.pm",   "version": "1.0.0" },
+    "Clank::Wits::Fs::Test":     { "file": "lib/Clank/Wits/Fs/Test.pm",     "version": "1.0.0" },
+    "Clank::Wits::Fs::Pipe":     { "file": "lib/Clank/Wits/Fs/Pipe.pm",     "version": "1.0.0" },
+    "Clank::Wits::Fs::Capture":  { "file": "lib/Clank/Wits/Fs/Capture.pm",  "version": "1.0.0" },
+    "Clank::Wits::Fs::Editor":   { "file": "lib/Clank/Wits/Fs/Editor.pm",   "version": "1.0.0" }
   }
 }

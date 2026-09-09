@@ -5,15 +5,15 @@ use Test::More;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use AI::Clam::Store;
-use AI::Clam::Rules;
+use Clank::Store;
+use Clank::Rules;
 
-my $store = AI::Clam::Store->new(db => ':memory:');
+my $store = Clank::Store->new(db => ':memory:');
 
 # === Test 1: Backward Chaining ===
 
 subtest 'Backward Chaining - prove existing fact' => sub {
-    my $engine = AI::Clam::Rules->engine(store => $store, strategy => 'first');
+    my $engine = Clank::Rules->engine(store => $store, strategy => 'first');
     
     $engine->assert_fact('person', { name => 'Alice', age => 30 });
     
@@ -25,12 +25,12 @@ subtest 'Backward Chaining - prove existing fact' => sub {
 };
 
 subtest 'Backward Chaining - prove via rule' => sub {
-    my $store2 = AI::Clam::Store->new(db => ':memory:');
-    my $engine = AI::Clam::Rules->engine(store => $store2, strategy => 'first');
+    my $store2 = Clank::Store->new(db => ':memory:');
+    my $engine = Clank::Rules->engine(store => $store2, strategy => 'first');
     
     $engine->assert_fact('parent', { parent => 'Bob', child => 'Alice' });
     
-    $engine->add(AI::Clam::Rules::Rule->new(
+    $engine->add(Clank::Rules::Rule->new(
         name       => 'parent_to_relative',
         type       => 'production',
         priority   => 10,
@@ -60,8 +60,8 @@ subtest 'Backward Chaining - prove via rule' => sub {
 # === Test 2: Negation as Failure ===
 
 subtest 'Negation as Failure - not_exists' => sub {
-    my $store3 = AI::Clam::Store->new(db => ':memory:');
-    my $engine = AI::Clam::Rules->engine(store => $store3, strategy => 'first');
+    my $store3 = Clank::Store->new(db => ':memory:');
+    my $engine = Clank::Rules->engine(store => $store3, strategy => 'first');
     
     $engine->assert_fact('status', { name => 'active' });
     
@@ -70,12 +70,12 @@ subtest 'Negation as Failure - not_exists' => sub {
 };
 
 subtest 'Negation as Failure - in production rule' => sub {
-    my $store4 = AI::Clam::Store->new(db => ':memory:');
-    my $engine = AI::Clam::Rules->engine(store => $store4, strategy => 'first');
+    my $store4 = Clank::Store->new(db => ':memory:');
+    my $engine = Clank::Rules->engine(store => $store4, strategy => 'first');
     
     $engine->assert_fact('user', { name => 'Bob' });
     
-    $engine->add(AI::Clam::Rules::Rule->new(
+    $engine->add(Clank::Rules::Rule->new(
         name       => 'check_banned',
         type       => 'production',
         priority   => 5,
@@ -102,12 +102,12 @@ subtest 'Negation as Failure - in production rule' => sub {
 # === Test 3: Conflict Resolution ===
 
 subtest 'Conflict Resolution - priority wins' => sub {
-    my $store5 = AI::Clam::Store->new(db => ':memory:');
-    my $engine = AI::Clam::Rules->engine(store => $store5, strategy => 'first');
+    my $store5 = Clank::Store->new(db => ':memory:');
+    my $engine = Clank::Rules->engine(store => $store5, strategy => 'first');
     
     $engine->assert_fact('event', { event_type => 'alert' });
     
-    $engine->add(AI::Clam::Rules::Rule->new(
+    $engine->add(Clank::Rules::Rule->new(
         name       => 'low_priority',
         type       => 'production',
         priority   => 1,
@@ -115,7 +115,7 @@ subtest 'Conflict Resolution - priority wins' => sub {
         action     => sub { return { type => 'response', attributes => { level => 'low' } }; },
     ));
     
-    $engine->add(AI::Clam::Rules::Rule->new(
+    $engine->add(Clank::Rules::Rule->new(
         name       => 'high_priority',
         type       => 'production',
         priority   => 100,
@@ -131,13 +131,13 @@ subtest 'Conflict Resolution - priority wins' => sub {
 };
 
 subtest 'Conflict Resolution - random strategy' => sub {
-    my $store6 = AI::Clam::Store->new(db => ':memory:');
-    my $engine = AI::Clam::Rules->engine(store => $store6, strategy => 'random');
+    my $store6 = Clank::Store->new(db => ':memory:');
+    my $engine = Clank::Rules->engine(store => $store6, strategy => 'random');
     
     $engine->assert_fact('trigger', { id => 1 });
     
     for my $i (1..3) {
-        $engine->add(AI::Clam::Rules::Rule->new(
+        $engine->add(Clank::Rules::Rule->new(
             name       => "rule_$i",
             type       => 'production',
             priority   => $i,
@@ -149,11 +149,11 @@ subtest 'Conflict Resolution - random strategy' => sub {
     # Run multiple times and collect results.
     my %winners;
     for my $try (1..20) {
-        my $store_try = AI::Clam::Store->new(db => ':memory:');
-        my $engine_try = AI::Clam::Rules->engine(store => $store_try, strategy => 'random');
+        my $store_try = Clank::Store->new(db => ':memory:');
+        my $engine_try = Clank::Rules->engine(store => $store_try, strategy => 'random');
         $engine_try->assert_fact('trigger', { id => 1 });
         for my $i (1..3) {
-            $engine_try->add(AI::Clam::Rules::Rule->new(
+            $engine_try->add(Clank::Rules::Rule->new(
                 name       => "rule_$i",
                 type       => 'production',
                 priority   => $i,
@@ -172,17 +172,17 @@ subtest 'Conflict Resolution - random strategy' => sub {
 # === Test 4: Rule Composition ===
 
 subtest 'Rule Composition - pipeline' => sub {
-    my $store7 = AI::Clam::Store->new(db => ':memory:');
-    my $engine = AI::Clam::Rules->engine(store => $store7, strategy => 'first');
+    my $store7 = Clank::Store->new(db => ':memory:');
+    my $engine = Clank::Rules->engine(store => $store7, strategy => 'first');
     
-    $engine->add(AI::Clam::Rules::Rule->new(
+    $engine->add(Clank::Rules::Rule->new(
         name   => 'step1',
         type   => 'pattern',
         match  => qr/.*/,
         action => sub { return { input => 'hello world', words => ['hello', 'world'] }; },
     ));
     
-    $engine->add(AI::Clam::Rules::Rule->new(
+    $engine->add(Clank::Rules::Rule->new(
         name   => 'step2',
         type   => 'pattern',
         match  => qr/.*/,
@@ -202,10 +202,10 @@ subtest 'Rule Composition - pipeline' => sub {
 # === Test 5: Incremental Re-evaluation ===
 
 subtest 'Incremental Re-evaluation' => sub {
-    my $store8 = AI::Clam::Store->new(db => ':memory:');
-    my $engine = AI::Clam::Rules->engine(store => $store8, strategy => 'first');
+    my $store8 = Clank::Store->new(db => ':memory:');
+    my $engine = Clank::Rules->engine(store => $store8, strategy => 'first');
     
-    $engine->add(AI::Clam::Rules::Rule->new(
+    $engine->add(Clank::Rules::Rule->new(
         name       => 'process_sensor',
         type       => 'production',
         priority   => 10,
@@ -239,8 +239,8 @@ subtest 'Incremental Re-evaluation' => sub {
 # === Test 6: Enhanced _match_condition with negation ===
 
 subtest '_match_condition_with_negation' => sub {
-    my $store9 = AI::Clam::Store->new(db => ':memory:');
-    my $engine = AI::Clam::Rules->engine(store => $store9, strategy => 'first');
+    my $store9 = Clank::Store->new(db => ':memory:');
+    my $engine = Clank::Rules->engine(store => $store9, strategy => 'first');
     
     my $result = $engine->_match_condition_with_negation({
         type => 'ban',

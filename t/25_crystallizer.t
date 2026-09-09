@@ -5,16 +5,16 @@ use Test::More;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use AI::Clam::Store;
-use AI::Clam::Crystallizer;
+use Clank::Store;
+use Clank::Crystallizer;
 
-my $store = AI::Clam::Store->new(db => ':memory:');
+my $store = Clank::Store->new(db => ':memory:');
 
 # === Test 1: Construction ===
 
 subtest 'Construction' => sub {
-    my $c = AI::Clam::Crystallizer->new(store => $store);
-    isa_ok($c, 'AI::Clam::Crystallizer');
+    my $c = Clank::Crystallizer->new(store => $store);
+    isa_ok($c, 'Clank::Crystallizer');
     my $s = $c->stats;
     is($s->{total_rules}, 0, 'starts with zero rules');
 };
@@ -22,7 +22,7 @@ subtest 'Construction' => sub {
 # === Test 2: Crystallize from conversation text ===
 
 subtest 'Crystallize from text' => sub {
-    my $c = AI::Clam::Crystallizer->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $c = Clank::Crystallizer->new(store => Clank::Store->new(db => ':memory:'));
 
     my $count = $c->crystallize(
         conversation => "The capital of France is Paris. France is a country in Europe.",
@@ -36,7 +36,7 @@ subtest 'Crystallize from text' => sub {
 # === Test 3: Crystallize from message arrayref ===
 
 subtest 'Crystallize from messages' => sub {
-    my $c = AI::Clam::Crystallizer->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $c = Clank::Crystallizer->new(store => Clank::Store->new(db => ':memory:'));
 
     my $count = $c->crystallize(conversation => [
         { role => 'user', content => 'What is Perl?' },
@@ -48,7 +48,7 @@ subtest 'Crystallize from messages' => sub {
 # === Test 4: Deduplication ===
 
 subtest 'Duplicate rules are rejected' => sub {
-    my $c = AI::Clam::Crystallizer->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $c = Clank::Crystallizer->new(store => Clank::Store->new(db => ':memory:'));
 
     $c->crystallize(conversation => "Perl is a language.");
     my $count1 = $c->stats->{total_rules};
@@ -62,7 +62,7 @@ subtest 'Duplicate rules are rejected' => sub {
 # === Test 5: Confidence threshold ===
 
 subtest 'Low confidence rules are rejected' => sub {
-    my $c = AI::Clam::Crystallizer->new(store => AI::Clam::Store->new(db => ':memory:'), min_confidence => 0.9);
+    my $c = Clank::Crystallizer->new(store => Clank::Store->new(db => ':memory:'), min_confidence => 0.9);
 
     # Heuristic extraction produces 0.5-0.6 confidence — all below threshold.
     my $count = $c->crystallize(conversation => "If it rains then the ground gets wet.");
@@ -72,7 +72,7 @@ subtest 'Low confidence rules are rejected' => sub {
 # === Test 6: Rule stats ===
 
 subtest 'Stats tracking' => sub {
-    my $c = AI::Clam::Crystallizer->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $c = Clank::Crystallizer->new(store => Clank::Store->new(db => ':memory:'));
 
     $c->crystallize(conversation => "Water is H2O.");
     $c->crystallize(conversation => "Oxygen is O2.");
@@ -86,7 +86,7 @@ subtest 'Stats tracking' => sub {
 # === Test 7: Get rule by name ===
 
 subtest 'Get rule by name' => sub {
-    my $c = AI::Clam::Crystallizer->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $c = Clank::Crystallizer->new(store => Clank::Store->new(db => ':memory:'));
 
     $c->crystallize(conversation => "Gold is a precious metal.");
     my $rules = $c->list_rules;
@@ -100,7 +100,7 @@ subtest 'Get rule by name' => sub {
 # === Test 8: Disable rule ===
 
 subtest 'Disable rule' => sub {
-    my $c = AI::Clam::Crystallizer->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $c = Clank::Crystallizer->new(store => Clank::Store->new(db => ':memory:'));
 
     $c->crystallize(conversation => "Silver is a metal.");
     my $rules = $c->list_rules;
@@ -117,7 +117,7 @@ subtest 'Disable rule' => sub {
 # === Test 9: Mark used ===
 
 subtest 'Mark used increments count' => sub {
-    my $c = AI::Clam::Crystallizer->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $c = Clank::Crystallizer->new(store => Clank::Store->new(db => ':memory:'));
 
     $c->crystallize(conversation => "Copper is conductive.");
     my $rules = $c->list_rules;
@@ -134,7 +134,7 @@ subtest 'Mark used increments count' => sub {
 # === Test 10: Disabled crystallizer ===
 
 subtest 'Disabled crystallizer does nothing' => sub {
-    my $c = AI::Clam::Crystallizer->new(store => AI::Clam::Store->new(db => ':memory:'), enabled => 0);
+    my $c = Clank::Crystallizer->new(store => Clank::Store->new(db => ':memory:'), enabled => 0);
 
     my $count = $c->crystallize(conversation => "Gold is gold.");
     is($count, 0, 'no rules when disabled');
@@ -143,7 +143,7 @@ subtest 'Disabled crystallizer does nothing' => sub {
 # === Test 11: Empty conversation ===
 
 subtest 'Empty conversation returns 0' => sub {
-    my $c = AI::Clam::Crystallizer->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $c = Clank::Crystallizer->new(store => Clank::Store->new(db => ':memory:'));
 
     is($c->crystallize(conversation => ''), 0, 'empty string');
     is($c->crystallize(conversation => []), 0, 'empty array');
@@ -153,7 +153,7 @@ subtest 'Empty conversation returns 0' => sub {
 # === Test 12: Heuristic extraction patterns ===
 
 subtest 'Heuristic extracts "X is Y" facts' => sub {
-    my $c = AI::Clam::Crystallizer->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $c = Clank::Crystallizer->new(store => Clank::Store->new(db => ':memory:'));
 
     $c->crystallize(conversation => "Mercury is the smallest planet.");
     my $rules = $c->list_rules;
@@ -163,7 +163,7 @@ subtest 'Heuristic extracts "X is Y" facts' => sub {
 };
 
 subtest 'Heuristic extracts "if X then Y" rules' => sub {
-    my $c = AI::Clam::Crystallizer->new(store => AI::Clam::Store->new(db => ':memory:'),
+    my $c = Clank::Crystallizer->new(store => Clank::Store->new(db => ':memory:'),
                                      min_confidence => 0.4);
 
     $c->crystallize(conversation => "If it rains then the ground gets wet.");
@@ -175,11 +175,11 @@ subtest 'Heuristic extracts "if X then Y" rules' => sub {
 # === Test 13: Rules engine integration ===
 
 subtest 'Crystallized rules are registered in engine' => sub {
-    my $store2 = AI::Clam::Store->new(db => ':memory:');
-    require AI::Clam::Rules;
-    my $engine = AI::Clam::Rules->engine(store => $store2);
+    my $store2 = Clank::Store->new(db => ':memory:');
+    require Clank::Rules;
+    my $engine = Clank::Rules->engine(store => $store2);
 
-    my $c = AI::Clam::Crystallizer->new(store => $store2, engine => $engine);
+    my $c = Clank::Crystallizer->new(store => $store2, engine => $engine);
     $c->crystallize(conversation => "Gold is a precious metal.");
 
     my $rules = $engine->list;
@@ -189,13 +189,13 @@ subtest 'Crystallized rules are registered in engine' => sub {
 # === Test 14: Bus integration ===
 
 subtest 'Bus agent_end triggers crystallization' => sub {
-    my $store3 = AI::Clam::Store->new(db => ':memory:');
-    require AI::Clam::Bus;
-    my $bus = AI::Clam::Bus->new(store => $store3);
-    require AI::Clam::Wit::API;
-    my $api = AI::Clam::Wit::API->new(bus => $bus, store => $store3);
+    my $store3 = Clank::Store->new(db => ':memory:');
+    require Clank::Bus;
+    my $bus = Clank::Bus->new(store => $store3);
+    require Clank::Wit::API;
+    my $api = Clank::Wit::API->new(bus => $bus, store => $store3);
 
-    my $c = AI::Clam::Crystallizer->new(store => $store3);
+    my $c = Clank::Crystallizer->new(store => $store3);
     $c->register($api);
 
     my $sid = $store3->create_session(title => 'test');
@@ -211,11 +211,11 @@ subtest 'Bus agent_end triggers crystallization' => sub {
 # === Test 15: Metrics integration ===
 
 subtest 'Metrics tracking' => sub {
-    my $store4 = AI::Clam::Store->new(db => ':memory:');
-    require AI::Clam::Metrics;
-    my $metrics = AI::Clam::Metrics->new(store => $store4);
+    my $store4 = Clank::Store->new(db => ':memory:');
+    require Clank::Metrics;
+    my $metrics = Clank::Metrics->new(store => $store4);
 
-    my $c = AI::Clam::Crystallizer->new(store => $store4, metrics => $metrics);
+    my $c = Clank::Crystallizer->new(store => $store4, metrics => $metrics);
     $c->crystallize(conversation => "Silver is a conductor.");
 
     ok($metrics->get('crystallized') > 0, 'crystallized metric tracked');

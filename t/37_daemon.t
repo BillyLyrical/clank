@@ -1,7 +1,7 @@
 #!/usr/bin/env perl
-# 37_daemon.t — test clamd daemonization, status/stop, client reconnect.
+# 37_daemon.t — test clankd daemonization, status/stop, client reconnect.
 #
-# These tests start a real clamd daemon (with --provider mock), connect to
+# These tests start a real clankd daemon (with --provider mock), connect to
 # its socket, exchange messages, disconnect, reconnect, and verify the
 # daemon survives.  Each test uses a unique socket/pidfile to avoid clashes.
 
@@ -12,9 +12,9 @@ use lib "$FindBin::RealBin/../lib";
 use Test::More;
 use IO::Socket::UNIX;
 use File::Temp qw(tempdir);
-use AI::Clam::Util qw(jencode jdecode);
+use Clank::Util qw(jencode jdecode);
 
-my $clamd = "$FindBin::RealBin/../bin/clamd";
+my $clankd = "$FindBin::RealBin/../bin/clankd";
 my $tmpdir = tempdir(CLEANUP => 1);
 my $provider = 'mock';
 
@@ -28,15 +28,15 @@ sub send_recv {
 
 # --- test: daemon starts, writes PID file, responds to commands ---------------
 
-my $socket_path = "$tmpdir/clamd.sock";
-my $pidfile     = "$tmpdir/clamd.pid";
+my $socket_path = "$tmpdir/clankd.sock";
+my $pidfile     = "$tmpdir/clankd.pid";
 
 my $pid = fork;
 die "fork: $!" unless defined $pid;
 
 if ($pid == 0) {
-    # Child: exec clamd as daemon.
-    exec $^X, $clamd,
+    # Child: exec clankd as daemon.
+    exec $^X, $clankd,
         '--provider', $provider,
         '--socket',   $socket_path,
         '--pidfile',  $pidfile,

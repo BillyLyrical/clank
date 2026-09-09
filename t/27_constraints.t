@@ -5,18 +5,18 @@ use Test::More;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use AI::Clam::Store;
-use AI::Clam::Bus;
-use AI::Clam::Constraints;
+use Clank::Store;
+use Clank::Bus;
+use Clank::Constraints;
 
-my $store = AI::Clam::Store->new(db => ':memory:');
-my $bus   = AI::Clam::Bus->new(store => $store);
+my $store = Clank::Store->new(db => ':memory:');
+my $bus   = Clank::Bus->new(store => $store);
 
 # === Test 1: Construction ===
 
 subtest 'Construction' => sub {
-    my $c = AI::Clam::Constraints->new;
-    isa_ok($c, 'AI::Clam::Constraints');
+    my $c = Clank::Constraints->new;
+    isa_ok($c, 'Clank::Constraints');
     my $schemas = $c->list_schemas;
     ok(scalar @$schemas >= 3, 'has built-in schemas');
 };
@@ -24,7 +24,7 @@ subtest 'Construction' => sub {
 # === Test 2: List schemas ===
 
 subtest 'List schemas' => sub {
-    my $c = AI::Clam::Constraints->new;
+    my $c = Clank::Constraints->new;
     my $schemas = $c->list_schemas;
     my @names = map { $_->{name} } @$schemas;
     ok(scalar @names >= 3, 'multiple schemas registered');
@@ -36,7 +36,7 @@ subtest 'List schemas' => sub {
 # === Test 3: Vagueness constraint ===
 
 subtest 'Vagueness: flags excessive hedging' => sub {
-    my $c = AI::Clam::Constraints->new;
+    my $c = Clank::Constraints->new;
     my $output = "Maybe it could work. Perhaps it might be possible. It depends on many factors. "
                . "Generally this sort of approach might be possibly useful. Sort of like a kind of solution.";
     my $v = $c->validate($output, {});
@@ -45,7 +45,7 @@ subtest 'Vagueness: flags excessive hedging' => sub {
 };
 
 subtest 'Vagueness: passes specific output' => sub {
-    my $c = AI::Clam::Constraints->new;
+    my $c = Clank::Constraints->new;
     my $v = $c->validate('The function returns 42. It takes two arguments: x and y.', {});
     my @vague = grep { $_->{schema} eq 'vagueness' } @$v;
     is(scalar @vague, 0, 'no vagueness violation for specific output');
@@ -54,7 +54,7 @@ subtest 'Vagueness: passes specific output' => sub {
 # === Test 4: Overclaiming constraint ===
 
 subtest 'Overclaiming: flags absolute claims' => sub {
-    my $c = AI::Clam::Constraints->new;
+    my $c = Clank::Constraints->new;
     my $v = $c->validate('This code always works without exception and is 100% correct.', {});
     my @over = grep { $_->{schema} eq 'overclaiming' } @$v;
     ok(scalar @over >= 1, 'overclaiming violation detected');
@@ -63,14 +63,14 @@ subtest 'Overclaiming: flags absolute claims' => sub {
 # === Test 5: Constraint with world model ===
 
 subtest 'WM contradiction: detects contradiction' => sub {
-    my $wm_store = AI::Clam::Store->new(db => ':memory:');
-    use AI::Clam::WorldModel;
-    my $wm = AI::Clam::WorldModel->new(store => $wm_store);
+    my $wm_store = Clank::Store->new(db => ':memory:');
+    use Clank::WorldModel;
+    my $wm = Clank::WorldModel->new(store => $wm_store);
 
     $wm->add_entity(id => 'perl', type => 'language', name => 'Perl');
     $wm->assert_fact(entity_id => 'perl', predicate => 'type', value => 'scripting language', source => 'user');
 
-    my $c = AI::Clam::Constraints->new(world_model => $wm);
+    my $c = Clank::Constraints->new(world_model => $wm);
     my $v = $c->validate('Perl is not a scripting language.', {});
     my @wm_v = grep { $_->{schema} eq 'wm_contradiction' } @$v;
     ok(scalar @wm_v >= 1, 'contradiction detected');
@@ -78,14 +78,14 @@ subtest 'WM contradiction: detects contradiction' => sub {
 };
 
 subtest 'WM contradiction: no false positives' => sub {
-    my $wm_store = AI::Clam::Store->new(db => ':memory:');
-    use AI::Clam::WorldModel;
-    my $wm = AI::Clam::WorldModel->new(store => $wm_store);
+    my $wm_store = Clank::Store->new(db => ':memory:');
+    use Clank::WorldModel;
+    my $wm = Clank::WorldModel->new(store => $wm_store);
 
     $wm->add_entity(id => 'perl', type => 'language', name => 'Perl');
     $wm->assert_fact(entity_id => 'perl', predicate => 'type', value => 'scripting language', source => 'user');
 
-    my $c = AI::Clam::Constraints->new(world_model => $wm);
+    my $c = Clank::Constraints->new(world_model => $wm);
     my $v = $c->validate('Perl is a scripting language.', {});
     my @wm_v = grep { $_->{schema} eq 'wm_contradiction' } @$v;
     is(scalar @wm_v, 0, 'no false positive');
@@ -94,19 +94,19 @@ subtest 'WM contradiction: no false positives' => sub {
 # === Test 6: Severity levels ===
 
 subtest 'Severity: strict violations detected' => sub {
-    my $wm_store = AI::Clam::Store->new(db => ':memory:');
-    use AI::Clam::WorldModel;
-    my $wm = AI::Clam::WorldModel->new(store => $wm_store);
+    my $wm_store = Clank::Store->new(db => ':memory:');
+    use Clank::WorldModel;
+    my $wm = Clank::WorldModel->new(store => $wm_store);
     $wm->add_entity(id => 'x', type => 'thing', name => 'X');
     $wm->assert_fact(entity_id => 'x', predicate => 'is', value => 'blue', source => 'user');
 
-    my $c = AI::Clam::Constraints->new(world_model => $wm);
+    my $c = Clank::Constraints->new(world_model => $wm);
     my $v = $c->validate('X is not blue.', {});
     ok($c->has_blocking_violations($v), 'has blocking violations');
 };
 
 subtest 'Severity: warn violations not blocking' => sub {
-    my $c = AI::Clam::Constraints->new;
+    my $c = Clank::Constraints->new;
     my $v = $c->validate('This code always works.', {});
     ok(!$c->has_blocking_violations($v), 'no blocking violations for warn-only');
 };
@@ -114,7 +114,7 @@ subtest 'Severity: warn violations not blocking' => sub {
 # === Test 7: Custom constraint ===
 
 subtest 'Custom constraint: register and validate' => sub {
-    my $c = AI::Clam::Constraints->new;
+    my $c = Clank::Constraints->new;
     $c->add_constraint(
         name     => 'no_jargon',
         desc     => 'Avoid technical jargon',
@@ -135,7 +135,7 @@ subtest 'Custom constraint: register and validate' => sub {
 # === Test 8: Unregister ===
 
 subtest 'Unregister constraint' => sub {
-    my $c = AI::Clam::Constraints->new;
+    my $c = Clank::Constraints->new;
     my $before = scalar @{$c->list_schemas};
     $c->add_constraint(name => 'temp', fn => sub { () });
     is(scalar @{$c->list_schemas}, $before + 1, 'added');
@@ -146,7 +146,7 @@ subtest 'Unregister constraint' => sub {
 # === Test 9: Set severity ===
 
 subtest 'Set severity' => sub {
-    my $c = AI::Clam::Constraints->new;
+    my $c = Clank::Constraints->new;
     $c->set_severity('vagueness', 'strict');
     my $schemas = $c->list_schemas;
     my ($s) = grep { $_->{name} eq 'vagueness' } @$schemas;
@@ -156,7 +156,7 @@ subtest 'Set severity' => sub {
 # === Test 10: Format for revision ===
 
 subtest 'Format for revision' => sub {
-    my $c = AI::Clam::Constraints->new;
+    my $c = Clank::Constraints->new;
     my $v = $c->validate('This code always works.', {});
     my $msg = $c->format_for_revision($v);
     like($msg, qr/overclaiming/, 'contains schema name');
@@ -166,11 +166,11 @@ subtest 'Format for revision' => sub {
 # === Test 11: Bus integration ===
 
 subtest 'Bus: message_end triggers validation' => sub {
-    my $bus_store = AI::Clam::Store->new(db => ':memory:');
-    my $bus = AI::Clam::Bus->new(store => $bus_store);
-    require AI::Clam::Wit::API;
-    my $api = AI::Clam::Wit::API->new(bus => $bus, store => $bus_store);
-    my $c = AI::Clam::Constraints->new;
+    my $bus_store = Clank::Store->new(db => ':memory:');
+    my $bus = Clank::Bus->new(store => $bus_store);
+    require Clank::Wit::API;
+    my $api = Clank::Wit::API->new(bus => $bus, store => $bus_store);
+    my $c = Clank::Constraints->new;
     $c->register($api);
 
     my $result = $bus->publish('message_end', {
@@ -185,13 +185,13 @@ subtest 'Bus: message_end triggers validation' => sub {
 # === Test 12: Multiple violations ===
 
 subtest 'Multiple violations in one output' => sub {
-    my $wm_store = AI::Clam::Store->new(db => ':memory:');
-    use AI::Clam::WorldModel;
-    my $wm = AI::Clam::WorldModel->new(store => $wm_store);
+    my $wm_store = Clank::Store->new(db => ':memory:');
+    use Clank::WorldModel;
+    my $wm = Clank::WorldModel->new(store => $wm_store);
     $wm->add_entity(id => 'perl', type => 'language', name => 'Perl');
     $wm->assert_fact(entity_id => 'perl', predicate => 'is', value => 'compiled', source => 'user');
 
-    my $c = AI::Clam::Constraints->new(world_model => $wm);
+    my $c = Clank::Constraints->new(world_model => $wm);
     my $v = $c->validate(
         'Perl is not compiled. This code always works without exception.',
         { conversation => 'I feel upset about this.' }

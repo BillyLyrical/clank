@@ -5,16 +5,16 @@ use Test::More;
 use FindBin;
 use lib "$FindBin::Bin/../lib";
 
-use AI::Clam::Store;
-use AI::Clam::EventSourcing;
+use Clank::Store;
+use Clank::EventSourcing;
 
-my $store = AI::Clam::Store->new(db => ':memory:');
+my $store = Clank::Store->new(db => ':memory:');
 
 # === Test 1: Construction ===
 
 subtest 'Construction' => sub {
-    my $es = AI::Clam::EventSourcing->new(store => $store);
-    isa_ok($es, 'AI::Clam::EventSourcing');
+    my $es = Clank::EventSourcing->new(store => $store);
+    isa_ok($es, 'Clank::EventSourcing');
     my $s = $es->stats;
     is($s->{total_events}, 0, 'starts with zero events');
 };
@@ -22,7 +22,7 @@ subtest 'Construction' => sub {
 # === Test 2: Emit and retrieve ===
 
 subtest 'Emit and retrieve event' => sub {
-    my $es = AI::Clam::EventSourcing->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $es = Clank::EventSourcing->new(store => Clank::Store->new(db => ':memory:'));
 
     my $id = $es->emit(
         event_type     => 'created',
@@ -43,7 +43,7 @@ subtest 'Emit and retrieve event' => sub {
 # === Test 3: Append-only (no updates) ===
 
 subtest 'Events are immutable' => sub {
-    my $es = AI::Clam::EventSourcing->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $es = Clank::EventSourcing->new(store => Clank::Store->new(db => ':memory:'));
 
     $es->emit(event_type => 'created', aggregate_type => 'entity', aggregate_id => 'e1',
               payload => { name => 'Alice' });
@@ -60,7 +60,7 @@ subtest 'Events are immutable' => sub {
 # === Test 4: Aggregate isolation ===
 
 subtest 'Aggregates are isolated' => sub {
-    my $es = AI::Clam::EventSourcing->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $es = Clank::EventSourcing->new(store => Clank::Store->new(db => ':memory:'));
 
     $es->emit(event_type => 'created', aggregate_type => 'entity', aggregate_id => 'e1',
               payload => { name => 'Alice' });
@@ -82,7 +82,7 @@ subtest 'Aggregates are isolated' => sub {
 # === Test 5: Delete/retract ===
 
 subtest 'Delete events remove from replay' => sub {
-    my $es = AI::Clam::EventSourcing->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $es = Clank::EventSourcing->new(store => Clank::Store->new(db => ':memory:'));
 
     $es->emit(event_type => 'created', aggregate_type => 'entity', aggregate_id => 'e1',
               payload => { name => 'Alice' });
@@ -100,7 +100,7 @@ subtest 'Delete events remove from replay' => sub {
 # === Test 6: Causal chain ===
 
 subtest 'Causal chain tracing' => sub {
-    my $es = AI::Clam::EventSourcing->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $es = Clank::EventSourcing->new(store => Clank::Store->new(db => ':memory:'));
 
     my $e1 = $es->emit(event_type => 'created', aggregate_type => 'fact',
                        aggregate_id => 'f1', payload => { predicate => 'rains' });
@@ -126,7 +126,7 @@ subtest 'Causal chain tracing' => sub {
 # === Test 7: Replay ===
 
 subtest 'Replay rebuilds state' => sub {
-    my $es = AI::Clam::EventSourcing->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $es = Clank::EventSourcing->new(store => Clank::Store->new(db => ':memory:'));
 
     $es->emit(event_type => 'created', aggregate_type => 'entity', aggregate_id => 'e1',
               payload => { name => 'Alice' });
@@ -146,7 +146,7 @@ subtest 'Replay rebuilds state' => sub {
 # === Test 8: Snapshot ===
 
 subtest 'Snapshot of aggregate state' => sub {
-    my $es = AI::Clam::EventSourcing->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $es = Clank::EventSourcing->new(store => Clank::Store->new(db => ':memory:'));
 
     $es->emit(event_type => 'created', aggregate_type => 'entity', aggregate_id => 'e1',
               payload => { name => 'Alice' });
@@ -163,7 +163,7 @@ subtest 'Snapshot of aggregate state' => sub {
 # === Test 9: History since/until ===
 
 subtest 'History with since/until' => sub {
-    my $es = AI::Clam::EventSourcing->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $es = Clank::EventSourcing->new(store => Clank::Store->new(db => ':memory:'));
 
     my $e1 = $es->emit(event_type => 'created', aggregate_type => 'entity', aggregate_id => 'e1',
                         payload => { v => 1 });
@@ -184,7 +184,7 @@ subtest 'History with since/until' => sub {
 # === Test 10: Events by type ===
 
 subtest 'Query by event type' => sub {
-    my $es = AI::Clam::EventSourcing->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $es = Clank::EventSourcing->new(store => Clank::Store->new(db => ':memory:'));
 
     $es->emit(event_type => 'created', aggregate_type => 'entity', aggregate_id => 'e1',
               payload => {});
@@ -200,7 +200,7 @@ subtest 'Query by event type' => sub {
 # === Test 11: Stats ===
 
 subtest 'Stats' => sub {
-    my $es = AI::Clam::EventSourcing->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $es = Clank::EventSourcing->new(store => Clank::Store->new(db => ':memory:'));
 
     $es->emit(event_type => 'created', aggregate_type => 'entity', aggregate_id => 'e1', payload => {});
     $es->emit(event_type => 'created', aggregate_type => 'fact', aggregate_id => 'f1', payload => {});
@@ -215,11 +215,11 @@ subtest 'Stats' => sub {
 # === Test 12: Bus events ===
 
 subtest 'Bus integration' => sub {
-    my $store2 = AI::Clam::Store->new(db => ':memory:');
-    require AI::Clam::Bus;
-    my $bus = AI::Clam::Bus->new(store => $store2);
+    my $store2 = Clank::Store->new(db => ':memory:');
+    require Clank::Bus;
+    my $bus = Clank::Bus->new(store => $store2);
 
-    my $es = AI::Clam::EventSourcing->new(store => $store2, bus => $bus);
+    my $es = Clank::EventSourcing->new(store => $store2, bus => $bus);
     my @events;
     $bus->subscribe('event.*', sub { push @events, $_[0]{topic} }, name => 'test');
 
@@ -231,7 +231,7 @@ subtest 'Bus integration' => sub {
 # === Test 13: Max depth on causal chain ===
 
 subtest 'Causal chain respects max_depth' => sub {
-    my $es = AI::Clam::EventSourcing->new(store => AI::Clam::Store->new(db => ':memory:'));
+    my $es = Clank::EventSourcing->new(store => Clank::Store->new(db => ':memory:'));
 
     my $prev;
     for my $i (1..10) {
