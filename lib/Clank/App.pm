@@ -134,6 +134,46 @@ sub start_session {
         metrics     => $self->{metrics},
     )->register($api);
 
+    # Escalation: cheapest correct tool first (before LLM call).
+    require Clank::Escalation;
+    Clank::Escalation->new(
+        store       => $self->{store},
+        bus         => $self->{bus},
+        provider    => $self->{provider},
+        world_model => $self->{world_model},
+        tracer      => $self->{tracer},
+        metrics     => $self->{metrics},
+    )->register($api);
+
+    # Metrics bus handler: respond to metrics.self_stats queries.
+    if ($self->{metrics}) {
+        my $metrics = $self->{metrics};
+        $api->on('metrics.self_stats', sub { return $metrics->self_stats });
+    }
+
+    # Perl Execution Environment: neurosymbolic loop for Perl code.
+    require Clank::PerlEnv;
+    my $perl_env = Clank::PerlEnv->new(
+        store        => $self->{store},
+        bus          => $self->{bus},
+        world_model  => $self->{world_model},
+        metrics      => $self->{metrics},
+        tracer       => $self->{tracer},
+    );
+    $perl_env->register($api);
+
+    # PerlLoop: agent loop connecting LLM to PerlEnv.
+    require Clank::PerlLoop;
+    Clank::PerlLoop->new(
+        store    => $self->{store},
+        bus      => $self->{bus},
+        provider => $self->{provider},
+        session  => $session,
+        perl_env => $perl_env,
+        metrics  => $self->{metrics},
+        tracer   => $self->{tracer},
+    )->register($api);
+
     $self->{pm}      = $pm;
     $self->{wits}    = \@wits;
     $self->{session} = $session;
@@ -161,6 +201,15 @@ sub shutdown {
     my ($self) = @_;
     $self->{bus}->publish('session_shutdown', {}) if $self->{bus};
 }
+
+# Accessors for wits and REPL commands.
+sub store   { $_[0]->{store} }
+sub bus     { $_[0]->{bus} }
+sub provider { $_[0]->{provider} }
+sub metrics { $_[0]->{metrics} }
+sub pm      { $_[0]->{pm} }
+sub session { $_[0]->{session} }
+sub wits    { @{ $_[0]->{wits} // [] } }
 
 # Create a minimal Wit::API-like object for bus-driven wits.
 sub _make_api {

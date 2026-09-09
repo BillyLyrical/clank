@@ -1,0 +1,34 @@
+name = "log-event"
+description = "Log an event: extract details → format → store summary"
+trigger = "band.log-event"
+output = "band.log-event.done"
+
+[[steps]]
+name = "extract"
+code = """
+    my ($state) = @_;
+    my $event = $state->{event} // 'unknown';
+    my $detail = $state->{detail} // '';
+    return { event_type => $event, event_detail => $detail, timestamp => time() };
+"""
+
+[[steps]]
+name = "format"
+code = """
+    my ($state) = @_;
+    my $msg = sprintf("[%s] %s: %s",
+        $state->{timestamp} // time(),
+        $state->{event_type} // 'unknown',
+        $state->{event_detail} // '');
+    return { formatted => $msg };
+"""
+
+[[steps]]
+name = "store"
+code = """
+    my ($state) = @_;
+    my $msg = $state->{formatted} // '';
+    # In a real band, this would write to the world model or store.
+    # For testing, we just return the formatted message.
+    return { stored => 1, summary => $msg };
+"""

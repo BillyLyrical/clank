@@ -111,6 +111,41 @@ sub crystallize {
     $self->inc("crystallizations.$rule_name") if defined $rule_name;
 }
 
+# === SELF-IMPROVEMENT STATS ===
+
+# Compute self-improvement metrics from escalation counters.
+# Returns a hashref with ratios and breakdowns.
+sub self_stats {
+    my ($self) = @_;
+    my $c = $self->{_counters};
+
+    my $rule_hit    = $c->{'escalation.rule_hit'}    // 0;
+    my $wm_hit      = $c->{'escalation.wm_hit'}      // 0;
+    my $engine_hit  = $c->{'escalation.engine_hit'}   // 0;
+    my $llm_fallback = $c->{'escalation.llm_fallback'} // 0;
+    my $crystallized = $c->{'escalation.crystallized'} // 0;
+
+    my $total_escalated = $rule_hit + $wm_hit + $engine_hit;
+    my $total_calls     = $total_escalated + $llm_fallback;
+
+    my $automation_ratio = $total_calls > 0
+        ? $total_escalated / $total_calls
+        : 0;
+
+    return {
+        escalation => {
+            rule_hit     => $rule_hit,
+            wm_hit       => $wm_hit,
+            engine_hit   => $engine_hit,
+            llm_fallback => $llm_fallback,
+            crystallized => $crystallized,
+        },
+        automation_ratio => $automation_ratio,
+        total_escalated  => $total_escalated,
+        total_calls      => $total_calls,
+    };
+}
+
 # === INTERNAL ===
 
 sub _load {

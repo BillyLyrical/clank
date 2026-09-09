@@ -106,6 +106,29 @@ sub register {
         return join("\n", @out) || '(no events)';
     });
 
+    $api->register_command('stats', description => 'self-improvement metrics: automation ratio, escalation breakdown', handler => sub {
+        my ($ctx) = @_;
+        my $metrics = $ctx->{app}->metrics;
+        unless ($metrics) {
+            return "metrics not available (no metrics module loaded)";
+        }
+        my $s = $metrics->self_stats;
+        my $ratio = $s->{automation_ratio};
+        my $e = $s->{escalation};
+
+        my $out = "=== Self-Improvement Metrics ===\n\n";
+        $out .= sprintf("  Automation ratio:  %.1f%% (%d escalated / %d total)\n",
+            $ratio * 100, $s->{total_escalated}, $s->{total_calls});
+        $out .= "\n  Escalation breakdown:\n";
+        $out .= sprintf("    Crystallized rules:  %d hits\n", $e->{rule_hit});
+        $out .= sprintf("    World model facts:   %d hits\n", $e->{wm_hit});
+        $out .= sprintf("    Rules engine:        %d hits\n", $e->{engine_hit});
+        $out .= sprintf("    LLM fallback:        %d calls\n", $e->{llm_fallback});
+        $out .= sprintf("    Rules crystallized:  %d new\n", $e->{crystallized});
+        $out .= "\n  The higher the automation ratio, the less you pay for LLM calls.\n";
+        return $out;
+    });
+
     $api->register_command('wit', description => 'manage wits: /wit disable|enable NAME', handler => sub {
         my ($ctx, $args) = @_;
         if ($args =~ m{^(disable|enable)\s+(\S+)$}) {

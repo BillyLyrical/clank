@@ -245,6 +245,40 @@ sub handle_request {
                 wits    => \@wits,
                 skipped => (ref($skipped) eq 'ARRAY') ? $skipped : [],
             };
+        } elsif ($cmd eq 'session.send') {
+            my $to = $msg->{to};
+            my $payload = $msg->{payload} // {};
+            if (!defined $to || !length $to) {
+                $resp = { id => $msg->{id}, ok => 0, error => 'session.send requires "to" session id' };
+            } else {
+                my $mesh = $driver->mesh;
+                if (!$mesh) {
+                    $resp = { id => $msg->{id}, ok => 0, error => 'mesh not available' };
+                } else {
+                    my $result = $mesh->send($to, $payload);
+                    $resp = { id => $msg->{id}, %$result };
+                }
+            }
+        } elsif ($cmd eq 'session.broadcast') {
+            my $payload = $msg->{payload} // {};
+            my $mesh = $driver->mesh;
+            if (!$mesh) {
+                $resp = { id => $msg->{id}, ok => 0, error => 'mesh not available' };
+            } else {
+                my $result = $mesh->broadcast($payload);
+                $resp = { id => $msg->{id}, %$result };
+            }
+        } elsif ($cmd eq 'session.messages') {
+            my $mesh = $driver->mesh;
+            if (!$mesh) {
+                $resp = { id => $msg->{id}, ok => 0, error => 'mesh not available' };
+            } else {
+                my $messages = $mesh->query_messages(
+                    from => $msg->{from},
+                    limit => $msg->{limit} // 50,
+                );
+                $resp = { id => $msg->{id}, ok => 1, messages => $messages };
+            }
         } elsif ($cmd eq 'status') {
             $resp = {
                 id         => $msg->{id},

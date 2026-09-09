@@ -82,6 +82,23 @@ sub session   { $_[0]->{session} }
 sub provider  { $_[0]->{app}->provider if $_[0]->{app} }
 sub session_id { $_[0]->{session}->id if $_[0]->{session} }
 
+# Cross-session mesh (lazy — created on first access).
+sub mesh {
+    my ($self) = @_;
+    return $self->{mesh} if $self->{mesh};
+    return undef unless $self->{session} && $self->{app};
+    eval {
+        require Clank::Mesh;
+        $self->{mesh} = Clank::Mesh->new(
+            bus        => $self->bus,
+            store      => $self->store,
+            session_id => $self->session_id,
+        );
+        $self->{mesh}->subscribe;
+    };
+    return $self->{mesh};
+}
+
 # --- the core: one agent turn -------------------------------------------------
 
 # Run one prompt through the full agent loop and return a structured result.

@@ -79,6 +79,22 @@ sub run_prompt {
 
     $bus->publish('agent_start', { prompt => $final_text, session_id => $session->id });
 
+    # 2a) escalation check: cheapest correct tool first.
+    #     If a crystallized rule, world model fact, or rules engine derivation
+    #     can answer the question, short-circuit the LLM call entirely.
+    my $esc = $bus->publish('escalation.check', { prompt => $final_text });
+    for my $r (@{ $esc->{results} }) {
+        next unless ref $r eq 'HASH' && $r->{handled};
+        my $output = $r->{output} // '';
+        my $source = $r->{source} // 'escalation';
+        $session->add_assistant_message(content => $output);
+        $self->{metrics}->inc("escalation.$source") if $self->{metrics};
+        $bus->publish('turn_end', { turn => 0, escalated => 1, source => $source });
+        $bus->publish('agent_end', { session_id => $session->id, escalated => 1 });
+        $self->{tracer}->end_span($agent_span) if $self->{tracer} && $agent_span;
+        return { ok => 1, response => $output, turns => 0, escalated => 1, source => $source };
+    }
+
     my ($turn, $last_error) = (0);
     while (!$self->{aborted}) {
         last if ++$turn > $self->{max_turns};
