@@ -116,6 +116,10 @@ the separation helps humans navigate.
 
 **Effort**: Low (documentation + convention, no code changes needed)
 
+**Status**: ✅ Done — docs/ARCHITECTURE_LAYERS.md documents the three-layer
+separation (agents=who, wits=what, hooks=when). Scaling threshold noted
+at ~200 wits.
+
 ---
 
 ## 5. Council: Adversarial Decision-Making
@@ -188,6 +192,12 @@ Not urgent — WorldModel handles most cases. But "lesson" and "runbook"
 kinds are interesting for cross-session learning.
 
 **Effort**: Low-Medium (new table + bus topic, no changes to WorldModel)
+
+**Status**: ✅ Done — lib/Clank/Memory.pm with memory_documents table
+(ECC memory.v1 compatible), FTS5 search, CRUD, bus integration,
+8 typed kinds (context/decision/fact/handoff/lesson/note/preference/runbook),
+3 scopes (project/team/user), 3 statuses (active/rejected/superseded),
+/memory CLI. 10 tests.
 
 ---
 
