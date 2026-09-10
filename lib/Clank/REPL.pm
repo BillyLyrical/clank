@@ -1,6 +1,6 @@
 # Interactive REPL (Term::ReadLine, no TUI) on top of Clank::App.
 # Pure interface layer: reads input, dispatches commands, displays output.
-# All command handling lives in wits (especially Clank::Wit::Session).
+# Command dispatch uses Clank::Sigil — the same parser shared with clankd.
 package Clank::REPL;
 use strict;
 use warnings;
@@ -33,6 +33,11 @@ sub run {
     my ($self) = @_;
     my $app = Clank::App->new(%$self);
     $app->start_session(resume => $self->{resume});
+
+    # Create sigil dispatcher and register handlers.
+    require Clank::Sigil;
+    my $sigil = Clank::Sigil->new(app => $app);
+    $self->_register_handlers($sigil, $app);
 
     # live output: streaming deltas + tool activity
     $app->bus->subscribe('message_update', sub {
@@ -80,8 +85,8 @@ sub run {
         next unless length $line;
         $term->addhistory($line);
 
-        # Single dispatch path: all commands go through wit-registered handlers.
-        my $result = $self->_dispatch($app, $line);
+        # Sigil dispatch: parse first character, route to handler.
+        my $result = $sigil->dispatch($line);
         if ($result) {
             if (ref $result eq 'HASH' && $result->{exit}) {
                 last;
@@ -92,7 +97,7 @@ sub run {
             next;
         }
 
-        # Not a command: send to agent loop.
+        # No sigil match: send to agent loop (bare text = LLM prompt).
         my $resp = eval { $app->run_prompt($line) };
         if ($@) { print "error: $@"; next }
         if ($resp->{handled}) {
@@ -115,31 +120,84 @@ sub run {
 }
 
 # ---------------------------------------------------------------------------
-# Unified command dispatch. Parses /command [args], looks up the handler
-# from all registered wit commands, calls it, returns the result.
-# Returns undef when the line is not a command (agent prompt territory).
-sub _dispatch {
-    my ($self, $app, $line) = @_;
-    return undef unless $line =~ m{^/(\S+)(?:\s+(.*))?$};
-    my ($name, $args) = ($1, $2 // '');
-    my %cmds = %{ $app->pm->all_commands };
-    return undef unless exists $cmds{$name};
-    my $cmd = $cmds{$name};
-    my $res = eval {
-        $cmd->{handler}->({
-            bus     => $app->bus,
-            store   => $app->store,
-            session => $app->session,
-            app     => $app,
-        }, $args);
-    };
-    if ($@) {
-        return { output => "command /$name failed: $@" };
-    }
-    if (ref $res eq 'HASH') {
-        return $res;
-    }
-    return { output => defined $res ? "$res" : undef };
+# Register sigil handlers. Each handler receives ($app, $content) and
+# returns {output => '...'} or undef.
+sub _register_handlers {
+    my ($self, $sigil, $app) = @_;
+
+    # / — Command: delegate to wit-registered command handlers.
+    $sigil->register('/', sub {
+        my ($app, $args) = @_;
+        my ($name, $rest) = $args =~ /^(\S+)(?:\s+(.*))?$/;
+        return { output => "usage: /<command> [args]" } unless defined $name;
+        my %cmds = %{ $app->pm->all_commands };
+        return { output => "unknown command: /$name" } unless exists $cmds{$name};
+        my $cmd = $cmds{$name};
+        my $res = eval {
+            $cmd->{handler}->({
+                bus     => $app->bus,
+                store   => $app->store,
+                session => $app->session,
+                app     => $app,
+            }, $rest // '');
+        };
+        if ($@) { return { output => "command /$name failed: $@" } }
+        if (ref $res eq 'HASH') { return $res }
+        return { output => defined $res ? "$res" : undef };
+    });
+
+    # # — Comment: no-op.
+    $sigil->register('#', sub { { output => '' } });
+
+    # ? — Query: informational LLM query (stub).
+    $sigil->register('?', sub {
+        my ($app, $args) = @_;
+        return { output => 'usage: ? <question>' } unless length $args;
+        return { output => "(query mode not yet implemented: $args)" };
+    });
+
+    # $ — Eval: Perl expression (stub).
+    $sigil->register('$', sub {
+        my ($app, $args) = @_;
+        return { output => 'usage: $ <perl expression>' } unless length $args;
+        return { output => "(eval mode not yet implemented: $args)" };
+    });
+
+    # @ — Agent: agent dispatch (stub).
+    $sigil->register('@', sub {
+        my ($app, $args) = @_;
+        return { output => "(agent mode not yet implemented: $args)" };
+    });
+
+    # % — Pipeline: run named pipeline (stub).
+    $sigil->register('%', sub {
+        my ($app, $args) = @_;
+        return { output => "(pipeline mode not yet implemented: $args)" };
+    });
+
+    # > — Pipe: inline pipeline (stub).
+    $sigil->register('>', sub {
+        my ($app, $args) = @_;
+        return { output => "(pipe mode not yet implemented: $args)" };
+    });
+
+    # : — Topic: bus publish/subscribe (stub).
+    $sigil->register(':', sub {
+        my ($app, $args) = @_;
+        return { output => "(topic mode not yet implemented: $args)" };
+    });
+
+    # ~ — Wit: wit management (stub).
+    $sigil->register('~', sub {
+        my ($app, $args) = @_;
+        return { output => "(wit mode not yet implemented: $args)" };
+    });
+
+    # ! — History: re-run previous command (stub).
+    $sigil->register('!', sub {
+        my ($app, $args) = @_;
+        return { output => "(history mode not yet implemented: $args)" };
+    });
 }
 
 1;

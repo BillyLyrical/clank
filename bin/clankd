@@ -153,6 +153,12 @@ if ($@) {
     exit 1;
 }
 
+# Create sigil dispatcher for prompt commands.
+require Clank::Sigil;
+require Clank::App;
+my $sigil = Clank::Sigil->new(app => $driver);
+_register_clankd_sigils($sigil, $driver);
+
 $| = 1;   # autoflush stdout — parents read line-by-line
 
 my $socket_path = $o{socket};
@@ -223,10 +229,17 @@ sub handle_request {
             if (!defined $text || !length($text)) {
                 $resp = { id => $msg->{id}, ok => 0, error => 'no prompt text' };
             } else {
-                my %ask;
-                $ask{timeout} = $msg->{timeout} // $o{timeout} if defined ($msg->{timeout} // $o{timeout});
-                $resp = $driver->ask($text, %ask);
-                $resp->{id} = $msg->{id};
+                # Check for sigil dispatch first.
+                my $sigil_result = $sigil->dispatch($text);
+                if ($sigil_result) {
+                    $resp = { id => $msg->{id}, ok => 1, %$sigil_result };
+                } else {
+                    # No sigil: send to LLM (existing behavior).
+                    my %ask;
+                    $ask{timeout} = $msg->{timeout} // $o{timeout} if defined ($msg->{timeout} // $o{timeout});
+                    $resp = $driver->ask($text, %ask);
+                    $resp->{id} = $msg->{id};
+                }
             }
         } elsif ($cmd eq 'session_info') {
             my $info = eval { $driver->info() };
@@ -303,6 +316,87 @@ sub handle_request {
         $out = jencode({ id => (ref $msg eq 'HASH' ? $msg->{id} : undef), ok => 0, error => 'internal: result not JSON-serializable' });
     }
     return ($out . "\n", 0);
+}
+
+# --- sigil handlers for clankd ------------------------------------------------
+# Same sigils as the REPL, adapted for JSON protocol output.
+
+sub _register_clankd_sigils {
+    my ($sigil, $driver) = @_;
+
+    # / — Command: delegate to wit-registered commands.
+    $sigil->register('/', sub {
+        my ($app, $args) = @_;
+        my ($name, $rest) = $args =~ /^(\S+)(?:\s+(.*))?$/;
+        return { output => "usage: /<command> [args]" } unless defined $name;
+        my %cmds = eval { %{ $driver->app->pm->all_commands } };
+        return { output => "unknown command: /$name" } unless exists $cmds{$name};
+        my $cmd = $cmds{$name};
+        my $res = eval {
+            $cmd->{handler}->({
+                bus     => $driver->app->bus,
+                store   => $driver->app->store,
+                session => $driver->app->session,
+                app     => $driver->app,
+            }, $rest // '');
+        };
+        if ($@) { return { output => "command /$name failed: $@" } }
+        if (ref $res eq 'HASH') { return $res }
+        return { output => defined $res ? "$res" : undef };
+    });
+
+    # # — Comment: no-op.
+    $sigil->register('#', sub { { output => '' } });
+
+    # ? — Query: informational LLM query (stub).
+    $sigil->register('?', sub {
+        my ($app, $args) = @_;
+        return { output => 'usage: ? <question>' } unless length $args;
+        return { output => "(query mode not yet implemented: $args)" };
+    });
+
+    # $ — Eval: Perl expression (stub).
+    $sigil->register('$', sub {
+        my ($app, $args) = @_;
+        return { output => 'usage: $ <perl expression>' } unless length $args;
+        return { output => "(eval mode not yet implemented: $args)" };
+    });
+
+    # @ — Agent: agent dispatch (stub).
+    $sigil->register('@', sub {
+        my ($app, $args) = @_;
+        return { output => "(agent mode not yet implemented: $args)" };
+    });
+
+    # % — Pipeline: run named pipeline (stub).
+    $sigil->register('%', sub {
+        my ($app, $args) = @_;
+        return { output => "(pipeline mode not yet implemented: $args)" };
+    });
+
+    # > — Pipe: inline pipeline (stub).
+    $sigil->register('>', sub {
+        my ($app, $args) = @_;
+        return { output => "(pipe mode not yet implemented: $args)" };
+    });
+
+    # : — Topic: bus publish/subscribe (stub).
+    $sigil->register(':', sub {
+        my ($app, $args) = @_;
+        return { output => "(topic mode not yet implemented: $args)" };
+    });
+
+    # ~ — Wit: wit management (stub).
+    $sigil->register('~', sub {
+        my ($app, $args) = @_;
+        return { output => "(wit mode not yet implemented: $args)" };
+    });
+
+    # ! — History: re-run previous command (stub).
+    $sigil->register('!', sub {
+        my ($app, $args) = @_;
+        return { output => "(history mode not yet implemented: $args)" };
+    });
 }
 
 # --- transports ----------------------------------------------------------------
