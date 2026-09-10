@@ -34,7 +34,7 @@ Before each LLM call, Loop.pm assembles context in this order:
 │     ContextRules → deterministic DSL injections     │
 ├─────────────────────────────────────────────────────┤
 │  3. KNOWLEDGE CONTEXT (what do I know?)             │
-│     bus: context.knowledge_request                  │
+│     bus: context_knowledge_request                  │
 │       ├── WorldModel → entities, facts, beliefs     │
 │       └── Crystallizer → deterministic rules        │
 ├─────────────────────────────────────────────────────┤
@@ -147,7 +147,7 @@ DSL
 Or register rules at runtime:
 
 ```perl
-$bus->publish('context.knowledge_request', { prompt => $prompt });
+$bus->publish('context_knowledge_request', { prompt => $prompt });
 ```
 
 ---
@@ -160,7 +160,7 @@ crystallized rules. Wired via bus events.
 ### 5.1 Bus Flow
 
 ```
-Loop.pm publishes:  context.knowledge_request { prompt }
+Loop.pm publishes:  context_knowledge_request { prompt }
                         │
     ┌───────────────────┼───────────────────┐
     ▼                   ▼                   ▼
@@ -177,7 +177,7 @@ WorldModel          Crystallizer        (future: Store)
 Queries FTS5-indexed entities, facts, and beliefs matching the prompt:
 
 ```perl
-$bus->subscribe('context.knowledge_request', sub {
+$bus->subscribe('context_knowledge_request', sub {
     my ($ev) = @_;
     my $prompt = $ev->{payload}{prompt};
     # Returns: { facts => [{ type => 'entity'|'fact'|'belief', text => '...' }] }
@@ -194,10 +194,10 @@ Returns deterministic rules whose names or conditions match the prompt:
 
 ### 5.4 Extension Points
 
-Subscribe to `context.knowledge_request` to add your own knowledge sources:
+Subscribe to `context_knowledge_request` to add your own knowledge sources:
 
 ```perl
-$api->on('context.knowledge_request', sub {
+$api->on('context_knowledge_request', sub {
     my ($ev) = @_;
     my $prompt = $ev->{payload}{prompt};
     # Query your data source...
@@ -272,7 +272,7 @@ my $rule_text = $context_rules->format_for_prompt(prompt => $sp);
 $sp .= "\n\n$rule_text" if $rule_text;
 
 # 3c) Knowledge context (bus → world model + crystallizer).
-my $kr = $bus->publish('context.knowledge_request', { prompt => $last_msg });
+my $kr = $bus->publish('context_knowledge_request', { prompt => $last_msg });
 # Collect facts + rules, inject as [knowledge context] message.
 
 # 4) RATS: select relevant tools.
@@ -312,7 +312,7 @@ Cost per call (GPT-4o): ~$0.015-0.03 vs. ~$0.15 naive.
 | `PluginManager::manifest()` | Capability | Generates deck-level capability string |
 | `ToolSelector::select()` | Capability | RATS: scores tools by relevance + context |
 | `ContextRules` | Behavioral | DSL rules → injection text |
-| `WorldModel::register()` | Knowledge | Responds to `context.knowledge_request` |
+| `WorldModel::register()` | Knowledge | Responds to `context_knowledge_request` |
 | `Crystallizer::register()` | Knowledge | Responds with crystallized rules |
 | `Messages::prune_context()` | Compression | Drops unreferenced old turns |
 | `Loop::_summarize_tool_output()` | Compression | Summarizes large tool outputs |
@@ -326,7 +326,7 @@ Cost per call (GPT-4o): ~$0.015-0.03 vs. ~$0.15 naive.
 
 ```perl
 # In a wit's register():
-$api->on('context.knowledge_request', sub {
+$api->on('context_knowledge_request', sub {
     my ($ev) = @_;
     return { facts => [{ type => 'wit_fact', text => '...' }] };
 });
@@ -355,6 +355,6 @@ $api->on('before_provider_request', sub {
 
 ### Add a Knowledge Source
 
-Subscribe to `context.knowledge_request` and return `{ facts => [...] }`.
+Subscribe to `context_knowledge_request` and return `{ facts => [...] }`.
 Loop.pm collects all responses and injects them as a knowledge context
 message.

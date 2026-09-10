@@ -55,13 +55,13 @@ my $subgraph = $pg->extract_guidance_subgraph($node_id, 2);
 │  LLM refiner, rejection memory, snapshot/rollback    │
 ├─────────────────────────────────────────────────────┤
 │  Wits::ProceduralGraph (bus + tools + REPL)          │
-│  context.procedural_guidance bus topic               │
+│  context_procedural_guidance bus topic               │
 │  8 tools: show, add_node, add_edge, delete_*, stats, │
 │           reset, evolve                              │
 │  /pg show|stats|reset REPL commands                  │
 ├─────────────────────────────────────────────────────┤
 │  Loop.pm (context assembly)                          │
-│  Step 3d: publishes context.procedural_guidance      │
+│  Step 3d: publishes context_procedural_guidance      │
 │  _extract_last_action(): finds last tool call        │
 └─────────────────────────────────────────────────────┘
 ```
@@ -76,7 +76,7 @@ my $subgraph = $pg->extract_guidance_subgraph($node_id, 2);
 
 ## Online Guidance
 
-The wit subscribes to `context.procedural_guidance` on the bus. Before each
+The wit subscribes to `context_procedural_guidance` on the bus. Before each
 LLM call, Loop.pm publishes this event with the last action taken. The wit:
 
 1. **Localizes** the active node by matching the last action (exact → fuzzy → reverse fuzzy)

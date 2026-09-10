@@ -4,6 +4,9 @@ Status: early design. Sketching concerns, not freezing spec.
 
 ---
 
+
+QUESTION: are Agents best implemented as Wits on the Bus?
+
 ## 1. What Problem Does This Solve?
 
 Clank spawns subagents via `Loop.pm::spawn()` but there's no formalized

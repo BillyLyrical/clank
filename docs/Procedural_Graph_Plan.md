@@ -36,8 +36,8 @@ Mixing them would complect orthogonal concerns.
 
 ### 2.2 Bus Topic Separation
 
-PG guidance uses a dedicated topic `context.procedural_guidance`, not the
-existing `context.knowledge_request`. The loop collects both and injects them
+PG guidance uses a dedicated topic `context_procedural_guidance`, not the
+existing `context_knowledge_request`. The loop collects both and injects them
 as separate context blocks.
 
 **Rationale**: Clean separation. The PG wit doesn't need to know about WorldModel
@@ -270,7 +270,7 @@ sub register {
     );
 
     # Bus: provide procedural guidance context
-    $api->on('context.procedural_guidance', sub {
+    $api->on('context_procedural_guidance', sub {
         my ($ev) = @_;
         my $prompt = $ev->{payload}{prompt};
         my $last_action = $ev->{payload}{last_action};
@@ -301,11 +301,11 @@ The loop's context assembly in `Loop.pm` gains one new step:
 
 ```
   5. KNOWLEDGE CONTEXT
-     bus: context.knowledge_request
+     bus: context_knowledge_request
        ├── WorldModel → entities, facts, beliefs
        └── Crystallizer → deterministic rules
   5a. PROCEDURAL GUIDANCE                    ← NEW
-     bus: context.procedural_guidance
+     bus: context_procedural_guidance
        └── ProceduralGraph → subgraph guidance
 ```
 
@@ -324,7 +324,7 @@ User prompt arrives
   │
   ├─ Loop.pm assembles context (existing)
   │
-  ├─ Bus: context.procedural_guidance { prompt, last_action }
+  ├─ Bus: context_procedural_guidance { prompt, last_action }
   │    │
   │    ├─ ProceduralGraph::localize($last_action)
   │    │   → match last tool call / action text to nearest node
@@ -542,9 +542,9 @@ The evolution loop works identically in all three cases.
 
 **Tasks**:
 1. Create `wits/procedural-graph/` wit directory
-2. Implement wit `register()`: bus subscription for `context.procedural_guidance`
+2. Implement wit `register()`: bus subscription for `context_procedural_guidance`
 3. Implement guidance formatting (subgraph → text block)
-4. Add `context.procedural_guidance` publish call to Loop.pm context assembly
+4. Add `context_procedural_guidance` publish call to Loop.pm context assembly
 5. Register PG tools: `pg_show_graph`, `pg_add_node`, `pg_add_edge`, `pg_delete_edge`
 6. Write tests: guidance formatting, tool registration, bus round-trip
 
@@ -592,7 +592,7 @@ The evolution loop works identically in all three cases.
 | Existing Module | How PG Uses It |
 |---|---|
 | `Store` | SQLite DB for pg_nodes, pg_edges, pg_evolution_log, pg_rejections |
-| `Bus` | pub/sub for context.procedural_guidance, agent_end events |
+| `Bus` | pub/sub for context_procedural_guidance, agent_end events |
 | `WorldModel` | Independent — PG complements it, doesn't modify it |
 | `Crystallizer` | Pattern reference for the evolution pipeline |
 | `ContextRules` | Coexists — PG guidance is a separate context block |

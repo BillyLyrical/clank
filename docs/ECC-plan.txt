@@ -48,16 +48,16 @@ Measured +2.25 quality points vs ungated.
 **Key file**: /home/clam/ref/ECC/skills/gateguard/SKILL.md
 
 **Clank adaptation**:
-Wire as a bus hook on `tool_call` events for write/edit tools:
+Wire as a bus hook on `pre_tool_use` events for write/edit tools:
 - First edit attempt: block, return "investigate before editing"
 - Inject instructions: "grep for importers of this module, read the schema,
   confirm the user's intent"
 - Second attempt: allow
 
-Could be a wit (`wits/guardrails/`) that subscribes to `tool_call` and
+Could be a wit (`wits/guardrails/`) that subscribes to `pre_tool_use` and
 blocks writes until the agent has gathered context.
 
-**Effort**: Low (bus hook + tool_call interception, existing patterns)
+**Effort**: Low (bus hook + pre_tool_use interception, existing patterns)
 
 ---
 
@@ -296,8 +296,8 @@ circuit breakers, user-facing vs developer error separation.
 ## 10. Hook Schema → Bus Event Vocabulary
 
 ### Current Clank Bus Events (ad-hoc)
-The bus has informal topics: `context.knowledge_request`, `tool_call`,
-`tool_result`, `agent_end`, `turn_start`, `turn_end`, etc.
+The bus has formalized topics: `context_knowledge_request`, `pre_tool_use`,
+`post_tool_use`, `agent_end`, `turn_start`, `turn_end`, etc.
 
 ### ECC Hook Events (18 typed events)
 From /home/clam/ref/ECC/schemas/hooks.schema.json:
@@ -306,9 +306,9 @@ From /home/clam/ref/ECC/schemas/hooks.schema.json:
 |-----------|-----------------|--------|
 | SessionStart | (none) | Add `session_start` topic |
 | UserPromptSubmit | (none — Loop.pm handles) | Add `user_prompt_submit` topic |
-| PreToolUse | `tool_call` (exists) | Rename or alias |
+| PreToolUse | `pre_tool_use` (renamed) | Done |
 | PermissionRequest | (none) | Add `permission_request` topic |
-| PostToolUse | `tool_result` (exists) | Rename or alias |
+| PostToolUse | `post_tool_use` (renamed) | Done |
 | PostToolUseFailure | (none) | Add `tool_failure` topic |
 | Notification | (none) | Add `notification` topic |
 | SubagentStart | (none) | Add `subagent_start` topic |
@@ -334,8 +334,8 @@ Prompt lifecycle:
   user_prompt_submit     — user input received (before agent processes)
 
 Tool lifecycle:
-  pre_tool_use           — before tool execution (existing: tool_call)
-  post_tool_use          — after tool success (existing: tool_result)
+  pre_tool_use           — before tool execution
+  post_tool_use          — after tool success
   post_tool_use_failure  — after tool failure (NEW)
   permission_request     — tool requires permission (NEW)
 

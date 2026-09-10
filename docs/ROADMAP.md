@@ -79,7 +79,7 @@ Agent loop events (emitted during each turn):
 input → before_agent_start → agent_start →
   turn_start → context →
     stream assistant (message_update deltas) →
-    tool_call → execute → tool_result →
+    pre_tool_use → execute → post_tool_use →
   turn_end →
 agent_end → agent_settled
 ```
@@ -347,7 +347,7 @@ Provider interface: `stream_chat({model,system,messages,tools})` → iterator of
 
 ### 2.2 Compaction (Pi semantics)
 
-Trigger: `est_tokens(context) > context_window - reserve` (default 16384). Check points: between turns inside a run, before new user prompt. Method: walk back from newest accumulating ~tokens until `keep_recent` (default 20k); summarize older span with LLM into structured summary (goal, decisions, files touched, open threads); store as compaction entry in session tree; next context = [summary] + kept messages. Manual: `/compact [instructions]`. Wits may cancel/customize via `session_before_compact`.
+Trigger: `est_tokens(context) > context_window - reserve` (default 16384). Check points: between turns inside a run, before new user prompt. Method: walk back from newest accumulating ~tokens until `keep_recent` (default 20k); summarize older span with LLM into structured summary (goal, decisions, files touched, open threads); store as compaction entry in session tree; next context = [summary] + kept messages. Manual: `/compact [instructions]`. Wits may cancel/customize via `pre_compact`.
 
 ### 2.3 Module Map
 
@@ -525,7 +525,7 @@ The core harness is done and working (705 tests, all passing).
 
 | Item | Status | What |
 |------|--------|------|
-| Anthropic provider | ✅ Done | Native Messages API: `system` top-level, `tool_use`/`tool_result` content blocks, `x-api-key` auth |
+| Anthropic provider | ✅ Done | Native Messages API: `system` top-level, `tool_use`/`post_tool_use` content blocks, `x-api-key` auth |
 | Gemini provider | ✅ Done | Native generateContent API: different message format, `functionCall`/`functionResponse` parts |
 | Azure provider | ✅ Done | Thin wrapper over OpenAI-compat: deployment URL + `api-version` query param |
 | Ollama + OpenAI | ✅ Done | Full providers (not just aliases) |

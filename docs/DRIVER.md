@@ -84,7 +84,7 @@ the next `ask()` proceeds from the current chain.
 
 Accessors: `app`, `store`, `bus`, `session`, `provider`, `session_id`,
 `started`. The bus is exposed so callers can subscribe their own hooks (input
-interception, tool_call vetoing, context rewriting) exactly as wits do.
+interception, pre_tool_use vetoing, context rewriting) exactly as wits do.
 
 ### Topic glob conventions
 
@@ -185,7 +185,7 @@ alarm-bounded `waitpid`.
   `timed_out`.
 - **Event capture must return undef.** Per-turn capture subscribes to `*` on
   the bus; `publish()` gathers *defined* handler results as hook responses, so
-  a collector that returned a hashref could be misread by input/tool_call/
+  a collector that returned a hashref could be misread by input/pre_tool_use/
   message_end hooks.
 - **IPC::Open3 landmine (for test authors).** Its DESCRIPTION says
   `(read, write, other)` but the actual argument order is

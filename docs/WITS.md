@@ -149,7 +149,7 @@ sub register {
     );
 
     # Register bus event listeners
-    $api->on('tool_call', sub {
+    $api->on('pre_tool_use', sub {
         my ($ev) = @_;
         # Block dangerous git commands
     });
