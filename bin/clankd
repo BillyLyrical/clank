@@ -536,9 +536,9 @@ sub _register_clankd_sigils {
 
         if ($sub eq 'unload') {
             return { output => 'usage: ~ unload <wit-name>' } unless defined $rest && length $rest;
-            my $ok = eval { $pm->disable_wit($rest) };
+            my $result = eval { $pm->disable_wit($rest) };
             if ($@) { return { output => "unload error: $@" } }
-            return { output => $ok ? "unloaded $rest" : "wit '$rest' not found" };
+            return { output => $result };
         }
 
         if ($sub eq 'inspect') {
