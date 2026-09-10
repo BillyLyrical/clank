@@ -6,7 +6,7 @@ use Exporter 'import';
 
 our @EXPORT_OK = qw(builtin_tools version);
 
-our $VERSION = '0.1.0';
+our $VERSION = '0.4.0';
 
 sub version { return $VERSION }
 
