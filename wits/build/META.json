@@ -36,6 +36,10 @@
     "Clank::Wits::Build::Council": {
       "file": "lib/Clank/Wits/Build/Council.pm",
       "version": "1.0.0"
+    },
+    "Clank::Wits::Build::SkillComply": {
+      "file": "lib/Clank/Wits/Build/SkillComply.pm",
+      "version": "1.0.0"
     }
   },
   "requires": {
@@ -49,6 +53,7 @@
     { "trigger": "build_production_audit",  "module": "Clank::Wits::Build::ProductionAudit" },
     { "trigger": "build_verification_loop", "module": "Clank::Wits::Build::VerificationLoop" },
     { "trigger": "build_gateguard",          "module": "Clank::Wits::Build::GateGuard" },
-    { "trigger": "build_council",            "module": "Clank::Wits::Build::Council" }
+    { "trigger": "build_council",            "module": "Clank::Wits::Build::Council" },
+    { "trigger": "build_skill_comply",       "module": "Clank::Wits::Build::SkillComply" }
   ]
 }
