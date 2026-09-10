@@ -9,6 +9,7 @@
 #   Tool:       pre_tool_use, post_tool_use, post_tool_use_failure
 #   Context:    context.knowledge_request, context.procedural_guidance
 #   Subagent:   subagent_start, subagent_stop
+#   Agent:      pre_agent_start, agent_end, agent_delegate
 package Clank::Bus::Events;
 use strict;
 use warnings;
@@ -166,6 +167,23 @@ our %EVENTS = (
         category    => 'subagent',
         description => 'Subagent completed',
         payload     => { parent_session_id => 'string', child_session_id => 'string', ok => 'boolean', turns => 'integer' },
+    },
+
+    # --- Agent lifecycle ---
+    pre_agent_start => {
+        category    => 'agent',
+        description => 'Agent profile loaded, before loop runs',
+        payload     => { parent_session_id => 'string', child_session_id => 'string', agent => 'string', model => 'string' },
+    },
+    agent_end => {
+        category    => 'agent',
+        description => 'Agent execution completed',
+        payload     => { parent_session_id => 'string', child_session_id => 'string', ok => 'boolean', turns => 'integer', agent => 'string', model => 'string' },
+    },
+    agent_delegate => {
+        category    => 'agent',
+        description => 'One agent delegates to another',
+        payload     => { from_agent => 'string', to_agent => 'string', prompt => 'string' },
     },
 
     # --- Escalation ---

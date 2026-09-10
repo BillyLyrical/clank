@@ -6,6 +6,18 @@ use File::Basename ();
 
 my $AGENT_DIR;
 
+# Common stop words to exclude from TF scoring.
+my %STOP = map { $_ => 1 } qw(
+    the a an is are was were be been am do does did have has had
+    will would shall should may might can could of in to for on
+    with at by from as into through during before after above below
+    between out off over under again further then once here there when
+    where why how all each every both few more most other some such
+    no nor not only own same so than too very that this these those
+    and but or if because until while it its i me my we our you your
+    he him his she her they them their what which who whom
+);
+
 sub agent_dir {
     my ($class, $dir) = @_;
     $AGENT_DIR = $dir if defined $dir;
@@ -13,7 +25,7 @@ sub agent_dir {
 }
 
 # Load an agent profile by name. Returns undef if not found.
-# Profile = { name, description, model, tools, max_turns, prompt, raw_toml }
+# Profile = { name, description, model, tools, max_turns, prompt, delegate_to }
 sub load {
     my ($class, $name) = @_;
     my $dir = $class->agent_dir;
@@ -41,6 +53,45 @@ sub list {
 sub metadata {
     my ($class) = @_;
     return [ map { $class->load($_) } $class->list ];
+}
+
+# Route a prompt to the best-matching agent profile using TF scoring.
+# Returns { name, score } or undef if no profile scores above threshold.
+sub route {
+    my ($class, $prompt) = @_;
+    my @profiles = map { $class->load($_) } $class->list;
+    return undef unless @profiles;
+
+    my @prompt_tokens = _tokenize($prompt);
+    return undef unless @prompt_tokens;
+    my %prompt_tf;
+    $prompt_tf{$_}++ for @prompt_tokens;
+
+    my ($best_name, $best_score);
+    for my $p (@profiles) {
+        my @desc_tokens = _tokenize($p->{description} // '');
+        next unless @desc_tokens;
+        my %desc_tf;
+        $desc_tf{$_}++ for @desc_tokens;
+
+        # Score = sum of min(prompt_tf, desc_tf) for shared tokens.
+        my $score = 0;
+        for my $t (keys %prompt_tf) {
+            next unless $desc_tf{$t};
+            $score += ($prompt_tf{$t} < $desc_tf{$t} ? $prompt_tf{$t} : $desc_tf{$t});
+        }
+        # Normalize by description length to avoid bias toward short descriptions.
+        $score /= scalar @desc_tokens if @desc_tokens;
+
+        if (!defined $best_score || $score > $best_score) {
+            $best_score = $score;
+            $best_name  = $p->{name};
+        }
+    }
+
+    # Require minimum signal — don't route on noise.
+    return undef if !defined $best_score || $best_score < 0.1;
+    return { name => $best_name, score => $best_score };
 }
 
 # Spawn a subagent with a named profile via the parent loop.
@@ -94,7 +145,14 @@ sub spawn {
     $child->{skills}        = [ @{ $parent->{skills}        // [] } ];
     $child->{context_files} = [ @{ $parent->{context_files} // [] } ];
 
-    # Publish lifecycle event.
+    # Publish pre_agent_start lifecycle event (before loop runs).
+    $bus->publish('pre_agent_start', {
+        parent_session_id => $parent->id,
+        child_session_id  => $child->id,
+        agent             => $name,
+        model             => $provider->{model},
+    });
+
     $bus->publish('subagent_start', {
         parent_session_id => $parent->id,
         child_session_id  => $child->id,
@@ -115,7 +173,7 @@ sub spawn {
 
     my $result = $child_loop->run_prompt($prompt);
 
-    # Publish completion event.
+    # Publish completion events.
     $bus->publish('subagent_stop', {
         parent_session_id => $parent->id,
         child_session_id  => $child->id,
@@ -123,6 +181,16 @@ sub spawn {
         turns             => $result->{turns},
         error             => $result->{error},
         agent             => $name,
+    });
+
+    $bus->publish('agent_end', {
+        parent_session_id => $parent->id,
+        child_session_id  => $child->id,
+        ok                => $result->{ok},
+        turns             => $result->{turns},
+        error             => $result->{error},
+        agent             => $name,
+        model             => $provider->{model},
     });
 
     # Extract output.
@@ -143,6 +211,34 @@ sub spawn {
         agent      => $name,
         model      => $provider->{model},
     };
+}
+
+# Delegate to another agent from within an agent's execution.
+# Publishes agent_delegate event and spawns the target agent.
+# Returns the delegate's result hashref.
+sub delegate {
+    my ($class, %args) = @_;
+    my $from   = $args{from}   or die "Agent::delegate requires from\n";
+    my $to     = $args{to}     or die "Agent::delegate requires to\n";
+    my $prompt = $args{prompt} or die "Agent::delegate requires prompt\n";
+    my $loop   = $args{loop}   or die "Agent::delegate requires loop\n";
+
+    my $bus = $loop->_bus;
+    $bus->publish('agent_delegate', {
+        from_agent => $from,
+        to_agent   => $to,
+        prompt     => $prompt,
+    });
+
+    return $class->spawn(name => $to, prompt => $prompt, loop => $loop);
+}
+
+# Tokenize text for TF scoring. Lowercase, split on non-word, drop stop words.
+sub _tokenize {
+    my ($text) = @_;
+    return () unless defined $text;
+    my @tokens = grep { length($_) >= 2 && !$STOP{$_} } split /[^a-z0-9]+/i, lc($text);
+    return @tokens;
 }
 
 # Read file contents (avoids File::Slurp interference with tool namespace).

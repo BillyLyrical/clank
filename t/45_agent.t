@@ -26,6 +26,16 @@ sub make_loop {
 use Clank::Agent;
 Clank::Agent->agent_dir("$FindBin::Bin/../agents");
 
+# Helper: find index of element in array.
+sub first_index {
+    my ($cond, @arr) = @_;
+    for my $i (0 .. $#arr) {
+        local $_ = $arr[$i];
+        return $i if $cond->();
+    }
+    return -1;
+}
+
 # === Test 1: Agent.pm loads ===
 
 subtest 'Agent module loads' => sub {
@@ -252,6 +262,120 @@ subtest 'Spawn each agent type' => sub {
         ok($result->{ok}, "$name spawn succeeded");
         is($result->{agent}, $name, "$name name correct");
     }
+};
+
+# === Phase 2 tests ===
+
+# === Test 16: Route prompt to best agent ===
+
+subtest 'Route prompt to best agent' => sub {
+    my $r = Clank::Agent->route('review the code for bugs and style issues');
+    ok($r, 'routing returned a result');
+    is($r->{name}, 'reviewer', 'routed to reviewer');
+    ok($r->{score} > 0, 'score is positive');
+};
+
+# === Test 17: Route security prompt ===
+
+subtest 'Route security prompt' => sub {
+    my $r = Clank::Agent->route('scan for vulnerabilities and secrets');
+    ok($r, 'routing returned a result');
+    is($r->{name}, 'security', 'routed to security');
+};
+
+# === Test 18: Route architecture prompt ===
+
+subtest 'Route architecture prompt' => sub {
+    my $r = Clank::Agent->route('review the module boundaries and API design');
+    ok($r, 'routing returned a result');
+    is($r->{name}, 'architect', 'routed to architect');
+};
+
+# === Test 19: Route empty/garbage returns undef ===
+
+subtest 'Route noise returns undef' => sub {
+    my $r = Clank::Agent->route('x');
+    is($r, undef, 'single char returns undef');
+    $r = Clank::Agent->route('');
+    is($r, undef, 'empty string returns undef');
+};
+
+# === Test 20: Pre_agent_start and agent_end events ===
+
+subtest 'Agent lifecycle events' => sub {
+    my ($store, $bus, $mock, $sess, $loop) = make_loop;
+
+    my @events;
+    for my $ev (qw(pre_agent_start subagent_start subagent_stop agent_end)) {
+        $bus->subscribe($ev, sub {
+            push @events, { topic => $_[0]{topic}, agent => $_[0]{payload}{agent} // '' };
+        }, name => "spy_$ev");
+    }
+
+    Clank::Agent->spawn(
+        name   => 'reviewer',
+        prompt => 'review lib/Clank.pm',
+        loop   => $loop,
+    );
+
+    my @topics = map { $_->{topic} } @events;
+    ok(grep({ $_ eq 'pre_agent_start' } @topics), 'pre_agent_start fired');
+    ok(grep({ $_ eq 'subagent_start' } @topics), 'subagent_start fired');
+    ok(grep({ $_ eq 'subagent_stop' } @topics), 'subagent_stop fired');
+    ok(grep({ $_ eq 'agent_end' } @topics), 'agent_end fired');
+
+    # Verify ordering: pre_agent_start before subagent_start before subagent_stop before agent_end
+    my @agent_events = grep { $_->{agent} eq 'reviewer' } @events;
+    my @lifecycle = map { $_->{topic} } @agent_events;
+    my $pre_idx  = first_index(sub { $_ eq 'pre_agent_start' }, @lifecycle);
+    my $start_idx = first_index(sub { $_ eq 'subagent_start' }, @lifecycle);
+    my $stop_idx  = first_index(sub { $_ eq 'subagent_stop' }, @lifecycle);
+    my $end_idx   = first_index(sub { $_ eq 'agent_end' }, @lifecycle);
+    ok($pre_idx < $start_idx, 'pre_agent_start before subagent_start');
+    ok($stop_idx < $end_idx, 'subagent_stop before agent_end');
+};
+
+# === Test 21: Delegate method ===
+
+subtest 'Agent delegation' => sub {
+    my ($store, $bus, $mock, $sess, $loop) = make_loop;
+
+    my @delegates;
+    $bus->publish('agent_delegate', {
+        from_agent => 'reviewer',
+        to_agent   => 'debugger',
+        prompt     => 'fix the bug at line 42',
+    }) if 0; # just checking the event schema
+
+    # Subscribe to agent_delegate event
+    $bus->subscribe('agent_delegate', sub {
+        push @delegates, $_[0]{payload};
+    }, name => 'delegate_watcher');
+
+    my $result = eval {
+        Clank::Agent->delegate(
+            from   => 'reviewer',
+            to     => 'debugger',
+            prompt => 'fix the bug at line 42',
+            loop   => $loop,
+        );
+    };
+    ok(!$@, 'delegate did not die');
+    ok($result->{ok}, 'delegate spawn succeeded');
+    is($result->{agent}, 'debugger', 'delegated to debugger');
+    is(scalar @delegates, 1, 'agent_delegate event published');
+    is($delegates[0]{from_agent}, 'reviewer', 'delegate from is reviewer');
+    is($delegates[0]{to_agent}, 'debugger', 'delegate to is debugger');
+};
+
+# === Test 22: Delegate requires args ===
+
+subtest 'Delegate requires mandatory args' => sub {
+    my ($store, $bus, $mock, $sess, $loop) = make_loop;
+    eval { Clank::Agent->delegate(to => 'x', prompt => 'y', loop => $loop) };
+    like($@, qr/requires from/, 'dies without from');
+    eval { Clank::Agent->delegate(from => 'x', prompt => 'y', loop => $loop) };
+    like($@, qr/requires to/, 'dies without to');
 };
 
 done_testing;
