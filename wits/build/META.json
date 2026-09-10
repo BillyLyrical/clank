@@ -28,6 +28,10 @@
     "Clank::Wits::Build::VerificationLoop": {
       "file": "lib/Clank/Wits/Build/VerificationLoop.pm",
       "version": "1.0.0"
+    },
+    "Clank::Wits::Build::GateGuard": {
+      "file": "lib/Clank/Wits/Build/GateGuard.pm",
+      "version": "1.0.0"
     }
   },
   "requires": {
@@ -39,6 +43,7 @@
     { "trigger": "build_cpanm",             "module": "Clank::Wits::Build::Cpanm" },
     { "trigger": "build_test",              "module": "Clank::Wits::Build::Test" },
     { "trigger": "build_production_audit",  "module": "Clank::Wits::Build::ProductionAudit" },
-    { "trigger": "build_verification_loop", "module": "Clank::Wits::Build::VerificationLoop" }
+    { "trigger": "build_verification_loop", "module": "Clank::Wits::Build::VerificationLoop" },
+    { "trigger": "build_gateguard",          "module": "Clank::Wits::Build::GateGuard" }
   ]
 }
