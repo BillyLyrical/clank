@@ -1,8 +1,8 @@
 # Syntax, Semantics, and Pipeline Format
 
-Status: implemented. Sigil dispatch library built and integrated into
-REPL and clankd. All handlers wired: / ? $ @ % > : ~ ! #.
-Pipeline format (§2) is design-only.
+Status: implemented. Sigil dispatch library, all handlers, and pipeline
+system built. Blueprint parser, topic-wired execution, inline pipes.
+See lib/Clank/Sigil.pm, lib/Clank/Pipeline.pm.
 
 ---
 
