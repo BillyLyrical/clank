@@ -348,54 +348,184 @@ sub _register_clankd_sigils {
     # # — Comment: no-op.
     $sigil->register('#', sub { { output => '' } });
 
-    # ? — Query: informational LLM query (stub).
+    # ? — Query: informational LLM query.
     $sigil->register('?', sub {
         my ($app, $args) = @_;
         return { output => 'usage: ? <question>' } unless length $args;
-        return { output => "(query mode not yet implemented: $args)" };
+        my $wrapped = "[Informational query — answer from your knowledge of Clank. "
+                    . "Do not use tools unless explicitly asked.]\n\n$args";
+        my $resp = eval { $driver->ask($wrapped) };
+        if ($@) { return { output => "query error: $@" } }
+        return { output => $resp->{response} // '(no response)' };
     });
 
-    # $ — Eval: Perl expression (stub).
+    # $ — Eval: Perl expression in harness context.
     $sigil->register('$', sub {
         my ($app, $args) = @_;
         return { output => 'usage: $ <perl expression>' } unless length $args;
-        return { output => "(eval mode not yet implemented: $args)" };
+        my $store   = $driver->app->store;
+        my $bus     = $driver->app->bus;
+        my $session = $driver->app->session;
+        my $result  = eval "no warnings; $args";
+        if ($@) { return { output => "eval error: $@" } }
+        return { output => defined $result ? "$result" : '(undef)' };
     });
 
-    # @ — Agent: agent dispatch (stub).
+    # @ — Agent: dispatch agent operations.
     $sigil->register('@', sub {
         my ($app, $args) = @_;
-        return { output => "(agent mode not yet implemented: $args)" };
+        require Clank::Agent;
+        my ($sub, $rest) = $args =~ /^(\S+)(?:\s+(.*))?$/;
+        $sub //= '';
+
+        if ($sub eq 'list' || $sub eq '') {
+            my @names = Clank::Agent->list;
+            return { output => 'usage: @list | @status | @<name> <prompt>' } unless @names;
+            my @out;
+            for my $name (@names) {
+                my $p = Clank::Agent->load($name);
+                push @out, sprintf("  %-16s %s", $p->{name}, $p->{description} // '');
+            }
+            return { output => "agents:\n" . join("\n", @out) };
+        }
+
+        if ($sub eq 'status') {
+            my $stats = Clank::Agent->stats;
+            my @out;
+            for my $name (sort keys %$stats) {
+                my $s = $stats->{$name};
+                push @out, sprintf("  %-16s calls:%d ok:%d errors:%d turns:%d",
+                    $name, $s->{calls}, $s->{ok}, $s->{errors}, $s->{turns});
+            }
+            return { output => @out ? "agent stats:\n" . join("\n", @out) : '(no agents invoked yet)' };
+        }
+
+        my $prompt = $rest // '';
+        return { output => "usage: @<agent-name> <prompt>" } unless length $prompt;
+        my $loop = $driver->app->loop;
+        return { output => 'no active loop — start a session first' } unless $loop;
+        my $result = eval {
+            Clank::Agent->spawn(name => $sub, prompt => $prompt, loop => $loop);
+        };
+        if ($@) { return { output => "agent error: $@" } }
+        my $out = "[$result->{agent}] turns: $result->{turns}\n\n" . ($result->{output} // '(no output)');
+        return { output => $out };
     });
 
-    # % — Pipeline: run named pipeline (stub).
+    # % — Pipeline: run named pipeline.
     $sigil->register('%', sub {
         my ($app, $args) = @_;
-        return { output => "(pipeline mode not yet implemented: $args)" };
+        return { output => 'usage: % <pipeline-name> | % list' } unless length $args;
+        if ($args eq 'list') {
+            my $dir = "$ENV{HOME}/.clank/pipelines";
+            opendir my $dh, $dir or return { output => '(no pipelines directory)' };
+            my @files = sort map { s/\.clank$//r } grep { /\.clank$/ } readdir $dh;
+            closedir $dh;
+            return { output => @files ? "pipelines:\n  " . join("\n  ", @files) : '(no pipelines found)' };
+        }
+        return { output => "pipeline '$args' not yet implemented — use /agent instead" };
     });
 
-    # > — Pipe: inline pipeline (stub).
+    # > — Pipe: inline pipeline construction.
     $sigil->register('>', sub {
         my ($app, $args) = @_;
-        return { output => "(pipe mode not yet implemented: $args)" };
+        return { output => 'usage: > stage1 | stage2 | stage3' } unless length $args;
+        return { output => "inline pipes not yet implemented — use /agent instead" };
     });
 
-    # : — Topic: bus publish/subscribe (stub).
+    # : — Topic: bus publish/subscribe.
     $sigil->register(':', sub {
         my ($app, $args) = @_;
-        return { output => "(topic mode not yet implemented: $args)" };
+        return { output => 'usage: : <topic> | : listen <topic> | : publish <topic> <json>' } unless length $args;
+        my $bus = $driver->app->bus;
+
+        if ($args =~ /^listen\s+(\S+)/) {
+            my $topic = $1;
+            my @seen;
+            my $sub_id = $bus->subscribe($topic, sub {
+                push @seen, $_[0]{payload} if @seen < 10;
+            }, name => 'sigil_listen');
+            select(undef, undef, undef, 0.1);
+            $bus->unsubscribe($sub_id);
+            if (@seen) {
+                require Clank::Util;
+                my @out = map { '  ' . Clank::Util::jencode($_) } @seen;
+                return { output => "events on $topic:\n" . join("\n", @out) };
+            }
+            return { output => "(no recent events on $topic)" };
+        }
+
+        if ($args =~ /^publish\s+(\S+)\s+(.+)$/) {
+            my ($topic, $payload_str) = ($1, $2);
+            my $payload = eval { Clank::Util::jdecode($payload_str) };
+            if ($@) { return { output => "invalid JSON: $@" } }
+            $bus->publish($topic, $payload);
+            return { output => "published to $topic" };
+        }
+
+        $bus->publish($args, {});
+        return { output => "published to $args" };
     });
 
-    # ~ — Wit: wit management (stub).
+    # ~ — Wit: wit lifecycle management.
     $sigil->register('~', sub {
         my ($app, $args) = @_;
-        return { output => "(wit mode not yet implemented: $args)" };
+        my ($sub, $rest) = $args =~ /^(\S+)(?:\s+(.*))?$/;
+        $sub //= '';
+        my $pm = $driver->app->pm;
+
+        if ($sub eq 'list' || $sub eq '') {
+            my @ws = $driver->app->wits;
+            return { output => '(no wits loaded)' } unless @ws;
+            my @out;
+            for my $w (@ws) {
+                push @out, sprintf("  %-20s %-9s %s", $w->{name}, $w->{state} // 'active', $w->{dir});
+            }
+            return { output => "wits:\n" . join("\n", @out) };
+        }
+
+        if ($sub eq 'load') {
+            return { output => 'usage: ~ load <directory-path>' } unless defined $rest && length $rest;
+            my @loaded = eval { $pm->load_all(extra_paths => [$rest]) };
+            if ($@) { return { output => "load error: $@" } }
+            return { output => "loaded " . scalar(@loaded) . " wit(s) from $rest" };
+        }
+
+        if ($sub eq 'unload') {
+            return { output => 'usage: ~ unload <wit-name>' } unless defined $rest && length $rest;
+            my $ok = eval { $pm->disable_wit($rest) };
+            if ($@) { return { output => "unload error: $@" } }
+            return { output => $ok ? "unloaded $rest" : "wit '$rest' not found" };
+        }
+
+        if ($sub eq 'inspect') {
+            return { output => 'usage: ~ inspect <wit-name>' } unless defined $rest && length $rest;
+            my @ws = $driver->app->wits;
+            for my $w (@ws) {
+                if ($w->{name} eq $rest) {
+                    my @out = ("$rest:");
+                    push @out, "  state: " . ($w->{state} // 'active');
+                    push @out, "  dir:   $w->{dir}";
+                    push @out, "  pkg:   $w->{pkg}";
+                    return { output => join("\n", @out) };
+                }
+            }
+            return { output => "wit '$rest' not found" };
+        }
+
+        if ($sub eq 'status') {
+            my @ws = $driver->app->wits;
+            my $active = grep { !($_->{state} // '') eq 'disabled' } @ws;
+            return { output => "wits: $active active, " . scalar(@ws) . " total" };
+        }
+
+        return { output => "usage: ~ list | ~ load <path> | ~ unload <name> | ~ inspect <name> | ~ status" };
     });
 
-    # ! — History: re-run previous command (stub).
+    # ! — History: not applicable in stateless JSON protocol.
     $sigil->register('!', sub {
         my ($app, $args) = @_;
-        return { output => "(history mode not yet implemented: $args)" };
+        return { output => "history not available in clankd — send the command directly" };
     });
 }
 
