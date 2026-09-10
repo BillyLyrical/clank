@@ -361,6 +361,14 @@ sub run_prompt {
             $bus->publish('tool_execution_end',
                 { toolCallId => $tc->{id}, name => $tc->{name}, isError => $is_err });
 
+            # Feed instinct learning: every tool call is an observation.
+            $bus->publish('observation', {
+                tool    => $tc->{name},
+                input   => $input,
+                output  => $output,
+                success => !$is_err,
+            });
+
             # Post-tool-call compression: summarize large outputs before re-entry.
             # Keeps context manageable without losing essential information.
             if (!$is_err && defined $output && length($output) > 4000) {
