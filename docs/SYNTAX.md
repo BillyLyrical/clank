@@ -1,8 +1,8 @@
 # Syntax, Semantics, and Pipeline Format
 
-Status: implemented (Phase 2 partial). Sigil dispatch library built and
-integrated into REPL and clankd. / Command fully wired, ? $ @ % > : ~ !
-stubbed. Pipeline format (§2) is design-only.
+Status: implemented. Sigil dispatch library built and integrated into
+REPL and clankd. All handlers wired: / ? $ @ % > : ~ ! #.
+Pipeline format (§2) is design-only.
 
 ---
 
