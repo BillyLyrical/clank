@@ -134,11 +134,11 @@ is($stats->{edges}, 5, 'initial graph: 5 edges');
 # Phase 2: Bus guidance — simulate Loop.pm context assembly
 # ===========================================================================
 
-my @pg_subs = grep { $_->{topic} eq 'context.procedural_guidance' } @{$api->{bus}{subs}};
+my @pg_subs = grep { $_->{topic} eq 'context_procedural_guidance' } @{$api->{bus}{subs}};
 is(scalar @pg_subs, 1, 'guidance bus subscriber registered');
 
 # Simulate agent taking action "check_cash" — should get guidance about forecast
-my $result = $api->{bus}->publish('context.procedural_guidance', {
+my $result = $api->{bus}->publish('context_procedural_guidance', {
     prompt      => 'what should I do next?',
     last_action => 'check_cash',
 });
@@ -151,7 +151,7 @@ like($guidance, qr/project runway for next 6 months/, 'guidance text present');
 like($guidance, qr/do not skip negative balance check/, 'pitfalls present');
 
 # Simulate agent at "start" — should get guidance about check_cash
-$result = $api->{bus}->publish('context.procedural_guidance', {
+$result = $api->{bus}->publish('context_procedural_guidance', {
     prompt      => 'start the analysis',
     last_action => 'start',
 });
@@ -160,7 +160,7 @@ like($guidance, qr/Check Cash/, 'start -> check_cash guidance');
 like($guidance, qr/begin by verifying current bank balance/, 'start guidance text');
 
 # Unknown action — no guidance
-$result = $api->{bus}->publish('context.procedural_guidance', {
+$result = $api->{bus}->publish('context_procedural_guidance', {
     prompt      => 'do something random',
     last_action => 'xyzzy',
 });
@@ -176,7 +176,7 @@ my @actions = ('start', 'check_cash', 'forecast', 'check_market');
 
 for my $action (@actions) {
     # Get guidance for this step
-    $result = $api->{bus}->publish('context.procedural_guidance', {
+    $result = $api->{bus}->publish('context_procedural_guidance', {
         prompt      => 'continue analysis',
         last_action => $action,
     });

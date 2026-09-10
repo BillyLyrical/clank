@@ -123,7 +123,7 @@ sub broadcast {
         _timestamp    => now_ms(),
     };
 
-    my $pub = $bus->publish('mesh.broadcast', $envelope, sender => "mesh:$sid");
+    my $pub = $bus->publish('mesh_broadcast', $envelope, sender => "mesh:$sid");
     $self->{metrics}->inc('mesh.broadcasts') if $self->{metrics};
 
     return {

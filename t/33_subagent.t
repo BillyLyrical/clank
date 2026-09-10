@@ -66,7 +66,7 @@ subtest 'Child shares bus' => sub {
     my ($store, $bus, $mock, $sess, $loop) = make_loop;
 
     my @events;
-    $bus->subscribe('subagent.spawn', sub {
+    $bus->subscribe('subagent_start', sub {
         push @events, $_[0]{payload}{child_session_id};
     }, name => 'watcher');
 
@@ -92,15 +92,15 @@ subtest 'Spawn publishes bus events' => sub {
     my ($store, $bus, $mock, $sess, $loop) = make_loop;
 
     my @spawned;
-    $bus->subscribe('subagent.spawn', sub { push @spawned, $_[0]{payload} }, name => 'watcher1');
+    $bus->subscribe('subagent_start', sub { push @spawned, $_[0]{payload} }, name => 'watcher1');
     my @done;
-    $bus->subscribe('subagent.done', sub { push @done, $_[0]{payload} }, name => 'watcher2');
+    $bus->subscribe('subagent_stop', sub { push @done, $_[0]{payload} }, name => 'watcher2');
 
     my $result = $loop->spawn(prompt => 'do something');
 
-    ok(scalar @spawned >= 1, 'subagent.spawn event published');
+    ok(scalar @spawned >= 1, 'subagent_start event published');
     is($spawned[0]{parent_session_id}, $sess->id, 'parent session ID in spawn event');
-    ok(scalar @done >= 1, 'subagent.done event published');
+    ok(scalar @done >= 1, 'subagent_stop event published');
     is($done[0]{child_session_id}, $result->{session_id}, 'child session ID in done event');
 };
 

@@ -135,7 +135,7 @@ $out = $pg_cmd->($ctx, '');
 like($out, qr/NODES|empty/, '/pg with no args shows graph (or empty)');
 
 # --- Bus guidance ---
-my @pg_subs = grep { $_->{topic} eq 'context.procedural_guidance' } @{$api->{bus}{subs}};
+my @pg_subs = grep { $_->{topic} eq 'context_procedural_guidance' } @{$api->{bus}{subs}};
 is(scalar @pg_subs, 1, 'procedural_guidance subscribed');
 
 $pg->add_node(id => 'start', label => 'Start');

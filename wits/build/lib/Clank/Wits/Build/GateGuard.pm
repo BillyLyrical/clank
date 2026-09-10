@@ -33,7 +33,7 @@ sub register {
         exempt_globs   => [],
     };
 
-    $api->on('tool_call', sub {
+    $api->on('pre_tool_use', sub {
         my ($ev) = @_;
         my $name = $ev->{payload}{name} // '';
         my $input = $ev->{payload}{input} // {};

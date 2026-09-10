@@ -70,9 +70,9 @@ $mesh_a->on_message(sub {
 });
 
 $mesh_b->broadcast({ announcement => 'B is online' });
-# Broadcast goes to mesh.broadcast topic — both sessions would need to
-# subscribe to mesh.broadcast to receive it. Let's subscribe A.
-$bus->subscribe('mesh.broadcast', sub {
+# Broadcast goes to mesh_broadcast topic — both sessions would need to
+# subscribe to mesh_broadcast to receive it. Let's subscribe A.
+$bus->subscribe('mesh_broadcast', sub {
     my ($ev) = @_;
     push @broadcast_a, {
         from    => $ev->{payload}{_from_session} // 'unknown',

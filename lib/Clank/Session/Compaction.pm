@@ -51,7 +51,7 @@ sub compact {
 
     # session_before_compact hook: wits may cancel or add instructions.
     if ($bus) {
-        my $pub = $bus->publish('session_before_compact',
+        my $pub = $bus->publish('pre_compact',
             { session_id => $sid, messages_to_summarize => scalar @older });
         for my $r (@{ $pub->{results} }) {
             next unless ref $r eq 'HASH';
@@ -77,7 +77,7 @@ sub compact {
     };
     if ($@ || !$resp) {
         my $err = "$@";
-        $bus->publish('session_compact_failed', { session_id => $sid, error => $err }) if $bus;
+        $bus->publish('post_compact', { session_id => $sid, error => $err }) if $bus;
         return undef;
     }
     my $summary = $resp->{choices}[0]{message}{content} // '';
@@ -93,7 +93,7 @@ sub compact {
             summarized_count => scalar @older,
         },
     );
-    $bus->publish('session_compact',
+    $bus->publish('post_compact',
         { session_id => $sid, compaction_id => $id, kept_messages => $n - $cut }) if $bus;
     return $id;
 }

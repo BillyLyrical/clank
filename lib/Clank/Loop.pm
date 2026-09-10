@@ -85,7 +85,7 @@ sub run_prompt {
     # 2a) escalation check: cheapest correct tool first.
     #     If a crystallized rule, world model fact, or rules engine derivation
     #     can answer the question, short-circuit the LLM call entirely.
-    my $esc = $bus->publish('escalation.check', { prompt => $final_text });
+    my $esc = $bus->publish('escalation_check', { prompt => $final_text });
     for my $r (@{ $esc->{results} }) {
         next unless ref $r eq 'HASH' && $r->{handled};
         my $output = $r->{output} // '';
@@ -139,7 +139,7 @@ sub run_prompt {
 
         # 3c) knowledge context: query world model + crystallizer for relevant facts.
         my $last_msg = $msgs->[-1]{content} // '';
-        my $kr = $bus->publish('context.knowledge_request', { prompt => $last_msg });
+        my $kr = $bus->publish('context_knowledge_request', { prompt => $last_msg });
         my @knowledge;
         for my $r (@{ $kr->{results} }) {
             next unless ref $r eq 'HASH';
@@ -154,7 +154,7 @@ sub run_prompt {
 
         # 3d) procedural guidance: query procedural graph for situational hints.
         my $last_action = _extract_last_action($msgs);
-        my $pg_result = $bus->publish('context.procedural_guidance', {
+        my $pg_result = $bus->publish('context_procedural_guidance', {
             prompt      => $last_msg,
             last_action => $last_action,
         });
@@ -325,7 +325,7 @@ sub run_prompt {
 
             # tool_call hook: input mutable in place; first block wins
             my $input = $tc->{arguments};
-            my $pub2  = $bus->publish('tool_call',
+            my $pub2  = $bus->publish('pre_tool_use',
                 { toolCallId => $tc->{id}, name => $tc->{name}, input => $input });
             my ($blocked, $reason);
             for my $r (@{ $pub2->{results} }) {
@@ -353,7 +353,7 @@ sub run_prompt {
             }
 
             # tool_result hook: output/isError mutable (chained)
-            my $tr = $bus->publish('tool_result',
+            my $tr = $bus->publish('post_tool_use',
                 { toolCallId => $tc->{id}, name => $tc->{name}, output => $output, isError => $is_err });
             for my $r (@{ $tr->{results} }) {
                 next unless ref $r eq 'HASH';
@@ -615,7 +615,7 @@ sub spawn {
     $child_session->{context_files} = [ @{ $parent->{context_files} // [] } ];
 
     # Publish subagent.spawn event.
-    $bus->publish('subagent.spawn', {
+    $bus->publish('subagent_start', {
         parent_session_id => $parent->id,
         child_session_id  => $child_session->id,
         prompt            => $prompt,
@@ -636,7 +636,7 @@ sub spawn {
     my $result = $child_loop->run_prompt($prompt);
 
     # Publish subagent.done event.
-    $bus->publish('subagent.done', {
+    $bus->publish('subagent_stop', {
         parent_session_id => $parent->id,
         child_session_id  => $child_session->id,
         ok                => $result->{ok},

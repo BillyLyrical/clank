@@ -21,7 +21,7 @@ sub register {
     $api->{pg} = $pg;
 
     # --- Bus: procedural guidance context ---
-    $api->on('context.procedural_guidance', sub {
+    $api->on('context_procedural_guidance', sub {
         my ($ev) = @_;
         my $last_action = $ev->{payload}{last_action} // '';
         my $prompt      = $ev->{payload}{prompt} // '';
