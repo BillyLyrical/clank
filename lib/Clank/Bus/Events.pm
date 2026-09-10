@@ -14,7 +14,7 @@ use strict;
 use warnings;
 use Exporter 'import';
 
-our @EXPORT_OK = qw(event_info event_topic alias_topic %EVENTS %ALIASES);
+our @EXPORT_OK = qw(event_info event_topic %EVENTS);
 
 # === EVENT CATALOG ===
 # Key: canonical topic name
@@ -200,56 +200,16 @@ our %EVENTS = (
     },
 );
 
-# === BACKWARD-COMPATIBLE ALIASES ===
-# Old topic name => canonical topic name.
-# Wits using old names continue to work.
-
-our %ALIASES = (
-    # Tool lifecycle (old dot notation -> new underscore notation)
-    'tool_call'                 => 'pre_tool_use',
-    'tool_result'               => 'post_tool_use',
-    'tool_execution_start'      => 'tool_execution_start',   # already canonical
-    'tool_execution_end'        => 'tool_execution_end',     # already canonical
-
-    # Context (old dot notation -> new underscore notation)
-    'context.knowledge_request'     => 'context_knowledge_request',
-    'context.procedural_guidance'   => 'context_procedural_guidance',
-
-    # Compaction
-    'session_before_compact'    => 'pre_compact',
-    'session_compact'           => 'post_compact',
-    'session_compact_failed'    => 'post_compact',  # merged: failure is just a flag
-
-    # Subagent
-    'subagent.spawn'            => 'subagent_start',
-    'subagent.done'             => 'subagent_stop',
-
-    # Escalation
-    'escalation.check'          => 'escalation_check',
-
-    # Mesh / Director
-    'mesh.broadcast'            => 'mesh_broadcast',
-    'director.done'             => 'director_done',
-    'band.discover'             => 'band_discover',
-    'metrics.self_stats'        => 'metrics_self_stats',
-);
-
 # === API ===
 
 sub event_info {
     my ($topic) = @_;
-    my $canonical = $ALIASES{$topic} // $topic;
-    return $EVENTS{$canonical};
+    return $EVENTS{$topic};
 }
 
 sub event_topic {
     my ($topic) = @_;
-    return $ALIASES{$topic} // $topic;
-}
-
-sub alias_topic {
-    my ($old_name) = @_;
-    return $ALIASES{$old_name};
+    return $topic;
 }
 
 1;

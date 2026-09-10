@@ -7,7 +7,7 @@ use lib "$FindBin::Bin/../lib";
 
 use Clank::Store;
 use Clank::Bus;
-use Clank::Bus::Events qw(event_info event_topic %EVENTS %ALIASES);
+use Clank::Bus::Events qw(event_info event_topic %EVENTS);
 
 # === Test 1: Event catalog has all topics ===
 
@@ -35,50 +35,33 @@ subtest 'Event catalog completeness' => sub {
     }
 };
 
-# === Test 2: Aliases map old names to canonical ===
+# === Test 2: event_info returns correct schema ===
 
-subtest 'Alias mapping' => sub {
-    is(event_topic('tool_call'), 'pre_tool_use', 'tool_call -> pre_tool_use');
-    is(event_topic('tool_result'), 'post_tool_use', 'tool_result -> post_tool_use');
-    is(event_topic('context.knowledge_request'), 'context_knowledge_request', 'dot notation -> underscore');
-    is(event_topic('context.procedural_guidance'), 'context_procedural_guidance', 'dot notation -> underscore');
-    is(event_topic('session_before_compact'), 'pre_compact', 'session_before_compact -> pre_compact');
-    is(event_topic('session_compact'), 'post_compact', 'session_compact -> post_compact');
-    is(event_topic('subagent.spawn'), 'subagent_start', 'subagent.spawn -> subagent_start');
-    is(event_topic('subagent.done'), 'subagent_stop', 'subagent.done -> subagent_stop');
-    is(event_topic('escalation.check'), 'escalation_check', 'escalation.check -> escalation_check');
-    is(event_topic('mesh.broadcast'), 'mesh_broadcast', 'mesh.broadcast -> mesh_broadcast');
+subtest 'event_info returns schema' => sub {
+    my $info = event_info('pre_tool_use');
+    ok(defined $info, 'event_info for known topic');
+    is($info->{category}, 'tool', 'correct category');
+    ok(defined $info->{description}, 'has description');
+    ok(ref $info->{payload} eq 'HASH', 'has payload hash');
+
+    my $unknown = event_info('nonexistent_topic');
+    ok(!defined $unknown, 'event_info returns undef for unknown');
 };
 
-# === Test 3: Canonical names resolve to themselves ===
+# === Test 3: event_topic is identity ===
 
-subtest 'Canonical names are identity' => sub {
-    is(event_topic('pre_tool_use'), 'pre_tool_use', 'pre_tool_use stays');
-    is(event_topic('post_tool_use'), 'post_tool_use', 'post_tool_use stays');
-    is(event_topic('session_start'), 'session_start', 'session_start stays');
+subtest 'event_topic returns topic unchanged' => sub {
+    is(event_topic('pre_tool_use'), 'pre_tool_use', 'canonical stays');
     is(event_topic('agent_end'), 'agent_end', 'agent_end stays');
+    is(event_topic('session_start'), 'session_start', 'session_start stays');
 };
 
-# === Test 4: event_info returns schema for canonical and alias ===
+# === Test 4: Bus publish/subscribe with canonical names ===
 
-subtest 'event_info works for both' => sub {
-    my $info1 = event_info('tool_call');
-    ok(defined $info1, 'event_info for alias');
-    is($info1->{category}, 'tool', 'correct category');
-
-    my $info2 = event_info('pre_tool_use');
-    ok(defined $info2, 'event_info for canonical');
-    is($info2->{category}, 'tool', 'same category');
-};
-
-# === Test 5: Bus alias resolution dispatches to canonical subscribers ===
-
-subtest 'Bus aliases dispatch correctly' => sub {
+subtest 'Bus dispatch with canonical names' => sub {
     my $store = Clank::Store->new(db => ':memory:');
     my $bus = Clank::Bus->new(store => $store);
-    $bus->add_aliases(%ALIASES);
 
-    # Subscribe to canonical name.
     my @received;
     $bus->subscribe('pre_tool_use', sub {
         my ($ev) = @_;
@@ -86,69 +69,30 @@ subtest 'Bus aliases dispatch correctly' => sub {
         return undef;
     });
 
-    # Publish under old name.
-    $bus->publish('tool_call', { name => 'bash' });
+    $bus->publish('pre_tool_use', { name => 'bash' });
 
     is(scalar @received, 1, 'subscriber received event');
-    is($received[0]{topic}, 'tool_call', 'topic is the published name (not rewritten)');
+    is($received[0]{topic}, 'pre_tool_use', 'topic matches');
     is($received[0]{payload}{name}, 'bash', 'payload intact');
 };
 
-# === Test 6: Bus aliases dispatch to old-name subscribers from canonical publish ===
+# === Test 5: Bus glob matching still works ===
 
-subtest 'Bus aliases reverse dispatch' => sub {
+subtest 'Bus glob matching' => sub {
     my $store = Clank::Store->new(db => ':memory:');
     my $bus = Clank::Bus->new(store => $store);
-    $bus->add_aliases(%ALIASES);
-
-    # Subscribe to old name.
-    my @received;
-    $bus->subscribe('tool_call', sub {
-        my ($ev) = @_;
-        push @received, $ev->{topic};
-        return undef;
-    });
-
-    # Publish under canonical name.
-    $bus->publish('pre_tool_use', { name => 'read' });
-
-    is(scalar @received, 1, 'old-name subscriber received canonical event');
-    is($received[0], 'pre_tool_use', 'topic is canonical');
-};
-
-# === Test 7: No double-dispatch when alias = canonical ===
-
-subtest 'No double dispatch' => sub {
-    my $store = Clank::Store->new(db => ':memory:');
-    my $bus = Clank::Bus->new(store => $store);
-    $bus->add_aliases(%ALIASES);
 
     my $count = 0;
-    $bus->subscribe('pre_tool_use', sub { $count++; return undef });
+    $bus->subscribe('tool_execution_*', sub { $count++; return undef });
 
-    # Publish under canonical — should only fire once.
-    $bus->publish('pre_tool_use', {});
-    is($count, 1, 'no double dispatch for canonical');
+    $bus->publish('tool_execution_start', { name => 'bash' });
+    $bus->publish('tool_execution_end', { name => 'bash' });
+    $bus->publish('pre_tool_use', { name => 'bash' });
+
+    is($count, 2, 'glob matched two tool_execution events, not pre_tool_use');
 };
 
-# === Test 8: Existing subscribers still work without alias registration ===
-
-subtest 'Backward compatible without aliases' => sub {
-    my $store = Clank::Store->new(db => ':memory:');
-    my $bus = Clank::Bus->new(store => $store);
-    # No add_aliases call.
-
-    my @received;
-    $bus->subscribe('tool_call', sub {
-        push @received, $_[0]{topic};
-        return undef;
-    });
-
-    $bus->publish('tool_call', { name => 'bash' });
-    is(scalar @received, 1, 'works without aliases');
-};
-
-# === Test 9: Categories are consistent ===
+# === Test 6: Categories are consistent ===
 
 subtest 'Category groups' => sub {
     my %categories;

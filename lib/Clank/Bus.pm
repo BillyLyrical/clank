@@ -11,43 +11,12 @@ sub new {
         sender     => $args{sender} // 'bus',
         subs       => [],          # [ {pattern, code, name}, ... ]
         reply_waiters => {},       # correlation_id -> [coderefs] (request/reply)
-        aliases    => {},          # old_topic => canonical_topic
     }, $class;
     return $self;
 }
 
 sub store  { $_[0]->{store} }
 sub sender { $_[0]->{sender} }
-
-# Register topic aliases: old_name => canonical_name.
-# When published under old_name, subscribers of canonical_name also receive it.
-sub add_aliases {
-    my ($self, %map) = @_;
-    @{ $self->{aliases} }{ keys %map } = values %map;
-}
-
-# Resolve a topic through the alias map.
-sub _resolve {
-    my ($self, $topic) = @_;
-    return $self->{aliases}{$topic} // $topic;
-}
-
-# Expand a topic into [canonical, alias] for dispatch matching.
-sub _expand {
-    my ($self, $topic) = @_;
-    my $canonical = $self->_resolve($topic);
-    if ($canonical ne $topic) {
-        return ($topic, $canonical);
-    }
-    # Check reverse: is this topic the canonical target of any alias?
-    my @extra;
-    for my $old (keys %{ $self->{aliases} }) {
-        if ($self->{aliases}{$old} eq $topic) {
-            push @extra, $old;
-        }
-    }
-    return ($topic, @extra);
-}
 
 # Glob-style topic match: 'tool.*' matches 'tool.call.bash'; '*' matches all.
 # Public so journal queries (Clank::Driver, clankd) can filter with the same
@@ -93,17 +62,10 @@ sub publish {
         topic => $topic, sender => $sender, payload => $payload,
     );
 
-    # Expand topic through aliases for dispatch matching.
-    my @topics = $self->_expand($topic);
-
     # dispatch to matching subscribers (registration order)
     my @results;
     for my $sub (@{$self->{subs}}) {
-        my $matched = 0;
-        for my $t (@topics) {
-            if (_match($sub->{pattern}, $t)) { $matched = 1; last }
-        }
-        next unless $matched;
+        next unless _match($sub->{pattern}, $topic);
         my $result = eval {
             $sub->{code}->({
                 id => $id, correlation_id => $correlation_id,
