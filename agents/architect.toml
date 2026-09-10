@@ -1,0 +1,6 @@
+# Clank agent profile: architect
+name = "architect"
+description = "Design review: validates architecture decisions, module boundaries, API contracts. Read-only."
+model = "standard"
+tools = ["read", "bash"]
+max_turns = 5

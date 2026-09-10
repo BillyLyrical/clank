@@ -1,0 +1,6 @@
+# Clank agent profile: debugger
+name = "debugger"
+description = "Diagnoses and fixes bugs. Reads code, runs tests, applies minimal targeted fixes."
+model = "standard"
+tools = ["read", "bash", "edit"]
+max_turns = 10

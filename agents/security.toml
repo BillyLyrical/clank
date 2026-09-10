@@ -1,0 +1,6 @@
+# Clank agent profile: security
+name = "security"
+description = "Security review: scans for vulnerabilities, secrets, input validation issues. Read-only."
+model = "standard"
+tools = ["read", "bash"]
+max_turns = 5

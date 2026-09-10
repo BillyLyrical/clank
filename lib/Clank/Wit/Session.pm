@@ -153,24 +153,36 @@ sub register {
         return "agents:\n" . join("\n", @out);
     });
 
-    $api->register_command('agent', description => 'run an agent: /agent <name> <prompt>', handler => sub {
+    $api->register_command('agent', description => 'run an agent: /agent [--model=X] <name> <prompt>', handler => sub {
         my ($ctx, $args) = @_;
         require Clank::Agent;
         if (!defined $args || $args !~ /^(\S+)\s+(.+)$/) {
             my @names = Clank::Agent->list;
             my $list = @names ? "available: " . join(', ', @names) : '(no profiles)';
-            return "usage: /agent <name> <prompt>\n$list";
+            return "usage: /agent [--model=tier] <name> <prompt>\n$list";
         }
         my ($name, $prompt) = ($1, $2);
+        my %opts;
+        while ($name =~ /^--(\w+)=(.+)$/) {
+            $opts{$1} = $2;
+            ($name, $prompt) = ($prompt =~ /^(\S+)\s+(.+)$/)
+                or return "usage: /agent [--model=tier] <name> <prompt>";
+        }
         my $loop = $ctx->{app}->loop;
         unless ($loop) {
             return "no active loop — start a session first";
         }
         my $result = eval {
-            Clank::Agent->spawn(name => $name, prompt => $prompt, loop => $loop);
+            Clank::Agent->spawn(
+                name   => $name,
+                prompt => $prompt,
+                loop   => $loop,
+                (defined $opts{model} ? (model => $opts{model}) : ()),
+            );
         };
         if ($@) { return "agent error: $@" }
-        my $out = "[$result->{agent}] turns: $result->{turns}\n\n" . ($result->{output} // '(no output)');
+        my $model_info = $result->{model} ? " model: $result->{model}" : '';
+        my $out = "[$result->{agent}] turns: $result->{turns}$model_info\n\n" . ($result->{output} // '(no output)');
         return $out;
     });
 

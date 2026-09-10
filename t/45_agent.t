@@ -175,4 +175,83 @@ subtest 'max_turns override' => sub {
     ok($result->{turns} <= 2, 'turns within override limit');
 };
 
+# === Test 11: All 5 agent profiles load ===
+
+subtest 'All agent profiles load' => sub {
+    my @names = Clank::Agent->list;
+    is(scalar @names, 5, 'five agents found');
+    for my $name (qw(reviewer planner debugger security architect)) {
+        my $p = Clank::Agent->load($name);
+        ok($p, "$name loads");
+        is($p->{name}, $name, "$name has correct name");
+        ok(ref $p->{tools} eq 'ARRAY' && @{$p->{tools}}, "$name has tools");
+        ok(defined $p->{model}, "$name has model");
+        ok($p->{prompt}, "$name has prompt");
+    }
+};
+
+# === Test 12: Tool sets differ by profile ===
+
+subtest 'Tool sets differ by profile' => sub {
+    my %expected = (
+        reviewer  => [qw(read bash)],
+        planner   => [qw(read bash)],
+        debugger  => [qw(read bash edit)],
+        security  => [qw(read bash)],
+        architect => [qw(read bash)],
+    );
+    for my $name (keys %expected) {
+        my $p = Clank::Agent->load($name);
+        my @got = sort @{ $p->{tools} };
+        my @want = sort @{ $expected{$name} };
+        is_deeply(\@got, \@want, "$name tools match");
+    }
+};
+
+# === Test 13: Model tier passed to child ===
+
+subtest 'Model tier passed to child' => sub {
+    my ($store, $bus, $mock, $sess, $loop) = make_loop;
+
+    my $result = Clank::Agent->spawn(
+        name   => 'reviewer',
+        prompt => 'review lib/Clank.pm',
+        loop   => $loop,
+        model  => 'flash',
+    );
+
+    ok($result->{ok}, 'spawn with model override succeeded');
+    is($result->{model}, 'flash', 'model override reflected in result');
+};
+
+# === Test 14: Default model from profile ===
+
+subtest 'Default model from profile' => sub {
+    my ($store, $bus, $mock, $sess, $loop) = make_loop;
+
+    my $result = Clank::Agent->spawn(
+        name   => 'reviewer',
+        prompt => 'review lib/Clank.pm',
+        loop   => $loop,
+    );
+
+    ok($result->{ok}, 'spawn succeeded');
+    is($result->{model}, 'standard', 'uses profile default model');
+};
+
+# === Test 15: Spawn each agent type ===
+
+subtest 'Spawn each agent type' => sub {
+    for my $name (qw(reviewer planner debugger security architect)) {
+        my ($store, $bus, $mock, $sess, $loop) = make_loop;
+        my $result = Clank::Agent->spawn(
+            name   => $name,
+            prompt => 'analyze lib/Clank.pm',
+            loop   => $loop,
+        );
+        ok($result->{ok}, "$name spawn succeeded");
+        is($result->{agent}, $name, "$name name correct");
+    }
+};
+
 done_testing;

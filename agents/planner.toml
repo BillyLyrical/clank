@@ -1,0 +1,6 @@
+# Clank agent profile: planner
+name = "planner"
+description = "Decomposes complex tasks into ordered subtasks with clear acceptance criteria."
+model = "standard"
+tools = ["read", "bash"]
+max_turns = 5

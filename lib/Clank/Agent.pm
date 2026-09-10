@@ -59,12 +59,21 @@ sub spawn {
     my $bus   = $loop->_bus;
     my $parent = $loop->{session};
 
+    # Resolve model: profile default, overridden by caller.
+    my $model = $args{model} // $profile->{model};
+
+    # Create child provider if agent specifies a different model.
+    my $provider = $parent->{provider};
+    if (defined $model && $model ne ($provider->{model} // '')) {
+        $provider = bless { %$provider, model => $model }, ref($provider);
+    }
+
     # Create child session.
     require Clank::Session;
     my $child = Clank::Session->new(
         store    => $store,
         bus      => $bus,
-        provider => $parent->{provider},
+        provider => $provider,
         name     => "agent_$name",
     );
 
@@ -132,6 +141,7 @@ sub spawn {
         turns      => $result->{turns},
         error      => $result->{error},
         agent      => $name,
+        model      => $provider->{model},
     };
 }
 
