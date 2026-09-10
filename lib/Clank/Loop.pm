@@ -51,6 +51,9 @@ sub run_prompt {
         if $self->{tracer};
     $self->{metrics}->inc('agent.runs') if $self->{metrics};
 
+    # 0) user_prompt_submit: raw user input before any processing
+    $bus->publish('user_prompt_submit', { text => $text, session_id => $session->id });
+
     # 1) input hook: continue | transform | handled
     my $pub = $bus->publish('input', { text => $text, source => 'interactive' });
     my ($final_text, $handled_out) = ($text);

@@ -31,6 +31,11 @@ sub new {
     }, $class;
     $app->{store}    = Clank::Store->new(path => $o{db} // "$ENV{HOME}/.clank/clank.db");
     $app->{bus}      = Clank::Bus->new(store => $app->{store}, sender => 'app');
+
+    # Register backward-compatible event aliases.
+    require Clank::Bus::Events;
+    $app->{bus}->add_aliases(%Clank::Bus::Events::ALIASES);
+
     # provider: a name (registry lookup) or a ready-made provider object — the
     # latter is how tests and drivers inject scripted/mock providers.
     $app->{provider} = ref($o{provider}) ? $o{provider} : Clank::Providers->create(
