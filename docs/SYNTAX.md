@@ -200,6 +200,32 @@ $app->run_prompt('% code-review')         # dispatched as pipeline
 This means the LLM can use the same interface the human uses.
 The sigils become a shared vocabulary between human and AI.
 
+### 1.5 clankd: AI Testing the REPL
+
+`bin/clankd` enforces sigil usage for all prompts. The AI sends
+sigil-prefixed text through the JSON protocol:
+
+```
+# AI sends a comment (no-op):
+{"id":1,"prompt":"# testing the sigil system"}
+
+# AI asks a question:
+{"id":2,"prompt":"? what wits are loaded?"}
+
+# AI runs a command:
+{"id":3,"prompt":"/help"}
+
+# AI evaluates Perl:
+{"id":4,"prompt":"$ time()"}
+
+# Bare text is rejected:
+{"id":5,"prompt":"hello"}  →  {"ok":0,"error":"no sigil — use ? for LLM queries, / for commands"}
+```
+
+This makes clankd a faithful mirror of the REPL — the AI exercises
+exactly the same dispatch path a human would. The sigil system is
+tested end-to-end through the same interface.
+
 ---
 
 ## 2. Pipeline Format (Minsky Blueprints)
