@@ -16,6 +16,7 @@
     "Clank::Wits::Search::Llm": { "file": "lib/Clank/Wits/Search/Llm.pm", "version": "1.0.0" },
     "Clank::Wits::Search::Bing": { "file": "lib/Clank/Wits/Search/Bing.pm", "version": "1.0.0" },
     "Clank::Wits::Search::Brave": { "file": "lib/Clank/Wits/Search/Brave.pm", "version": "1.0.0" },
-    "Clank::Wits::Search::Google": { "file": "lib/Clank/Wits/Search/Google.pm", "version": "1.0.0" }
+    "Clank::Wits::Search::Google": { "file": "lib/Clank/Wits/Search/Google.pm", "version": "1.0.0" },
+    "Clank::Wits::Search::SearchFirst": { "file": "lib/Clank/Wits/Search/SearchFirst.pm", "version": "1.0.0" }
   }
 }

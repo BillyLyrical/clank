@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "author": "Clank",
   "license": "Artistic-2.0",
-  "abstract": "Build system wits for Clank — make, perl build, cpanm, test",
+  "abstract": "Build system wits for Clank — make, perl build, cpanm, test, terminal ops",
   "provides": {
     "Clank::Wits::Build::Make": {
       "file": "lib/Clank/Wits/Build/Make.pm",
@@ -20,15 +20,25 @@
     "Clank::Wits::Build::Test": {
       "file": "lib/Clank/Wits/Build/Test.pm",
       "version": "1.0.0"
+    },
+    "Clank::Wits::Build::ProductionAudit": {
+      "file": "lib/Clank/Wits/Build/ProductionAudit.pm",
+      "version": "1.0.0"
+    },
+    "Clank::Wits::Build::VerificationLoop": {
+      "file": "lib/Clank/Wits/Build/VerificationLoop.pm",
+      "version": "1.0.0"
     }
   },
   "requires": {
     "perl": "5.010"
   },
   "wits": [
-    { "trigger": "build_make",       "module": "Clank::Wits::Build::Make" },
-    { "trigger": "build_perl_build", "module": "Clank::Wits::Build::PerlBuild" },
-    { "trigger": "build_cpanm",      "module": "Clank::Wits::Build::Cpanm" },
-    { "trigger": "build_test",       "module": "Clank::Wits::Build::Test" }
+    { "trigger": "build_make",              "module": "Clank::Wits::Build::Make" },
+    { "trigger": "build_perl_build",        "module": "Clank::Wits::Build::PerlBuild" },
+    { "trigger": "build_cpanm",             "module": "Clank::Wits::Build::Cpanm" },
+    { "trigger": "build_test",              "module": "Clank::Wits::Build::Test" },
+    { "trigger": "build_production_audit",  "module": "Clank::Wits::Build::ProductionAudit" },
+    { "trigger": "build_verification_loop", "module": "Clank::Wits::Build::VerificationLoop" }
   ]
 }

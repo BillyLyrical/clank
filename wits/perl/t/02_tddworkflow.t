@@ -10,13 +10,13 @@ package MockAPI {
     sub register_tool { my ($self, %def) = @_; push @{$self->{tools}}, \%def; return $def{name} }
     sub register_command { return }
     sub on { return 1 }
-    sub ui { return undef }
     sub store { return undef }
+    sub ui { return undef }
 }
 
 package main;
 
-my $mod = 'Clank::Wits::Critic::CodingStandards';
+my $mod = 'Clank::Wits::Perl::TddWorkflow';
 eval "require $mod";
 is($@, '', "$mod loads");
 can_ok($mod, 'register');
@@ -25,11 +25,9 @@ my $api = MockAPI->new();
 eval { $mod->register($api) };
 is($@, '', "$mod registers ok");
 ok(scalar @{$api->{tools}} > 0, "registered at least one tool");
-is($api->{tools}[0]{name}, 'coding_standards', "tool name is coding_standards");
 
 my $tool = $api->{tools}[0];
-my $result = $tool->{execute}->({ file => '/nonexistent.pm' });
-is(ref $result, 'HASH', "returns hashref");
-ok(exists $result->{error}, "returns error for missing file");
+is($tool->{name}, 'tdd_cycle', 'tool name is tdd_cycle');
+ok($tool->{parameters}{required}, 'tool has required parameters');
 
 done_testing;

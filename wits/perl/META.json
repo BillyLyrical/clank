@@ -23,6 +23,7 @@
     "Clank::Wits::Perl::Refactor": { "file": "lib/Clank/Wits/Perl/Refactor.pm", "version": "1.0.0" },
     "Clank::Wits::Perl::Review": { "file": "lib/Clank/Wits/Perl/Review.pm", "version": "1.0.0" },
     "Clank::Wits::Perl::DeadCode": { "file": "lib/Clank/Wits/Perl/DeadCode.pm", "version": "1.0.0" },
-    "Clank::Wits::Perl::WarnCheck": { "file": "lib/Clank/Wits/Perl/WarnCheck.pm", "version": "1.0.0" }
+    "Clank::Wits::Perl::WarnCheck": { "file": "lib/Clank/Wits/Perl/WarnCheck.pm", "version": "1.0.0" },
+    "Clank::Wits::Perl::TddWorkflow": { "file": "lib/Clank/Wits/Perl/TddWorkflow.pm", "version": "1.0.0" }
   }
 }

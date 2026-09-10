@@ -1,9 +1,9 @@
 {
   "name": "Clank-Wits-Debug",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Clank",
   "license": "Artistic-2.0",
-  "abstract": "Debugging wits for Clank — stack traces, strace, open files, process info",
+  "abstract": "Debugging wits for Clank — stack traces, strace, open files, process info, error patterns",
   "provides": {
     "Clank::Wits::Debug::Stacktrace": {
       "file": "lib/Clank/Wits/Debug/Stacktrace.pm",
@@ -20,6 +20,10 @@
     "Clank::Wits::Debug::Pstack": {
       "file": "lib/Clank/Wits/Debug/Pstack.pm",
       "version": "1.0.0"
+    },
+    "Clank::Wits::Debug::ErrorPatterns": {
+      "file": "lib/Clank/Wits/Debug/ErrorPatterns.pm",
+      "version": "1.0.0"
     }
   },
   "requires": {
@@ -29,6 +33,7 @@
     { "trigger": "debug_stacktrace", "module": "Clank::Wits::Debug::Stacktrace" },
     { "trigger": "debug_strace",     "module": "Clank::Wits::Debug::Strace" },
     { "trigger": "debug_lsof",       "module": "Clank::Wits::Debug::Lsof" },
-    { "trigger": "debug_pstack",     "module": "Clank::Wits::Debug::Pstack" }
+    { "trigger": "debug_pstack",     "module": "Clank::Wits::Debug::Pstack" },
+    { "trigger": "debug_error_patterns", "module": "Clank::Wits::Debug::ErrorPatterns" }
   ]
 }

@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "author": "Clank",
   "license": "Artistic-2.0",
-  "abstract": "Database wits for Clank — connect, query, execute, schema, shell, history, export, import",
+  "abstract": "Database wits for Clank — connect, query, execute, schema, shell, history, export, import, migration safety",
   "provides": {
     "Clank::Wits::Db::Connect": {
       "file": "lib/Clank/Wits/Db/Connect.pm",
@@ -36,6 +36,10 @@
     "Clank::Wits::Db::Import": {
       "file": "lib/Clank/Wits/Db/Import.pm",
       "version": "1.0.0"
+    },
+    "Clank::Wits::Db::MigrationSafety": {
+      "file": "lib/Clank/Wits/Db/MigrationSafety.pm",
+      "version": "1.0.0"
     }
   },
   "requires": {
@@ -49,6 +53,8 @@
     { "trigger": "db_shell",         "module": "Clank::Wits::Db::Shell" },
     { "trigger": "dbshell_history",  "module": "Clank::Wits::Db::History" },
     { "trigger": "dbshell_export",   "module": "Clank::Wits::Db::Export" },
-    { "trigger": "dbshell_import",   "module": "Clank::Wits::Db::Import" }
+    { "trigger": "dbshell_import",   "module": "Clank::Wits::Db::Import" },
+    { "trigger": "db_migration_safety",       "module": "Clank::Wits::Db::MigrationSafety" },
+    { "trigger": "db_migration_expand_contract", "module": "Clank::Wits::Db::MigrationSafety" }
   ]
 }

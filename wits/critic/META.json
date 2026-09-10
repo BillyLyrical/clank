@@ -19,6 +19,7 @@
     "Clank::Wits::Critic::Frugality": { "file": "lib/Clank/Wits/Critic/Frugality.pm", "version": "1.0.0" },
     "Clank::Wits::Critic::Sustainability": { "file": "lib/Clank/Wits/Critic/Sustainability.pm", "version": "1.0.0" },
     "Clank::Wits::Critic::Architecture": { "file": "lib/Clank/Wits/Critic/Architecture.pm", "version": "1.0.0" },
-    "Clank::Wits::Critic::Usability": { "file": "lib/Clank/Wits/Critic/Usability.pm", "version": "1.0.0" }
+    "Clank::Wits::Critic::Usability": { "file": "lib/Clank/Wits/Critic/Usability.pm", "version": "1.0.0" },
+    "Clank::Wits::Critic::CodingStandards": { "file": "lib/Clank/Wits/Critic/CodingStandards.pm", "version": "1.0.0" }
   }
 }
