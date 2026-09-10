@@ -1,0 +1,471 @@
+# Agent Failure Modes — Discussion Document
+
+Status: research synthesis. Mapping documented failures to Clank architecture.
+
+---
+
+## 1. The Failure Mode Taxonomy
+
+From synthesizing academic research (arXiv), production reports (Gastown,
+Hermes, OpenClaw), and industry analyses, agent failures cluster into
+seven categories. Each maps to specific Clank components.
+
+### 1.1 Context Poisoning
+
+**What it is**: Bad data enters the context window and propagates into
+answers. Once corrupted information enters context, it becomes the basis
+for future reasoning.
+
+**Three drift patterns** (Redis, May 2026):
+- **Semantic drift**: Repeated summarization degrades meaning. Each
+  compaction cycle loses nuance. The summary says "fixed the bug" when
+  the original said "fixed the SQL injection but not the XSS."
+- **Procedural drift**: Suboptimal workflows get reinforced. An agent
+  that took a wrong approach once is more likely to take it again
+  because the wrong approach is in its history.
+- **Hallucination internalization**: The agent eventually treats
+  hallucinated content as validated knowledge. The hallucination
+  becomes a "fact" in the memory bank.
+
+**Clank impact**: Our Compaction system summarizes old turns. Our
+Crystallizer turns LLM solutions into deterministic rules. Both are
+vector for semantic drift. A compaction that drops a boundary condition
+from a crystallized rule is a silent data corruption.
+
+**Research**: Yan et al. (arXiv:2603.00532) — accumulated semantic
+ambiguity is the dominant failure mode in multi-step reasoning chains.
+Minor interpretation errors compound silently across steps.
+
+### 1.2 Error Propagation and Compounding
+
+**What it is**: An early error cascades through subsequent steps,
+multiplying at each stage. The final output is confidently wrong.
+
+**The "hallucination snowball"** (arXiv:2608.14588): Hallucinations
+injected at Stage 1 don't merely persist — they transform. Raw
+numerical facts become derived computations, then narrative prose,
+then editorially approved conclusions. Each downstream agent treats
+the upstream output as ground truth.
+
+**Production evidence** (user's HN report): "Any time there has been
+an erroneous analysis somewhere along the line, that error continues
+to be treated as a correct fact until it has been decisively eradicated.
+The initial error is weighted heavier than the correction."
+
+**Clank impact**: This is the Crystallizer's worst failure mode.
+LLM produces wrong solution → crystallized at confidence 0.6 → confidence
+decays slowly → future escalations hit this "rule" → wrong answer
+keeps getting reused. The WorldModel has the same problem — once a fact
+is written, subsequent agents treat it as ground truth.
+
+**Mitigation status**: Confidence decay helps but is insufficient.
+Decay only reduces confidence, it doesn't detect that the underlying
+fact is wrong. Need contradiction detection.
+
+### 1.3 Memory Drift and Stale State
+
+**What it is**: Long-running memory banks accumulate duplicate, stale,
+and conflicting records. Retrieval alone cannot repair this.
+
+**Sleep mode** (arXiv:2605.15338): Adversaries can inject fabricated
+memories that lie dormant across sessions. Poisoned memory insertion
+reached 99.8% success rate on GPT-5.5. Even without adversaries, the
+same mechanism works accidentally — a wrong fact inserted in Session 3
+is retrieved as truth in Session 47.
+
+**Clank impact**: The Store event journal grows unboundedly. Our
+Memory system (ECC memory.v1) stores documents. Neither has a
+compaction or garbage collection mechanism. Stale records accumulate.
+
+**Gastown lesson**: Gastown uses "beads" (git-backed task tracker)
+for persistence. The lesson: state that persists across sessions
+needs explicit lifecycle management — creation, validation,
+deprecation, and deletion. Git alone doesn't solve this because
+git tracks changes, not correctness.
+
+### 1.4 Coordination Failures
+
+**What it is**: Multiple agents working on the same problem produce
+conflicting results, false consensus, or deadlocks.
+
+**Classical concurrency** (Yang et al., arXiv:2608.18092): Agents
+concurrently read/write shared state. Long LLM inference windows
+amplify stale reads, lost updates, and inconsistent outcomes — mapped
+directly to database concurrency anomalies. Adding agents often
+REDUCES reliability.
+
+**False consensus** (Qiu & Gill, arXiv:2608.18167): Agents converge
+on agreement without sufficient evidence. Each agent reinforces the
+other's wrong assumption. The system produces a confident, unified,
+wrong answer.
+
+**Gastown experience**: "When multiple rigs in a convoy disagree —
+merge strategies conflict, code reviews contradict, build priorities
+clash — gastown currently has no principled way to resolve these
+conflicts." (Issue #1248). The Mayor breaks ties implicitly but
+there's no structured disagreement protocol.
+
+**Clank impact**: Our Council wit (4-voice adversarial decisions) is
+a partial mitigation — it forces structured disagreement. But agents
+sharing the bus can still produce false consensus if they all see the
+same poisoned input.
+
+### 1.5 Tool Misuse and Scope Violations
+
+**What it is**: Agents call tools they shouldn't, use tools incorrectly,
+or perform actions beyond their intended scope.
+
+**Three patterns**:
+1. **Tool call failures**: Agent calls a tool with wrong parameters,
+   gets an error, and proceeds as if it succeeded. The tool failure
+   converts into an agent failure (NimbleBrain).
+2. **Scope creep**: Agent gradually expands its task beyond the
+   original intent. Each small deviation seems reasonable in isolation.
+3. **Over-delegation**: Agents delegate tasks to agents that lack the
+   capability to complete them. Role confusion produces cascading
+   failures.
+
+**Hermes experience**: "I said 'give me a plan before doing deep
+research'. It responded 'you're right, I jumped' and then immediately
+listed 6 questions it should have asked first, as commentary on its
+own failure. It acknowledged the problem while still not doing what
+I asked." The model's tendency to override instructions is a tool
+misuse variant — the instruction is a tool constraint it ignores.
+
+**Clank impact**: Our GateGuard wit and Agent tool allowlists are
+direct mitigations. But the allowlist is only as good as the profile
+definition. A reviewer agent with `tools = ["read", "bash"]` can
+still run `bash rm -rf /` if the prompt doesn't prohibit destructive
+bash commands.
+
+### 1.6 Silent Quality Degradation
+
+**What it is**: The system produces output that looks correct but is
+progressively worse. No errors are thrown. No alerts fire. Quality
+degrades below the threshold where humans notice.
+
+**The "over-confidence in bad outputs" problem**: "Agents invent facts
+or steps that don't exist... lack of constraint awareness... the model
+doesn't know when to stop." (Hermes benchmark report). Each tool call
+costs tokens and fills the context window with noise.
+
+**Clank impact**: Our Metrics and Tracer systems track token usage and
+tool calls. But they don't track output quality over time. A Crystallizer
+rule that was correct when created may become wrong as the codebase
+evolves, but nothing detects this — the rule just keeps firing.
+
+### 1.7 Structural and Architectural Failures
+
+**What it is**: Failures that emerge from the system design itself,
+not from individual agent behavior.
+
+**Pipeline injection** (arXiv:2608.00718): Adversarial content accepted
+by one agent propagates as trusted input throughout the pipeline. Attack
+success aligns with pipeline structure, not model capability — it's an
+architectural property.
+
+**Topological amplification** (arXiv:2607.22758): Hub-centric network
+structures (like a bus with one central coordinator) compound localized
+hallucinations rather than correcting them, reaching 53% semantic drift.
+
+**Clank impact**: The bus is a hub-centric topology. The Loop is a
+single point of failure. Agent profiles loaded at spawn time are
+immutable for the session — no hot-reload means stale profiles persist.
+
+---
+
+## 2. Specific Framework Lessons
+
+### 2.1 Gastown (Steve Yegge's Multi-Agent Orchestrator)
+
+**Architecture**: Runs 20-30 coding agents in parallel using tmux
+and git-backed work tracking (beads). The "Mayor" orchestrates,
+agents work in isolated worktrees.
+
+**Documented failures**:
+- **Resource exhaustion**: "Spawned 6 agents on M2 Mac and it became
+  a space heater that couldn't render a terminal. 2-3 concurrent is
+  the realistic limit." Orphaned processes accumulate.
+- **Passive orchestrator**: The Mayor still waits for manual input.
+  Users write cron scripts to poke it — the orchestration doesn't
+  actually orchestrate.
+- **Conceptual overhead**: 10 concepts to learn before doing anything
+  (town, rig, mayor, polecat, witness, deacon, refinery, convoy,
+  molecules, beads). Cognitive overhead when trying to ship.
+- **Agent conflicts**: Merge strategies conflict, code reviews
+  contradict, build priorities clash. No principled conflict resolution.
+
+**Clank lesson**: Keep the agent concept surface small. Our 5 profiles
+(reviewer, planner, debugger, security, architect) are manageable.
+Gastown's 10 concepts are too many. The orchestrator must be proactive,
+not passive — our `/agent` command is explicit, but routing could be
+automatic.
+
+### 2.2 Hermes Agent (NousResearch)
+
+**Architecture**: Self-hosted AI agent with provider fallbacks,
+skill system, long-running gateway, memory persistence.
+
+**Documented failures**:
+- **Instruction non-adherence**: Agent acknowledges corrections but
+  doesn't follow them. "I've corrected this half a dozen times across
+  sessions and it hasn't stuck." Memory persistence works but behavioral
+  change doesn't persist.
+- **Provider instability**: Subagents have "nearly 100% chance" of
+  APIConnectionError when running concurrently. The model doesn't know
+  when to stop — "burns through usage by making tons of unnecessary
+  tool calls."
+- **Skill reuse trap**: "Skills that are too specific — the agent saves
+  a workflow from one task and applies it everywhere." Over-fitting to
+  past solutions.
+- **Error propagation in turns**: "Don't let one bad response corrupt
+  the entire conversation history. Strip the malformed turn and retry."
+
+**Clank lesson**: Turn boundaries are economic boundaries. Each agent
+turn should be isolated enough that a bad turn doesn't poison the next.
+Our `max_turns` limit helps, but we don't strip bad turns. The Crystallizer
+should not crystallize solutions from turns that produced errors.
+
+### 2.3 OpenClaw
+
+**Architecture**: Self-hosted agent framework with SOUL.md, AGENTS.md,
+SECURITY.md configuration. Skills, plugins, gateway architecture.
+
+**Documented failures**:
+- **Configuration fragility**: "The agent is only as good as its config
+  files. Garbage in, garbage out." Writing SOUL.md, AGENTS.md, SECURITY.md
+  took longer than expected. Getting openclaw.json right is critical.
+- **State drift**: "Session, memory, transcript, context, or agent state
+  can drift or corrupt" (tagged as a known issue class).
+- **Security through obscurity**: "If this guide is injected as a prompt
+  into the Agent, a malicious Skill could use prompt injection to tamper
+  with the guide's content, making the Agent 'believe' the red-line rules
+  have been modified."
+- **Scope creep in config**: Users lock down tool permissions but the
+  agent still does unintended things. The config surface is too large
+  to reason about.
+
+**Clank lesson**: Agent profiles (TOML+Markdown) are our configuration.
+Keep them small and auditable. Our `comply()` method tests tool
+allowlists but doesn't test behavioral constraints. Need profile-level
+compliance testing beyond just tool usage.
+
+---
+
+## 3. The Error Propagation Problem in Detail
+
+This is the most dangerous failure mode for Clank. Let me trace the
+specific mechanisms.
+
+### 3.1 How Errors Propagate in Clank
+
+```
+Session 1: LLM produces wrong solution
+    → Crystallizer crystallizes it (confidence 0.6)
+    → Confidence decays slowly (0.02 per day)
+
+Session 5: New problem hits similar context
+    → Escalation checks Crystallizer
+    → Wrong rule matches (confidence still 0.52)
+    → Rule fires, wrong answer reused
+    → User doesn't notice (output looks plausible)
+
+Session 20: Confidence finally drops below threshold
+    → But the wrong answer was already applied to the codebase
+    → Downstream code depends on the wrong assumption
+    → Now there are TWO problems: the original and the downstream
+```
+
+### 3.2 Why Decay Is Insufficient
+
+Decay reduces confidence over time, which helps. But:
+
+1. **Decay doesn't detect wrongness** — a correct rule and a wrong rule
+   decay at the same rate.
+2. **Decay is slow** — at 0.02/day, a rule at 0.6 confidence takes 10
+   days to drop below 0.4. That's 10 days of potential misuse.
+3. **Decay doesn't correct downstream effects** — even when the rule
+   finally drops below threshold, the damage to the codebase and
+   WorldModel facts persists.
+
+### 3.3 What's Needed
+
+**Contradiction detection**: When an agent's output conflicts with an
+existing Crystallizer rule or WorldModel fact, flag it for review
+rather than silently overriding. This requires:
+
+1. Query Crystallizer/WM for related rules/facts before crystallizing
+2. Compare new output against existing knowledge
+3. If conflict detected: log contradiction, bump confidence of both
+   old and new, flag for human review
+
+**Provenance tracking**: Every crystallized rule and WM fact should
+track which agent/session produced it. When an error is found, trace
+and correct all downstream references. Currently we don't track this.
+
+**Fact validation**: Before using a crystallized rule or WM fact in a
+response, validate it against the current codebase state. A rule about
+"the function is at line 42" is wrong if the function moved to line 67.
+
+**Output sanitization**: Agent outputs that will be crystallized should
+be validated for factual correctness against the codebase before being
+stored. This is expensive (requires an LLM call) but prevents the
+worst propagation paths.
+
+---
+
+## 4. The Manager/Builder Insight
+
+From the HN discussion: "It's better to have one agent that's the
+Manager (on a Manager Schedule) and the rest be builders (on a
+Builder's Schedule), where the manager might be interrupt driven,
+but the builders need to be able to focus for a while without
+interruption (context poisoning)."
+
+### 4.1 What This Means for Clank
+
+Our 5 agents are currently peers — any agent can delegate to any other.
+The insight is that this is wrong. There should be exactly one
+coordinator (the planner) that:
+
+1. **Receives interrupts** — user can override mid-task
+2. **Delegates to builders** — debugger, security, architect work
+   without interruption
+3. **Aggregates results** — collects builder outputs, synthesizes
+   final answer
+
+Builders should NOT:
+- Subscribe to each other's bus events (no cross-talk)
+- Read each other's in-flight state
+- Be interruptible during execution
+
+### 4.2 Implementation Implications
+
+**Scoped bus views**: Each agent session should see only its own
+bus events plus the manager's coordination events. Currently the bus
+is shared — any agent can subscribe to any topic. This enables false
+consensus and context poisoning.
+
+**Builder isolation**: Builder agents should run in isolated sessions
+that don't share state. Our `spawn()` already creates child sessions,
+but they inherit the parent's bus. The builder shouldn't see sibling
+builder events.
+
+**Manager as the only aggregator**: Only the manager should read
+builder outputs and make decisions. If two builders produce conflicting
+results, the manager resolves it — not the builders themselves.
+
+### 4.3 The Blackboard Problem
+
+The HN insight: "Remove the blackboard from source control." The bus
+IS our blackboard. The problem is that agents read each other's
+blackboard entries, which means:
+
+- A wrong entry by Builder A is read by Builder B as ground truth
+- Builder B's output is based on A's wrong output
+- The manager sees two "independent" confirmations of the same wrong
+  answer
+
+The fix: builders write to the blackboard but don't read from it.
+Only the manager reads. This requires bus topic scoping.
+
+---
+
+## 5. Compaction and State Log Management
+
+### 5.1 The Pattern from HN
+
+"Compact the agent state log by having plans and implementation docs
+written at commit time and checked into .docs/. This separates the
+activity communication stream from codified documentation. You can
+then 'compact' the state log by just keeping the last N lines."
+
+### 5.2 How This Maps to Clank
+
+**Current state**: The Store event journal grows without bound.
+Compaction summarizes conversation turns but doesn't manage the
+event journal. Memory documents accumulate without lifecycle.
+
+**Needed**:
+1. **Event journal rotation**: Keep last N entries per session, archive
+   older entries. The journal is for debugging, not permanent storage.
+2. **Memory document lifecycle**: Deprecate facts that are no longer
+   true. Track when facts were created and last validated.
+3. **Git as canonical history**: Commit messages serve as the
+   permanent record. The event journal and memory are working state,
+   not history.
+
+### 5.3 The "Plans at Commit Time" Pattern
+
+When an agent commits code, it should also write:
+- **What was planned** (the task description)
+- **What was done** (the changes made)
+- **What was learned** (any new rules or facts discovered)
+
+This creates a clean separation:
+- `.docs/` = codified knowledge (what we know)
+- Bus journal = activity stream (what happened)
+- Git log = permanent history (what changed)
+
+The bus journal and memory can be compacted freely. The `.docs/` and
+git log are the source of truth.
+
+---
+
+## 6. Recommendations for Clank
+
+### 6.1 Immediate (Phase 4 candidates)
+
+1. **Contradiction detection in Crystallizer**: Before crystallizing,
+   check for conflicts with existing rules. Flag contradictions.
+2. **Provenance tracking**: Add `source_agent` and `source_session`
+   to crystallized rules and WM facts.
+3. **Event journal rotation**: Configurable max entries per session.
+4. **Builder bus isolation**: Agents don't see sibling agent events.
+
+### 6.2 Medium-term
+
+5. **Fact validation**: Validate crystallized rules against current
+   codebase state before using them.
+6. **Output sanitization**: Validate agent outputs before
+   crystallization.
+7. **Manager/Builder agent hierarchy**: Formalize the coordinator
+   pattern with scoped bus views.
+8. **Memory document lifecycle**: Deprecation, validation timestamps,
+   garbage collection.
+
+### 6.3 Long-term
+
+9. **Cross-session error tracking**: When a wrong fact is discovered,
+   trace all sessions that used it.
+10. **Adversarial verification**: Independent agent verifies outputs
+    from other agents (the "Inspector" pattern from Zartis research —
+    but the Inspector must use a different model/context to avoid
+    shared failure modes).
+11. **Quality metrics over time**: Track output quality degradation
+    across sessions, not just per-session metrics.
+
+---
+
+## References
+
+- Yan et al. (arXiv:2603.00532) — Accumulated semantic ambiguity
+- Wang et al. (arXiv:2608.29028) — Summary collapse in handoffs
+- Pulipaka et al. (arXiv:2605.15338) — Sleeper memory poisoning
+- Wang et al. (arXiv:2608.21867) — Memory drift in long-running banks
+- Yang et al. (arXiv:2608.18092) — Classical concurrency in multi-agent
+- Qiu & Gill (arXiv:2608.18167) — False consensus
+- Cao et al. (arXiv:2603.03655) — Multiplicative error compounding
+- Liu et al. (arXiv:2509.13941) — Cognitive deadlocks in coding agents
+- Raju et al. (arXiv:2602.16069) — Context overflow degradation
+- Bappy et al. (arXiv:2608.00718) — Pipeline injection
+- Banerjee (arXiv:2607.22758) — Topological amplification
+- Tan et al. (arXiv:2608.02499) — Workspace unawareness
+- arXiv:2608.14588 — Hallucination snowball
+- arXiv:2606.07937 — Hallucination cascade
+- Gastown (gastownhall/gastown) — Multi-agent orchestration issues
+- Hermes Agent (NousResearch/hermes-agent) — Instruction adherence failures
+- OpenClaw (openclaw/openclaw) — Configuration fragility, state drift
+- Redis (May 2026) — Context poisoning drift patterns
+- Zartis (Jun 2026) — Compounding errors, Inspector independence
+- Microsoft (Jun 2026) — Taxonomy of failure modes in agentic AI
