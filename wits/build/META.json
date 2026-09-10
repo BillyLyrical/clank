@@ -32,6 +32,10 @@
     "Clank::Wits::Build::GateGuard": {
       "file": "lib/Clank/Wits/Build/GateGuard.pm",
       "version": "1.0.0"
+    },
+    "Clank::Wits::Build::Council": {
+      "file": "lib/Clank/Wits/Build/Council.pm",
+      "version": "1.0.0"
     }
   },
   "requires": {
@@ -44,6 +48,7 @@
     { "trigger": "build_test",              "module": "Clank::Wits::Build::Test" },
     { "trigger": "build_production_audit",  "module": "Clank::Wits::Build::ProductionAudit" },
     { "trigger": "build_verification_loop", "module": "Clank::Wits::Build::VerificationLoop" },
-    { "trigger": "build_gateguard",          "module": "Clank::Wits::Build::GateGuard" }
+    { "trigger": "build_gateguard",          "module": "Clank::Wits::Build::GateGuard" },
+    { "trigger": "build_council",            "module": "Clank::Wits::Build::Council" }
   ]
 }
