@@ -1,0 +1,634 @@
+# Clank::Agent — Design Plan
+
+Status: early design. Sketching concerns, not freezing spec.
+
+---
+
+## 1. What Problem Does This Solve?
+
+Clank spawns subagents via `Loop.pm::spawn()` but there's no formalized
+agent definition. You pass a raw prompt and the LLM picks tools freely.
+ECC's 68 agents, LangChain's Deep Agents, and OpenClaw all converge on
+the same insight: **named agent profiles with constrained capabilities
+produce better results than unstructured subagent spawning.**
+
+We need a way to say "run this task as a reviewer" and have the system
+constrain the prompt, tools, model, and behavior automatically.
+
+---
+
+## 2. What We Learned From External Systems
+
+### 2.1 ECC: Agent-as-Markdown
+
+Agents are plain Markdown files with YAML frontmatter:
+- name, description, tools (allowlist), model
+- Self-contained prompt with anti-injection rules
+- Orchestrator routes proactively based on task type
+
+**Lesson**: Separation of concerns — agents = who, skills = what, hooks = what triggers.
+
+### 2.2 LangChain/LangGraph: StateGraph
+
+LangGraph models agents as **StateGraphs** — nodes are functions
+(deterministic or LLM-driven), edges are transitions. The key insight:
+mix deterministic steps with agentic steps in a single graph.
+
+Deep Agents (built on LangGraph) adds:
+- Planning (task decomposition)
+- Subagent spawning (parallel, isolated context)
+- Filesystem tools
+- Context management (summarization, offloading)
+- Long-term memory
+- Skills (optional capabilities loaded on demand)
+
+**Lesson**: Agents aren't just prompts — they're graphs of execution.
+But we don't need the full StateGraph abstraction yet. Our Procedural
+Graph already encodes procedural knowledge. What's missing is the
+**named profile** that binds a prompt + tools + model together.
+
+### 2.3 OpenClaw: Agent Client Protocol
+
+OpenClaw (389k stars) takes a different approach:
+- `acpx`: Headless CLI client for stateful Agent Client Protocol sessions
+- `clawhub`: Skill + Plugin Registry (like our CPAN wit distribution)
+- `mcporter`: MCP (Model Context Protocol) — standardized tool calling
+- `crabox`: Sandboxed code execution
+
+**Lesson**: Standardized protocols matter for interoperability. But
+Clank is a Perl harness, not a protocol — we don't need ACP/MCP yet.
+The registry pattern (clawhub → CPAN) we already have.
+
+### 2.4 Convergence Point
+
+All three systems agree on:
+1. **Named profiles** — agents have identities, not just prompts
+2. **Tool constraints** — agents see only the tools they need
+3. **Model selection** — different agents use different models
+4. **Composition** — agents spawn other agents
+5. **Context isolation** — each agent has its own context window
+
+---
+
+## 3. Decision: Core Module, Not Wits
+
+**Settled.** Agent profiles are core infrastructure, not wit extensions.
+
+### Why Core?
+
+Wits **add** capabilities — they register tools, commands, and bus hooks.
+Agent profiles **constrain** capabilities — they select a subset of tools,
+apply a specific prompt, and choose a model tier. These are different
+operations. Constraining is a core concern, not an extension.
+
+Concrete reasons:
+1. Tool allowlist enforcement hooks into Loop.pm's provider/tool selection
+2. Model selection per-agent hooks into Providers.pm
+3. Agent lifecycle events (subagent_start, subagent_stop) fire from Loop.pm::spawn()
+4. The spawn mechanism already lives in core — profiles are config for it
+5. Session and SystemPrompt are core modules that configure loop behavior — agent profiles are the same category
+
+### The Split
+
+```
+Core (lib/Clank/):
+  Agent.pm           — profile loader, spawn wrapper, registry
+  Loop.pm            — existing, gains agent-aware spawn
+  Session.pm         — existing, gains agent profile binding
+
+Wits (wits/):
+  gateguard/         — tool constraint WIT (code)
+  review-tools/      — review-specific tools (code)
+  continuous-learning/ — instinct WIT (code)
+
+Agent Profiles (agents/):
+  reviewer.toml + reviewer.md  — profile DATA (not code)
+  planner.toml + planner.md
+  debugger.toml + debugger.md
+```
+
+### The Principle
+
+**Core decides who runs. Wits decide what they can do. Profiles decide which wits load.**
+
+Agent profiles (TOML+Markdown) are data files in `agents/`, loaded by core
+`Agent.pm`. The wits that *implement* agent behaviors are separate wits
+in `wits/`. This keeps the core thin and the extension surface clean.
+
+---
+
+## 4. Design Concerns (Still Open)
+
+These are the tensions we need to balance. Don't resolve them yet.
+
+### 4.1 Perl Modules vs TOML+Markdown vs SQLite
+
+| Option | Pros | Cons |
+|---|---|---|
+| Perl modules | Type-safe, testable, existing wit pattern | Heavy for prompt-only definitions |
+| TOML+Markdown | Human-readable, LLM-readable, per AGENTS.md pref | Need parser, no code execution |
+| SQLite | Queryable, dynamic, bus-integrated | Loses file-based simplicity |
+| Hybrid: TOML metadata + Markdown prompt | Best of both worlds | Two files per agent |
+
+**Concern**: If we pick wrong, migrating 20+ agent profiles later hurts.
+Keep the spec loose enough to support multiple storage backends.
+
+### 4.2 Tool Allowlists vs Tool Denylists
+
+ECC uses **allowlists** (declare what tools an agent CAN use).
+The inverse is **denylists** (declare what tools an agent CANNOT use).
+
+**Concern**: Allowlists are safer but require maintaining every agent's
+tool set as wits change. Denylists are easier to maintain but less
+secure. Which default? Can we support both?
+
+### 4.3 Routing: Explicit vs Keyword vs LLM
+
+ECC's orchestrator routes proactively without user prompting.
+Options:
+1. **Explicit**: `/agent reviewer lib/Foo.pm` — user chooses
+2. **Keyword matching**: prompt matches agent description — like RATS
+3. **LLM routing**: classifier picks the agent — most flexible, costs one call
+
+**Concern**: LLM routing is the ECC-style approach but adds latency and
+cost. Keyword matching is fast but brittle. Start with explicit, add
+keyword matching later?
+
+### 4.4 Where Does the Agent Loop Live?
+
+Currently `Clank::Loop` IS the agent loop. An agent profile would
+specialize it:
+- Same loop code
+- Different prompt, tools, model
+
+**Concern**: Should `Clank::Agent` be a thin wrapper around Loop, or
+should Loop itself become agent-aware? If we wrap, we avoid modifying
+Loop. If we integrate, we get tighter coupling but cleaner code.
+
+### 4.5 Relationship to Procedural Graph
+
+The Procedural Graph encodes *what to do* for a task domain.
+An agent profile encodes *who does it* for a task type.
+
+**Concern**: Should an agent profile reference a procedural graph?
+("This reviewer agent uses the code-review PG"). Or are they independent?
+If independent, we miss a composition opportunity. If coupled, we
+complicate both.
+
+### 4.6 Anti-Injection / Prompt Defense
+
+ECC agents have "Prompt Defense Baseline" prepended to every agent.
+Clank is a local harness — prompt injection is less of a concern.
+
+**Concern**: Do we need this at all? If yes, it should be a bus hook
+(pre_agent_start), not baked into agent profiles.
+
+---
+
+## 5. Sketch: What Clank::Agent Could Be
+
+### 5.1 Agent Profile (data, not code)
+
+```toml
+# agents/reviewer.toml
+name = "reviewer"
+description = "Code review with evidence-based critique"
+model = "standard"              # model tier, not specific model
+tools = ["read", "bash"]        # allowlist — no write/edit
+max_turns = 5
+context_rules = ["inject_conciseness"]
+
+# Optional: reference a procedural graph
+# procedural_graph = "code_review"
+
+# Optional: bus subscriptions this agent cares about
+# bus_hooks = ["pre_tool_use"]
+```
+
+### 5.2 Agent Prompt (companion file or inline)
+
+```markdown
+# agents/reviewer.md
+You are a code reviewer. Your job is to:
+1. Read the code carefully
+2. Identify issues (bugs, style, security, performance)
+3. Provide evidence-based critique with file:line references
+4. Never modify files — report only
+
+Be concise. Focus on the 3 most important issues.
+```
+
+### 5.3 Module Interface (sketch, not final)
+
+```perl
+package Clank::Agent;
+use strict;
+use warnings;
+
+# Load an agent profile by name
+sub load {
+    my ($class, $name) = @_;
+    # Read agents/$name.toml + agents/$name.md
+    # Return blessed hashref with profile data
+}
+
+# Spawn a subagent with this profile
+sub spawn {
+    my ($self, %args) = @_;
+    # $args{prompt} — the task
+    # $args{session} — parent session
+    # $args{bus} — shared bus
+    #
+    # Creates child session with:
+    #   - system prompt from profile + agent prompt
+    #   - tool allowlist from profile
+    #   - model from profile (or override)
+    #   - max_turns from profile
+    # Returns: { ok, output, session_id, turns }
+}
+
+# List available agent profiles
+sub list { ... }
+
+# Get profile metadata (for routing/selection)
+sub metadata { ... }
+```
+
+### 5.4 Relationship to Existing Modules
+
+```
+Clank::Loop (agent loop)
+  └── used by Clank::Agent::spawn()
+      └── which creates a child session
+          └── with profile-constrained tools
+          └── and profile-specific prompt
+
+Clank::Wits (tool providers)
+  └── tools registered by wits
+      └── agent profile selects subset via allowlist
+
+Clank::ProceduralGraph (task knowledge)
+  └── optionally referenced by agent profile
+      └── provides situational guidance during execution
+
+Clank::Bus (communication)
+  └── agent lifecycle events
+      └── pre_agent_start, agent_end, subagent_start, etc.
+```
+
+---
+
+## 6. What NOT to Decide Yet
+
+1. **Storage format** — TOML+Markdown is the leading candidate but
+   don't commit until we've built the first 3 agents and felt the pain.
+
+2. **Routing mechanism** — explicit first, add keyword/LLM routing
+   when we have 10+ agents and manual selection feels tedious.
+
+3. **Anti-injection** — skip for now. Add as a bus hook if/when
+   Clank is exposed to untrusted input.
+
+4. **Agent-to-agent communication** — skip. Use bus pub/sub for now.
+   Formalize later if we need structured agent conversations.
+
+5. **State persistence** — agents currently inherit parent session state.
+   Do agents need isolated state? Don't decide until we have a use case.
+
+6. **Procedural Graph binding** — leave optional. Some agents benefit
+   from PG guidance, others don't. Don't force the coupling.
+
+---
+
+## 7. Implementation Path (when we're ready)
+
+### Phase 0: Proof of Concept (1 agent)
+- Create `Clank::Agent` module with `load()` and `spawn()`
+- Create `agents/reviewer.toml` + `agents/reviewer.md`
+- Test: spawn a reviewer agent on a code file, verify tool restriction
+- ~200 lines module + 100 lines tests
+
+### Phase 1: Core Framework (3-5 agents)
+- Agent profiles: reviewer, planner, debugger, security, architect
+- Tool allowlist enforcement in spawn
+- Model tier selection
+- `/agent <name> <prompt>` REPL command
+- ~400 lines module + 200 lines tests
+
+### Phase 2: Routing + Composition
+- Keyword-based agent selection (like RATS for agents)
+- Agent-to-agent delegation (reviewer spawns debugger on issues)
+- Bus lifecycle events (pre_agent_start, subagent_start, etc.)
+- ~300 lines + 150 lines tests
+
+### Phase 3: Polish
+- `/agents` list command
+- Agent compliance testing (like ECC's skill-comply)
+- Anti-injection hooks (optional bus hook)
+- Agent statistics (how often each agent is used)
+
+---
+
+## 8. Open Questions for Discussion
+
+1. Should agent profiles be **installed via CPAN** like wits, or
+   ship with the core dist?
+
+2. Do agents need their own **bus namespace** (e.g., `agent.reviewer.*`)
+   or is the existing topic system sufficient?
+
+3. Should `Clank::Agent::spawn()` be **synchronous** (blocks until done)
+   or **asynchronous** (returns immediately, result via bus)?
+
+4. How do we handle **agent failures**? Retry? Escalate to parent?
+   Log and continue?
+
+5. Should the procedural graph be **per-agent** or **shared** across
+   agents working on the same task domain?
+
+---
+
+## 9. Document Gaps
+
+These are areas the plan doesn't cover that it should before implementation.
+
+### 9.1 Agent Output Format
+
+How does an agent report results back to its caller?
+
+| Format | Pros | Cons |
+|---|---|---|
+| Free text (markdown) | Simple, LLM-native | Hard to parse programmatically |
+| Structured JSON | Machine-readable, composable | LLMs produce inconsistent JSON |
+| Both (JSON with markdown body) | Flexible | Schema complexity |
+
+**Gap**: Must decide before Phase 0. If agent A spawns agent B, A needs
+to consume B's output. If B returns free text, A re-parses it. If B
+returns structured JSON, A can act on it directly. ECC agents return
+markdown. LangGraph agents return structured state. We need a convention.
+
+**Suggested approach**: Agent results are hashrefs: `{ ok, output, metrics }`.
+`output` is free text (markdown). `metrics` is structured data (turns used,
+tools called, score). Callers can use either.
+
+### 9.2 Error Handling and Failure Modes
+
+Agents can fail in several ways, each needing different recovery:
+
+| Failure Mode | Detection | Recovery |
+|---|---|---|
+| Max turns exceeded | Turn counter | Return partial results + "max turns" reason |
+| Invalid tool call | Tool dispatch error | Skip tool, log warning, continue |
+| Provider error | HTTP/timeout | Retry (3x), then return error |
+| Crashed (exception) | eval catch | Log stack trace, return error |
+| Garbage output | Output validation | Log raw output, return error |
+| Agent loops forever | Timeout (configurable) | Kill process, return error |
+
+**Gap**: Need a retry/timeout strategy and a result format that includes
+error information. The `{ ok, output, metrics }` format should include
+`error` and `partial` fields for incomplete results.
+
+### 9.3 Agent Observability
+
+How do we know what an agent did? Without observability, debugging
+agent failures is guessing.
+
+**Needed**:
+- Agent trajectory log (what tools were called, in order)
+- Decision trace (why the agent chose each action)
+- Token/cost accounting per agent
+- Bus event trail (which lifecycle events fired)
+
+**Implementation**: Agent sessions already live in the Store event journal.
+Add an `agent_id` column to the events table, or use the existing
+`correlation_id` to chain agent events. Query: `SELECT * FROM events
+WHERE correlation_id = ? ORDER BY created_at`.
+
+### 9.4 Concrete End-to-End Example
+
+The plan mentions "reviewer agent on lib/Foo.pm" but never shows it
+step by step. Here's the full flow:
+
+```
+1. User: /agent reviewer lib/Foo.pm
+
+2. Agent.pm loads agents/reviewer.toml:
+   - tools: [read, bash]
+   - model: standard
+   - prompt: "You are a code reviewer..."
+   - max_turns: 5
+
+3. Agent.pm creates child session with profile:
+   - System prompt = base prompt + agent prompt
+   - Tool set = only read + bash (from allowlist)
+   - Model = standard tier (from config)
+
+4. Loop.pm runs child session:
+   Turn 1: LLM calls fs_read("lib/Foo.pm") → gets file content
+   Turn 2: LLM calls bash("prove -l t/49_procedural_graph.t") → tests pass
+   Turn 3: LLM produces review output (no more tool calls)
+
+5. Agent.pm captures result:
+   { ok => 1,
+     output => "## Review of lib/Foo.pm\n\nIssues found:\n...",
+     metrics => { turns => 3, tools_called => 2, tokens => 1200 } }
+
+6. REPL displays the review output to the user
+```
+
+### 9.5 Agent Versioning
+
+When we update an agent profile, what happens to in-flight sessions?
+
+**Options**:
+1. Sessions keep the profile version at spawn time (immutable)
+2. Sessions hot-reload the profile on each turn (always current)
+3. Version field in TOML, spawn checks compatibility
+
+**Gap**: Don't decide yet. For v1, profiles are loaded at spawn time
+(option 1) — simple, predictable. Add hot-reload later if needed.
+
+### 9.6 Concurrent Agents
+
+Can multiple agents run in parallel?
+
+**Current state**: `Loop.pm::spawn()` is synchronous — blocks until the
+child session completes. Parallel spawning requires either:
+- Multiple Loop instances (each with its own session)
+- Async spawning with callback (result via bus)
+
+**Gap**: For v1, synchronous spawning is fine. Parallel composition
+(agent A spawns B and C in parallel, waits for both) is a Phase 2
+feature. The bus already supports this pattern — publish to two
+topics, collect both results.
+
+### 9.7 Agent Testing Strategy
+
+How do we test that a reviewer agent actually reviews instead of editing?
+
+**ECC's approach**: `skill-comply` generates test scenarios at 3 prompt
+strictness levels, runs agents, classifies tool call sequences, reports
+compliance rates.
+
+**Clank approach**:
+1. Unit test: Agent.pm loads profile correctly, applies allowlist
+2. Integration test: Spawn reviewer with mock provider, verify only
+   allowed tools were called
+3. Compliance test: Run agent on known inputs, verify output format
+   and tool usage patterns
+
+**Gap**: Design the compliance test framework before Phase 3.
+
+---
+
+## 10. Affordances: What Getting This Right Unlocks
+
+Beyond named profiles and tool constraints, a correct Agent system
+enables second-order capabilities that compound across the entire
+Clank architecture.
+
+### 10.1 Multi-Agent Pipelines
+
+"Review this PR" becomes a pipeline:
+
+```
+User: /agent review-pr 42
+
+Planner agent     → decomposes into: code, security, design tasks
+Reviewer agent    → checks code quality (read-only tools)
+Security agent    → scans for vulnerabilities (read + bash tools)
+Architect agent   → validates design decisions (read + logic tools)
+Synthesizer agent → merges findings into unified report
+```
+
+Each agent has the right tools and prompt for its phase. The Procedural
+Graph encodes the workflow. Agents are the executors. This is ECC's
+"composable societies" pattern — wits chain via bus events, agents
+chain via spawn composition.
+
+### 10.2 Cost-Aware Routing
+
+Route triage tasks to cheap models, deep analysis to expensive ones.
+The agent profile's `model` field becomes a budget lever:
+
+```
+Triage agent    → Flash/Haiku ($0.001/call)  — "is this urgent?"
+Review agent    → Sonnet ($0.01/call)        — "what's wrong?"
+Architect agent → Opus ($0.10/call)          — "how should we redesign?"
+```
+
+Combined with the internal model discussion — the harness optimizes
+its own cost without user intervention. Cheap tasks stay cheap.
+Expensive tasks get the quality they need.
+
+### 10.3 Quality Gates as Agents
+
+"Don't let code ship without a reviewer agent approving it."
+
+A bus hook on `pre_push` or `pre_commit` spawns a reviewer agent.
+If it returns issues, the push is blocked. This is GateGuard
+generalized — quality enforcement as agent profiles, not hardcoded
+rules. The agent profile defines what "approved" means. The bus hook
+enforces it.
+
+```
+pre_commit hook → spawn reviewer agent → agent returns { ok: false, issues: [...] }
+                                      → block commit, display issues
+                                      → user fixes, retries
+                                      → agent returns { ok: true }
+                                      → commit proceeds
+```
+
+### 10.4 Domain-Specific Expertise
+
+Instead of one general-purpose LLM trying to do everything, specialized
+agents with domain knowledge:
+
+| Agent | Domain Knowledge | Tools |
+|---|---|---|
+| db-migration | expand-contract, concurrent indexes, zero-downtime | read, bash, db_* |
+| deploy | rollback strategies, health checks, canary | read, bash, devops_* |
+| perl-expert | strict/warnings, CPAN conventions, test patterns | read, bash, perl_* |
+| security | OWASP, secret scanning, input validation | read, bash |
+
+Each agent is a focused expert, not a generalist. The generalist LLM
+handles novel situations; specialists handle known domains.
+
+### 10.5 Agent-as-Commodity
+
+If agent profiles are TOML+Markdown, they're trivially shareable:
+
+```
+# Share your deployment agent
+cp agents/deploy.toml agents/deploy.md ~/shared-agents/
+
+# Or via CPAN (future)
+cpanm Clank-Agents::Deploy
+```
+
+Community-contributed agents become as easy as community-contributed
+wits. The CPAN model applies to agent expertise. Someone else's
+"database migration agent" saves you from writing one.
+
+### 10.6 Procedural Graph Evolution Accelerates
+
+The PG evolves from execution feedback. With agents, each agent
+produces cleaner, more focused trajectories:
+
+- Reviewer agent only calls read/bash → clean trajectory
+- No irrelevant tool calls polluting the training data
+- The Evolver gets better signal → faster convergence
+- Better graphs → better guidance → better agent performance
+
+This is a positive feedback loop: agents make trajectories cleaner,
+cleaner trajectories make graphs better, better graphs make agents
+smarter.
+
+### 10.7 Compliance and Auditing
+
+Agent compliance testing gives us something we've never had: proof
+that the system follows its own rules.
+
+```
+Agent Compliance Report:
+  reviewer: invoked 47 times, tool allowlist compliance 100%, 23 issues flagged
+  security: invoked 12 times, tool allowlist compliance 100%, 3 vulnerabilities found
+  planner:  invoked 8 times, tool allowlist compliance 100%, 8 plans generated
+```
+
+This is trust through measurement, not trust through祈祷. Useful for:
+- Auditing agent behavior in regulated environments
+- Verifying that cost-optimization routing works
+- Detecting when agents are underperforming
+
+### 10.8 The Self-Improvement Loop Closes
+
+The full Clank improvement cycle, with agents:
+
+```
+Crystallizer    → LLM solutions → deterministic rules (cheaper next time)
+Procedural Graph → execution feedback → better procedural knowledge
+Agents          → focused trajectories → cleaner training data
+Internal Model  → improves tool selection → fewer wrong picks
+RATS            → TF scoring → (optionally) small LLM → better selection
+```
+
+Each component feeds the others. The system genuinely gets better
+with use — not just the rules, but the entire execution structure.
+Agents are the keystone: they produce the clean trajectories that
+feed the PG and Crystallizer, which improve the guidance and rules
+that make agents smarter.
+
+---
+
+## References
+
+- /home/clam/ref/ECC/agents/*.md — ECC agent definitions (68 agents)
+- /home/clam/ref/ECC/skills/continuous-learning-v2/ — instinct architecture
+- /home/clam/ref/ECC/schemas/hooks.schema.json — hook event types
+- LangGraph: StateGraph for agent orchestration (Python)
+- Deep Agents: planning + subagents + context management (Python)
+- OpenClaw: Agent Client Protocol, clawhub registry (TypeScript)
+- Clank: lib/Clank/Loop.pm, lib/Clank/Wit/API.pm, lib/Clank/ProceduralGraph.pm
+- LM Studio: github.com/lmstudio-ai/lms — CLI, multi-model support
+- Ollama: ollama.com — multi-model local inference

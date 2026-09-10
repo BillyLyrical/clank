@@ -1,0 +1,386 @@
+# ECC Adoption Plan
+
+> Patterns borrowed from /home/clam/ref/ECC/ for integration into Clank.
+> ECC = "Enhanced Claude Code" — 68 agents, 286 skills, hooks, rules,
+> memory, continuous learning, AgentShield security scanning.
+
+---
+
+## 1. Continuous Learning / Instincts
+
+**ECC source**: /home/clam/ref/ECC/skills/continuous-learning-v2/
+
+**What it does**: Hooks capture tool-use observations → background observer
+(Haiku, cheap model) detects patterns → creates atomic "instincts" with
+confidence scores → instincts cluster into skills/commands/agents.
+
+**Key files**:
+- /home/clam/ref/ECC/skills/continuous-learning-v2/SKILL.md — pipeline spec
+- Hooks on PreToolUse and PostToolUse capture observations
+- Project scoping: instincts scoped to git-remote-hash, promote to global
+  at confidence >= 0.8 after 2+ projects
+- Confidence decay: -0.02/week without observation, -0.1 per contradiction
+
+**Clank adaptation**:
+Extend Crystallizer with confidence-weighted ephemeral rules:
+- Add `confidence` (0.0-1.0) and `last_observed` timestamp to crystallized_rules
+- Add decay: confidence -= 0.02/week when unused, -= 0.1 on contradiction
+- Add project scoping: hash of git remote URL as scope key
+- Promotion: rules with confidence >= 0.8 seen in 2+ scopes become global
+- Display: `/stats` shows automation ratio + confidence distribution
+
+**Effort**: Medium (extend Crystallizer schema + add decay/promotion logic)
+
+---
+
+## 2. GateGuard: Force Investigation Before Editing
+
+**ECC source**: /home/clam/ref/ECC/skills/gateguard/
+
+**What it does**: PreToolUse hook that forces the agent to investigate
+before editing files. Three stages:
+1. DENY — block first edit attempt
+2. FORCE — demand specific facts: importers, schemas, user instruction
+3. ALLOW — permit retry with gathered context
+
+Measured +2.25 quality points vs ungated.
+
+**Key file**: /home/clam/ref/ECC/skills/gateguard/SKILL.md
+
+**Clank adaptation**:
+Wire as a bus hook on `tool_call` events for write/edit tools:
+- First edit attempt: block, return "investigate before editing"
+- Inject instructions: "grep for importers of this module, read the schema,
+  confirm the user's intent"
+- Second attempt: allow
+
+Could be a wit (`wits/guardrails/`) that subscribes to `tool_call` and
+blocks writes until the agent has gathered context.
+
+**Effort**: Low (bus hook + tool_call interception, existing patterns)
+
+---
+
+## 3. Typed Hook Lifecycle
+
+**ECC source**: /home/clam/ref/ECC/schemas/hooks.schema.json
+
+**What it does**: 18 hook events with typed handlers:
+- SessionStart, UserPromptSubmit, PreToolUse, PostToolUse,
+  PostToolUseFailure, Stop, PreCompact, SessionEnd
+- SubagentStart, SubagentStop, TaskCompleted, ConfigChange
+
+Three handler types: command (shell), http (webhook), prompt (inject text).
+Profile-gated via ECC_HOOK_PROFILE (minimal/standard/strict).
+
+**Key files**:
+- /home/clam/ref/ECC/schemas/hooks.schema.json — event type definitions
+- /home/clam/ref/ECC/skills/continuous-learning-v2/ — uses PreToolUse/PostToolUse
+
+**Clank adaptation**:
+Formalize the bus event vocabulary. Currently ad-hoc topics. Add:
+- `pre_tool_use` / `post_tool_use` / `post_tool_use_failure`
+- `pre_compact` / `post_compact`
+- `session_start` / `session_end`
+- Profile system: ContextRules DSL gains profile levels (minimal/standard/strict)
+
+**Effort**: Low-Medium (rename some bus topics, add profile gating to ContextRules)
+
+---
+
+## 4. Agent/Skill/Hook Three-Layer Split
+
+**ECC source**: /home/clam/ref/ECC/agents/*.md, /home/clam/ref/ECC/skills/*/SKILL.md
+
+**What it does**: Clean separation of concerns:
+- **Agents** = who does it (prompt + tool allowlist + model)
+- **Skills** = what workflow (Markdown + optional scripts)
+- **Hooks** = what triggers automatically (event-driven)
+
+68 agents as plain Markdown files with YAML frontmatter. 286 skills.
+94 legacy command shims being deprecated.
+
+**Key files**:
+- /home/clam/ref/ECC/agents/*.md — agent definitions (prompt + tools)
+- /home/clam/ref/ECC/skills/*/SKILL.md — skill definitions
+- /home/clam/ref/ECC/AGENTS.md — orchestrator routing
+
+**Clank adaptation**:
+Wits currently mix all three concerns. Consider:
+- Agents: named prompt templates with tool allowlists (for subagent spawning)
+- Skills: workflow definitions (what Clank already has as wits)
+- Hooks: bus subscriptions (what wits already do, but formalize)
+
+Not urgent — our wit system works. But for scaling to 200+ wits,
+the separation helps humans navigate.
+
+**Effort**: Low (documentation + convention, no code changes needed)
+
+---
+
+## 5. Council: Adversarial Decision-Making
+
+**ECC source**: /home/clam/ref/ECC/skills/council/
+
+**What it does**: Four-voice adversarial decision-making:
+- Architect (constructive), Skeptic (critical), Pragmatist (practical),
+  Critic (quality)
+- Each sees only the question (anti-anchoring — no cross-contamination)
+- Synthesized by a fifth agent
+
+**Key file**: /home/clam/ref/ECC/skills/council/SKILL.md
+
+**Clank adaptation**:
+Implement as a "band" (bus workflow) or a subagent-spawning wit.
+Spawn 4 parallel subagents with isolated prompts, collect results,
+synthesize. Useful for ambiguous architectural decisions.
+
+Clank's subagent system already supports this — just need the orchestration
+wit that spawns 4 specialized prompts and merges results.
+
+**Effort**: Low (wit that spawns 4 subagents via existing infrastructure)
+
+---
+
+## 6. Skill Compliance Testing
+
+**ECC source**: /home/clam/ref/ECC/skills/skill-comply/
+
+**What it does**: Meta-quality measurement. Auto-generates test scenarios
+at 3 prompt strictness levels, runs agents, classifies tool call sequences,
+reports compliance rates. Are agents actually following their declared skills?
+
+**Key file**: /home/clam/ref/ECC/skills/skill-comply/SKILL.md
+
+**Clank adaptation**:
+Build a compliance test wit that:
+- Reads wit metadata (hint, about, usage)
+- Generates test prompts that should trigger specific wits
+- Runs agent loop, checks which tools were called
+- Reports: "wit X was expected 10 times, triggered 8 times (80% compliance)"
+
+This is valuable for our 141 wits — are they actually being selected by RATS?
+
+**Effort**: Medium (test generation + compliance scoring logic)
+
+---
+
+## 7. Unified Memory Schema
+
+**ECC source**: /home/clam/ref/ECC/schemas/memory.schema.json,
+/home/clam/ref/ECC/skills/unified-memory/
+
+**What it does**: Portable memory documents (ecc.memory.v1) shared across
+harnesses. Typed kinds: context, decision, fact, handoff, lesson, note,
+preference, runbook. Statuses: active/rejected/superseded. Scope-isolated
+(project/team/user), trust-bounded.
+
+**Key files**:
+- /home/clam/ref/ECC/schemas/memory.schema.json — schema definition
+- /home/clam/ref/ECC/skills/unified-memory/SKILL.md — usage spec
+
+**Clank adaptation**:
+Complementary to WorldModel (entities/relations/facts/beliefs) for
+durable structured knowledge. Could add a `memory_documents` table with
+kind/status/scope columns, queryable via FTS5.
+
+Not urgent — WorldModel handles most cases. But "lesson" and "runbook"
+kinds are interesting for cross-session learning.
+
+**Effort**: Low-Medium (new table + bus topic, no changes to WorldModel)
+
+---
+
+## 8. Dispatcher Fan-Out Pattern
+
+**ECC source**: /home/clam/ref/ECC/skills/continuous-learning-v2/ (uses consolidated dispatchers)
+
+**What it does**: Instead of N individual hook processes per event,
+consolidated dispatchers (pre-bash-dispatcher.js, posttooluse-dispatcher.js)
+fan out internally. Reduces process spawning.
+
+**Clank adaptation**:
+Our bus is in-process (synchronous dispatch), so this doesn't apply
+directly. But the pattern matters if we add external hook processes:
+one dispatcher per event type, fan out internally.
+
+**Effort**: N/A for now (in-process bus handles this)
+
+---
+
+## Implementation Priority
+
+| Priority | Item | Effort | Impact |
+|----------|------|--------|--------|
+| 1 | GateGuard (force investigation) | Low | High — direct quality improvement |
+| 2 | Instincts / confidence decay | Medium | High — smarter crystallization |
+| 3 | Typed hook lifecycle | Low-Med | Medium — cleaner architecture |
+| 4 | Council decision-making | Low | Medium — useful for ambiguous decisions |
+| 5 | Skill compliance testing | Medium | Medium — meta-quality for 141 wits |
+| 6 | Three-layer agent/skill/hook | Low | Low — convention/docs only |
+| 7 | Unified memory schema | Low-Med | Low — WorldModel covers most cases |
+
+---
+
+## 9. Skills to Convert to Wits (8 candidates)
+
+### 9.1 terminal-ops
+**Source**: /home/clam/ref/ECC/skills/terminal-ops/SKILL.md
+**What**: Evidence-first repo execution. Inspect before editing, run commands
+with exact status reporting (inspected/changed/verified/committed/pushed/blocked),
+never claim fixed without re-running the proving command.
+**Wit**: `build` deck — enforces "read before write, prove before commit."
+**Conversion**: Strip Claude refs, adapt to Perl tool names. ~100 lines.
+
+### 9.2 production-audit
+**Source**: /home/clam/ref/ECC/skills/production-audit/SKILL.md
+**What**: Local-evidence production readiness audit covering security, data
+integrity, payments, operations, UX. Scored ship/block recommendation (0-100)
+with evidence citations.
+**Wit**: `build` or `debug` deck — pre-deploy risk triage. No equivalent in Clank.
+**Conversion**: Language-agnostic checklist. Adapt checks to Perl/SQLite context. ~150 lines.
+
+### 9.3 verification-loop
+**Source**: /home/clam/ref/ECC/skills/verification-loop/SKILL.md
+**What**: Six-phase verification: build, typecheck, lint, test suite, security
+scan (secrets grep), diff review. Structured PASS/FAIL report per phase.
+**Wit**: `build` deck — composite verification pipeline.
+**Conversion**: Each phase maps to existing wits (perl_syntax, perl_test, etc.)
+or a single orchestrator wit. ~120 lines.
+
+### 9.4 database-migrations
+**Source**: /home/clam/ref/ECC/skills/database-migrations/SKILL.md
+**What**: Safe schema change patterns: expand-contract, concurrent indexes,
+batch backfills, zero-downtime deployment.
+**Wit**: `db` deck — migration safety checklist. Clank's db deck has 8 wits
+but none for migration patterns.
+**Conversion**: SQL patterns are universal. Adapt to SQLite/PostgreSQL. ~100 lines.
+
+### 9.5 search-first
+**Source**: /home/clam/ref/ECC/skills/search-first/SKILL.md
+**What**: Research-before-coding: check in-repo, package registries, OSS
+before writing custom code. Decision matrix: adopt/extend/compose/build.
+**Wit**: `search` deck — "don't reinvent the wheel" prompt.
+**Conversion**: Map to CPAN, existing codebase, web. ~80 lines.
+
+### 9.6 tdd-workflow
+**Source**: /home/clam/ref/ECC/skills/tdd-workflow/SKILL.md
+**What**: Structured TDD: write journeys → generate tests → RED → implement →
+GREEN → refactor → verify coverage → evidence report.
+**Wit**: `perl` deck — TDD orchestrator. Perl deck has testing wits but
+no workflow orchestrator that enforces the cycle.
+**Conversion**: Adapt to `prove -l t/` workflow. ~120 lines.
+
+### 9.7 coding-standards
+**Source**: /home/clam/ref/ECC/skills/coding-standards/SKILL.md
+**What**: Baseline conventions: naming, immutability, KISS/DRY/YAGNI, error
+handling, code smell detection (long functions, deep nesting, magic numbers).
+**Wit**: `perl` or `critic` deck — reviews code against Clank's style.
+**Conversion**: Language-agnostic principles adapt to Perl. ~100 lines.
+
+### 9.8 error-handling
+**Source**: /home/clam/ref/ECC/skills/error-handling/SKILL.md
+**What**: Typed error hierarchies, Result pattern, retry with backoff,
+circuit breakers, user-facing vs developer error separation.
+**Wit**: `debug` deck — structured error-handling patterns.
+**Conversion**: Map to Perl eval/$@/exception patterns. ~100 lines.
+
+### Conversion Notes
+- All 8 are language-agnostic or easily Perl-ized
+- Each becomes a wit with `# CLANK-WIT:` metadata + `register($api)`
+- Register bus hooks where appropriate (e.g., verification-loop on agent_end)
+- Total: ~870 lines across 8 wits
+
+---
+
+## 10. Hook Schema → Bus Event Vocabulary
+
+### Current Clank Bus Events (ad-hoc)
+The bus has informal topics: `context.knowledge_request`, `tool_call`,
+`tool_result`, `agent_end`, `turn_start`, `turn_end`, etc.
+
+### ECC Hook Events (18 typed events)
+From /home/clam/ref/ECC/schemas/hooks.schema.json:
+
+| ECC Event | Clank Equivalent | Action |
+|-----------|-----------------|--------|
+| SessionStart | (none) | Add `session_start` topic |
+| UserPromptSubmit | (none — Loop.pm handles) | Add `user_prompt_submit` topic |
+| PreToolUse | `tool_call` (exists) | Rename or alias |
+| PermissionRequest | (none) | Add `permission_request` topic |
+| PostToolUse | `tool_result` (exists) | Rename or alias |
+| PostToolUseFailure | (none) | Add `tool_failure` topic |
+| Notification | (none) | Add `notification` topic |
+| SubagentStart | (none) | Add `subagent_start` topic |
+| Stop | `agent_end` (exists) | Rename or alias |
+| SubagentStop | (none) | Add `subagent_stop` topic |
+| PreCompact | (none) | Add `pre_compact` topic |
+| InstructionsLoaded | (none) | Add `instructions_loaded` topic |
+| TeammateIdle | (none) | Not needed (single-agent) |
+| TaskCompleted | (none) | Add `task_completed` topic |
+| ConfigChange | (none) | Add `config_change` topic |
+| WorktreeCreate | (none) | Add `worktree_create` topic |
+| WorktreeRemove | (none) | Add `worktree_remove` topic |
+| SessionEnd | (none) | Add `session_end` topic |
+
+### Proposed Clank Bus Event Vocabulary
+
+```
+Session lifecycle:
+  session_start          — session created or resumed
+  session_end            — session closing
+
+Prompt lifecycle:
+  user_prompt_submit     — user input received (before agent processes)
+
+Tool lifecycle:
+  pre_tool_use           — before tool execution (existing: tool_call)
+  post_tool_use          — after tool success (existing: tool_result)
+  post_tool_use_failure  — after tool failure (NEW)
+  permission_request     — tool requires permission (NEW)
+
+Agent lifecycle:
+  agent_start            — agent loop begins a turn
+  agent_end              — agent loop finishes (existing)
+  turn_start             — individual turn begins (existing)
+  turn_end               — individual turn ends (existing)
+
+Subagent lifecycle:
+  subagent_start         — subagent spawned (NEW)
+  subagent_stop          — subagent completed (NEW)
+
+Context lifecycle:
+  pre_compact            — before context compaction (NEW)
+  post_compact           — after compaction (NEW)
+  instructions_loaded    — system prompt assembled (NEW)
+
+Task lifecycle:
+  task_completed         — background task finished (NEW)
+
+Config:
+  config_change          — configuration modified (NEW)
+```
+
+### Implementation
+- Add topic constants to `Clank::Bus` or a new `Clank::Bus::Topics`
+- Emit new events from Loop.pm at appropriate points
+- Rename existing topics with backward-compatible aliases
+- Add profile gating: ContextRules DSL gains `profile => 'standard'`
+  (minimal/standard/strict) to control which hooks fire
+
+---
+
+## References
+
+All paths relative to /home/clam/ref/ECC/:
+- agents/*.md — agent definitions (68 agents)
+- skills/*/SKILL.md — skill definitions (286 skills)
+- schemas/hooks.schema.json — hook event types
+- schemas/memory.schema.json — memory document schema
+- skills/continuous-learning-v2/ — instinct architecture
+- skills/gateguard/ — force-investigation pattern
+- skills/council/ — adversarial decision-making
+- skills/skill-comply/ — compliance testing
+- skills/unified-memory/ — cross-harness memory
+- skills/security-scan/ — AgentShield scanning
+- AGENTS.md — orchestrator routing and agent catalog
