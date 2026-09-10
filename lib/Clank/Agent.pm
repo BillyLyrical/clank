@@ -139,7 +139,18 @@ sub spawn {
     # Build agent-specific system prompt: base + agent instructions.
     my $base_prompt = $parent->system_prompt;
     my $agent_prompt = $profile->{prompt} // '';
-    $child->set_system_prompt($base_prompt . "\n\n" . $agent_prompt);
+    my $full_prompt = $base_prompt . "\n\n" . $agent_prompt;
+
+    # Anti-injection hook: let wits prepend defense instructions.
+    my $defense = $bus->publish('agent_prompt_defense', {
+        agent  => $name,
+        prompt => $full_prompt,
+    });
+    if ($defense && ref $defense eq 'HASH' && $defense->{prepend}) {
+        $full_prompt = $defense->{prepend} . "\n\n" . $full_prompt;
+    }
+
+    $child->set_system_prompt($full_prompt);
 
     # Copy skills and context files.
     $child->{skills}        = [ @{ $parent->{skills}        // [] } ];
@@ -193,6 +204,9 @@ sub spawn {
         model             => $provider->{model},
     });
 
+    # Record invocation stats.
+    $class->_record_stat($name, $result->{ok}, $result->{turns});
+
     # Extract output.
     my $output = '';
     if ($result->{ok}) {
@@ -231,6 +245,68 @@ sub delegate {
     });
 
     return $class->spawn(name => $to, prompt => $prompt, loop => $loop);
+}
+
+# Invocation statistics. Returns hashref: { $name => { calls, ok, errors, turns } }.
+my %STATS;
+
+sub stats {
+    my ($class) = @_;
+    return { %STATS };
+}
+
+sub _record_stat {
+    my ($class, $name, $ok, $turns) = @_;
+    $STATS{$name} //= { calls => 0, ok => 0, errors => 0, turns => 0 };
+    $STATS{$name}{calls}++;
+    $STATS{$name}{ok}++ if $ok;
+    $STATS{$name}{errors}++ unless $ok;
+    $STATS{$name}{turns} += $turns;
+}
+
+# Compliance test: spawn an agent and verify only allowed tools were called.
+# Args: name (profile), prompt (test scenario), loop, bus (to spy on tool_use).
+# Returns: { compliant, allowed_tools, used_tools, violations }.
+sub comply {
+    my ($class, %args) = @_;
+    my $name   = $args{name}   or die "Agent::comply requires name\n";
+    my $prompt = $args{prompt} or die "Agent::comply requires prompt\n";
+    my $loop   = $args{loop}   or die "Agent::comply requires loop\n";
+    my $bus    = $args{bus}    or die "Agent::comply requires bus\n";
+
+    my $profile = $class->load($name);
+    die "unknown agent: $name\n" unless $profile;
+
+    my %allowed = map { $_ => 1 } @{ $profile->{tools} // [] };
+    my %used;
+
+    # Spy on tool_use events to record which tools were called.
+    my $sub_id = $bus->subscribe('tool_use', sub {
+        my $tool = $_[0]{payload}{tool_name} // '';
+        $used{$tool}++ if $tool;
+    }, name => "comply_spy_$name");
+
+    my $result = $class->spawn(
+        name   => $name,
+        prompt => $prompt,
+        loop   => $loop,
+    );
+
+    $bus->unsubscribe($sub_id);
+
+    my @violations;
+    for my $tool (keys %used) {
+        push @violations, $tool unless $allowed{$tool};
+    }
+
+    return {
+        compliant    => scalar(@violations) == 0,
+        allowed_tools => [ sort keys %allowed ],
+        used_tools    => [ sort keys %used ],
+        violations    => \@violations,
+        ok            => $result->{ok},
+        turns         => $result->{turns},
+    };
 }
 
 # Tokenize text for TF scoring. Lowercase, split on non-word, drop stop words.
