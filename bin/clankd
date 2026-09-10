@@ -229,14 +229,16 @@ sub handle_request {
             if (!defined $text || !length($text)) {
                 $resp = { id => $msg->{id}, ok => 0, error => 'no prompt text' };
             } else {
-                # Sigil dispatch: every prompt must use a sigil.
-                # Bare text is rejected — use ? for LLM queries.
+                # Sigil dispatch first, then fall through to LLM.
                 my $sigil_result = $sigil->dispatch($text);
                 if ($sigil_result) {
                     $resp = { id => $msg->{id}, ok => 1, %$sigil_result };
                 } else {
-                    $resp = { id => $msg->{id}, ok => 0,
-                              error => "no sigil — use ? for LLM queries, / for commands" };
+                    # No sigil: send to LLM (same as bare text in bin/clank).
+                    my %ask;
+                    $ask{timeout} = $msg->{timeout} // $o{timeout} if defined ($msg->{timeout} // $o{timeout});
+                    $resp = $driver->ask($text, %ask);
+                    $resp->{id} = $msg->{id};
                 }
             }
         } elsif ($cmd eq 'session_info') {

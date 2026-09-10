@@ -202,8 +202,9 @@ The sigils become a shared vocabulary between human and AI.
 
 ### 1.5 clankd: AI Testing the REPL
 
-`bin/clankd` enforces sigil usage for all prompts. The AI sends
-sigil-prefixed text through the JSON protocol:
+`bin/clankd` mirrors the REPL exactly. Sigil-prefixed text routes
+through the same dispatch. Bare text goes to the LLM — same as
+typing it at the `clank>` prompt:
 
 ```
 # AI sends a comment (no-op):
@@ -218,13 +219,12 @@ sigil-prefixed text through the JSON protocol:
 # AI evaluates Perl:
 {"id":4,"prompt":"$ time()"}
 
-# Bare text is rejected:
-{"id":5,"prompt":"hello"}  →  {"ok":0,"error":"no sigil — use ? for LLM queries, / for commands"}
+# AI sends bare text to the LLM (same as human typing at prompt):
+{"id":5,"prompt":"hello"}  →  sent to LLM, returns response
 ```
 
 This makes clankd a faithful mirror of the REPL — the AI exercises
-exactly the same dispatch path a human would. The sigil system is
-tested end-to-end through the same interface.
+exactly the same dispatch path a human would.
 
 ---
 
