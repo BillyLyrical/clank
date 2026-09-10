@@ -1,6 +1,6 @@
 # Clank::Agent — Design Plan
 
-Status: early design. Sketching concerns, not freezing spec.
+Status: IMPLEMENTED. Phases 0-3 complete. See commit log.
 
 ---
 
@@ -305,30 +305,35 @@ Clank::Bus (communication)
 
 ## 7. Implementation Path (when we're ready)
 
-### Phase 0: Proof of Concept (1 agent)
+### Phase 0: Proof of Concept (1 agent) ✅ DONE
 - Create `Clank::Agent` module with `load()` and `spawn()`
 - Create `agents/reviewer.toml` + `agents/reviewer.md`
 - Test: spawn a reviewer agent on a code file, verify tool restriction
 - ~200 lines module + 100 lines tests
+- 10 tests passing, committed as c06b07d
 
-### Phase 1: Core Framework (3-5 agents)
+### Phase 1: Core Framework (3-5 agents) ✅ DONE
 - Agent profiles: reviewer, planner, debugger, security, architect
 - Tool allowlist enforcement in spawn
-- Model tier selection
-- `/agent <name> <prompt>` REPL command
-- ~400 lines module + 200 lines tests
-
-### Phase 2: Routing + Composition
-- Keyword-based agent selection (like RATS for agents)
-- Agent-to-agent delegation (reviewer spawns debugger on issues)
-- Bus lifecycle events (pre_agent_start, subagent_start, etc.)
-- ~300 lines + 150 lines tests
-
-### Phase 3: Polish
+- Model tier selection (spawn clones provider with agent's model)
+- `/agent <name> <prompt>` REPL command + `/agent --model=tier` override
 - `/agents` list command
-- Agent compliance testing (like ECC's skill-comply)
-- Anti-injection hooks (optional bus hook)
-- Agent statistics (how often each agent is used)
+- ~400 lines module + 200 lines tests
+- 15 tests passing, committed as 49c1cc7
+
+### Phase 2: Routing + Composition ✅ DONE
+- Keyword-based agent selection (TF scoring against descriptions)
+- Agent-to-agent delegation (reviewer spawns debugger on issues)
+- Bus lifecycle events (pre_agent_start, agent_end, agent_delegate)
+- ~300 lines + 150 lines tests
+- 22 tests passing, committed as f22dbc2
+
+### Phase 3: Polish ✅ DONE
+- `/agents` list command (done in Phase 0)
+- Agent compliance testing (comply() method with tool spying)
+- Anti-injection hooks (agent_prompt_defense bus event)
+- Agent statistics (invocation counts, success rates)
+- 26 tests passing, committed as 8e7b572
 
 ---
 
