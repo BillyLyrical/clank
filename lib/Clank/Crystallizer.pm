@@ -25,6 +25,9 @@ sub new {
         metrics     => $args{metrics},
         enabled     => $args{enabled} // 1,
         min_confidence => $args{min_confidence} // 0.6,
+        project_id  => $args{project_id},
+        decay_rate  => $args{decay_rate} // 0.02,
+        decay_interval_ms => $args{decay_interval_ms} // (7 * 24 * 60 * 60 * 1000),
     }, $class;
     $self->_init_schema if $self->{store};
     return $self;
@@ -52,6 +55,14 @@ sub register {
 
     # Subscribe to context.knowledge_request to provide crystallized rules.
     $api->on('context.knowledge_request', sub { $self->_on_knowledge_request(@_) });
+
+    # Subscribe to observation bus event for tool-use pattern capture.
+    $api->on('observation', sub { $self->_on_observation(@_) });
+
+    # CLI commands for instinct management.
+    $api->register_command('instinct',
+        description => 'instinct: status|decay|promote|domain <domain>',
+        handler => sub { $self->_cmd_instinct(@_) });
 
     return $self;
 }
@@ -110,6 +121,22 @@ CREATE TABLE IF NOT EXISTS crystallized_rules (
 )});
     $self->_dbh->do(qq{
 CREATE INDEX IF NOT EXISTS idx_crystallized_name ON crystallized_rules(name)});
+
+    # Schema migration: add instinct columns if missing.
+    for my $col (
+        'scope TEXT DEFAULT \'global\'',
+        'project_id TEXT',
+        'domain TEXT DEFAULT \'general\'',
+        'last_observed INTEGER',
+        'decay_rate REAL DEFAULT 0.02',
+    ) {
+        (my $col_name = $col) =~ s/\s+.*//;
+        eval { $self->_dbh->do("ALTER TABLE crystallized_rules ADD COLUMN $col") };
+    }
+    $self->_dbh->do(qq{
+CREATE INDEX IF NOT EXISTS idx_crystallized_scope ON crystallized_rules(scope)});
+    $self->_dbh->do(qq{
+CREATE INDEX IF NOT EXISTS idx_crystallized_project ON crystallized_rules(project_id)});
 }
 
 # === PUBLIC API ===
@@ -140,6 +167,10 @@ sub crystallize {
     for my $pattern (@patterns) {
         next unless $pattern->{confidence} >= $self->{min_confidence};
         next unless $self->_validate_pattern($pattern);
+
+        $pattern->{scope}      //= $args{scope}      // 'global';
+        $pattern->{project_id} //= $args{project_id}  // $self->{project_id} // '';
+        $pattern->{domain}     //= $args{domain}      // 'general';
 
         my $id = $self->_store_rule($pattern, session_id => $session_id);
         if ($id) {
@@ -197,7 +228,249 @@ sub stats {
         active       => $dbh->selectrow_array('SELECT COUNT(*) FROM crystallized_rules WHERE disabled = 0'),
         total_uses   => $dbh->selectrow_array('SELECT COALESCE(SUM(use_count), 0) FROM crystallized_rules'),
         avg_confidence => $dbh->selectrow_array('SELECT AVG(confidence) FROM crystallized_rules WHERE disabled = 0'),
+        project_scoped => $dbh->selectrow_array("SELECT COUNT(*) FROM crystallized_rules WHERE scope = 'project' AND disabled = 0"),
+        global_rules   => $dbh->selectrow_array("SELECT COUNT(*) FROM crystallized_rules WHERE scope = 'global' AND disabled = 0"),
     };
+}
+
+# === INSTINCTS: CONFIDENCE DECAY ===
+
+sub apply_decay {
+    my ($self, %args) = @_;
+    my $now = $args{now} // now_ms();
+    my $rate = $args{rate} // $self->{decay_rate};
+    my $interval = $args{interval_ms} // $self->{decay_interval_ms};
+
+    my $rules = $self->list_rules(limit => 10000);
+    my $decayed = 0;
+
+    for my $rule (@$rules) {
+        my $last = $rule->{last_used} // $rule->{created_at} // $now;
+        my $elapsed = $now - $last;
+        my $periods = int($elapsed / $interval);
+        next unless $periods > 0;
+
+        my $rule_rate = $rule->{decay_rate} // $rate;
+        my $new_conf = $rule->{confidence} - ($rule_rate * $periods);
+        $new_conf = 0 if $new_conf < 0;
+
+        if ($new_conf < $rule->{confidence}) {
+            if ($new_conf <= 0) {
+                $self->disable_rule($rule->{name});
+            }
+            else {
+                $self->_dbh->do(
+                    'UPDATE crystallized_rules SET confidence = ? WHERE name = ?',
+                    undef, $new_conf, $rule->{name});
+            }
+            $decayed++;
+        }
+    }
+
+    $self->{metrics}->inc('instincts_decayed', $decayed) if $self->{metrics};
+    return $decayed;
+}
+
+# === INSTINCTS: CONTRADICTION ===
+
+sub detect_contradiction {
+    my ($self, $pattern) = @_;
+    my $existing = $self->_dbh->selectrow_hashref(
+        'SELECT * FROM crystallized_rules WHERE name = ? AND disabled = 0',
+        undef, $pattern->{name});
+    return undef unless $existing;
+
+    my $existing_text = $existing->{action_def};
+    my $new_text = ref $pattern->{action} eq 'HASH' ? jencode($pattern->{action}) : ($pattern->{action} // '');
+
+    if ($existing_text ne $new_text && length($existing_text) > 5 && length($new_text) > 5) {
+        my $new_conf = $existing->{confidence} - 0.1;
+        $new_conf = 0 if $new_conf < 0;
+
+        if ($new_conf <= 0) {
+            $self->disable_rule($existing->{name});
+        }
+        else {
+            $self->_dbh->do(
+                'UPDATE crystallized_rules SET confidence = ? WHERE name = ?',
+                undef, $new_conf, $existing->{name});
+        }
+        return { rule => $existing, old_confidence => $existing->{confidence}, new_confidence => $new_conf };
+    }
+
+    return undef;
+}
+
+# === INSTINCTS: PROMOTION (project -> global) ===
+
+sub promote_rules {
+    my ($self, %args) = @_;
+    my $min_confidence = $args{min_confidence} // 0.8;
+
+    my $candidates = $self->_dbh->selectall_arrayref(
+        sprintf(q{SELECT name, COUNT(DISTINCT project_id) as project_count, AVG(confidence) as avg_conf
+          FROM crystallized_rules
+          WHERE scope = 'project' AND disabled = 0
+          GROUP BY name
+          HAVING project_count >= 2 AND avg_conf >= %s}, $min_confidence),
+        { Slice => {} });
+
+    my $promoted = 0;
+    for my $c (@$candidates) {
+        $self->_dbh->do(
+            "UPDATE crystallized_rules SET scope = 'global' WHERE name = ? AND scope = 'project'",
+            undef, $c->{name});
+        $promoted++;
+    }
+
+    $self->{metrics}->inc('instincts_promoted', $promoted) if $self->{metrics};
+    return $promoted;
+}
+
+# === INSTINCTS: OBSERVATION ===
+
+sub observe {
+    my ($self, %args) = @_;
+    my $tool_name = $args{tool} // '';
+    my $input     = $args{input} // {};
+    my $output    = $args{output} // '';
+    my $success   = $args{success} // 1;
+    my $domain    = $args{domain} // 'general';
+
+    my $now = now_ms();
+    my $project_id = $args{project_id} // $self->{project_id} // '';
+
+    # Update last_observed for matching rules.
+    my $rules = $self->list_rules(limit => 10000);
+    my $observed = 0;
+    for my $rule (@$rules) {
+        my $text = join(' ', $rule->{name} // '', $rule->{condition_def} // '', $rule->{action_def} // '');
+        if ($text =~ /\Q$tool_name\E/i) {
+            $self->_dbh->do(
+                'UPDATE crystallized_rules SET last_observed = ?, use_count = use_count + 1 WHERE name = ?',
+                undef, $now, $rule->{name});
+            $observed++;
+        }
+    }
+
+    $self->{metrics}->inc('observations', 1) if $self->{metrics};
+    return $observed;
+}
+
+# === INSTINCTS: PROJECT DETECTION ===
+
+sub detect_project_id {
+    my ($class, %args) = @_;
+    my $path = $args{path} // '.';
+
+    my $remote = eval {
+        chomp(my $url = `git -C $path remote get-url origin 2>/dev/null`);
+        $url;
+    };
+
+    if ($remote && $remote =~ /\S/) {
+        return _hash_string($remote);
+    }
+
+    my $toplevel = eval {
+        chomp(my $dir = `git -C $path rev-parse --show-toplevel 2>/dev/null`);
+        $dir;
+    };
+
+    if ($toplevel && $toplevel =~ /\S/) {
+        return _hash_string($toplevel);
+    }
+
+    return undef;
+}
+
+sub _hash_string {
+    my ($str) = @_;
+    my $hash = 0;
+    $hash = ($hash * 33 + ord($_)) & 0xFFFFFFFF for split //, $str;
+    return sprintf('%08x', $hash);
+}
+
+# === INSTINCTS: LIST BY SCOPE ===
+
+sub list_instincts {
+    my ($self, %args) = @_;
+    my $scope   = $args{scope};   # undef = all
+    my $domain  = $args{domain};  # undef = all
+    my $limit   = $args{limit} // 100;
+
+    my @where = ('disabled = 0');
+    my @bind;
+    if (defined $scope) {
+        push @where, 'scope = ?';
+        push @bind, $scope;
+    }
+    if (defined $domain) {
+        push @where, 'domain = ?';
+        push @bind, $domain;
+    }
+
+    my $sql = 'SELECT * FROM crystallized_rules WHERE ' . join(' AND ', @where);
+    $sql .= ' ORDER BY confidence DESC LIMIT ?';
+    push @bind, $limit;
+
+    return $self->_dbh->selectall_arrayref($sql, { Slice => {} }, @bind);
+}
+
+# === CLI COMMANDS ===
+
+sub _cmd_instinct {
+    my ($self, $ctx, $args) = @_;
+    my ($subcmd, @rest) = split /\s+/, ($args // '');
+    $subcmd //= 'status';
+
+    if ($subcmd eq 'status') {
+        my $s = $self->stats;
+        my $out = "Instinct status:\n";
+        $out .= "  total rules: $s->{total_rules}\n";
+        $out .= "  active: $s->{active}\n";
+        $out .= "  project-scoped: $s->{project_scoped}\n";
+        $out .= "  global: $s->{global_rules}\n";
+        $out .= "  avg confidence: " . sprintf('%.1f%%', ($s->{avg_confidence} // 0) * 100) . "\n";
+        $out .= "  total uses: $s->{total_uses}\n";
+
+        my $project = $self->{project_id} // 'none';
+        $out .= "  project_id: $project\n";
+
+        my $instincts = $self->list_instincts(limit => 10);
+        if (@$instincts) {
+            $out .= "\nTop instincts:\n";
+            for my $i (@$instincts) {
+                $out .= sprintf("  %.0f%% %s [%s] (used %d)\n",
+                    ($i->{confidence} // 0) * 100,
+                    $i->{name}, $i->{scope} // 'global',
+                    $i->{use_count} // 0);
+            }
+        }
+        return $out;
+    }
+    elsif ($subcmd eq 'decay') {
+        my $decayed = $self->apply_decay;
+        return "Decay applied: $decayed rules affected.\n";
+    }
+    elsif ($subcmd eq 'promote') {
+        my $promoted = $self->promote_rules;
+        return "Promotion: $promoted rules promoted to global.\n";
+    }
+    elsif ($subcmd eq 'domain') {
+        my $domain = $rest[0] // '';
+        return "Usage: /instinct domain <domain>\n" unless $domain;
+        my $instincts = $self->list_instincts(domain => $domain);
+        my $out = "Instincts in domain '$domain':\n";
+        for my $i (@$instincts) {
+            $out .= sprintf("  %.0f%% %s [%s]\n",
+                ($i->{confidence} // 0) * 100, $i->{name}, $i->{scope} // 'global');
+        }
+        $out .= "  (none)\n" unless @$instincts;
+        return $out;
+    }
+
+    return "Usage: /instinct status|decay|promote|domain <domain>\n";
 }
 
 # === PATTERN EXTRACTION ===
@@ -290,14 +563,19 @@ sub _validate_pattern {
 sub _store_rule {
     my ($self, $pattern, %args) = @_;
     my $now = now_ms();
+    my $scope = $pattern->{scope} // 'global';
+    my $project_id = $pattern->{project_id} // $self->{project_id} // '';
+    my $domain = $pattern->{domain} // 'general';
+
     eval {
         $self->_dbh->prepare(
-            'INSERT INTO crystallized_rules (name, rule_type, condition_def, action_def, confidence, source, session_id, created_at) VALUES (?,?,?,?,?,?,?,?)'
+            'INSERT INTO crystallized_rules (name, rule_type, condition_def, action_def, confidence, source, session_id, created_at, last_observed, scope, project_id, domain) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
         )->execute(
             $pattern->{name}, $pattern->{type},
             ref $pattern->{condition} eq 'HASH' ? jencode($pattern->{condition}) : $pattern->{condition},
             ref $pattern->{action} eq 'HASH' ? jencode($pattern->{action}) : $pattern->{action},
-            $pattern->{confidence}, 'crystallized', $args{session_id}, $now,
+            $pattern->{confidence}, 'crystallized', $args{session_id}, $now, $now,
+            $scope, $project_id, $domain,
         );
     };
     return undef if $@;
@@ -352,6 +630,20 @@ sub _on_agent_end {
     my $messages = $self->{store}->message_path($session_id);
     return unless @$messages;
     $self->crystallize(session_id => $session_id, conversation => $messages);
+}
+
+sub _on_observation {
+    my ($self, $ev) = @_;
+    return unless $self->{enabled};
+    my $p = $ev->{payload} // {};
+    $self->observe(
+        tool      => $p->{tool} // '',
+        input     => $p->{input} // {},
+        output    => $p->{output} // '',
+        success   => $p->{success} // 1,
+        domain    => $p->{domain} // 'general',
+        project_id => $p->{project_id} // $self->{project_id},
+    );
 }
 
 1;
