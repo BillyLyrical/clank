@@ -20,6 +20,10 @@
 #   <- {"id":6,"ok":1,"bye":1}        (process then exits 0)
 #   -> {"id":7,"command":"status"}
 #   <- {"id":7,"ok":1,"pid":12345,"uptime":42,"session_id":"..."}
+#   -> {"id":8,"command":"restart"}             (resume same session)
+#   <- {"id":8,"ok":1,"session_id":"...","resumed":1}
+#   -> {"id":9,"command":"restart","fresh":1}   (new session, same DB)
+#   <- {"id":9,"ok":1,"session_id":"...","resumed":0}
 #
 # Daemon mode (--daemon):
 #   Double-forks, detaches from terminal, writes PID file.  The socket
@@ -89,8 +93,8 @@ Options:
   --stdio           force stdio transport (the default without --socket)
   --daemon          fork to background (requires --socket)
   --pidfile=PATH    PID file (default ~/.clank/clankd.pid)
-  --status          check if a daemon is running, then exit
-  --stop            send shutdown to a running daemon, then exit
+   --status          check if a daemon is running, then exit
+   --stop            send shutdown to a running daemon, then exit
 
 Protocol: newline-delimited JSON; see the header comment for commands.
 USAGE
@@ -137,27 +141,39 @@ if ($o{status} || $o{stop}) {
     exit 0;
 }
 
-my $driver = eval {
-    Clank::Driver->new(
-        provider  => $o{provider},
-        model     => $o{model},
-        base_url  => $o{base_url},
-        api_key   => $o{api_key},
-        db        => $o{db},
-        workdir   => $o{workdir},
-        wit_paths => $o{wit_paths},
-    )->start($o{resume} ? (resume => $o{resume}) : ());
-};
-if ($@) {
-    print STDERR "clankd: failed to start session: $@";
-    exit 1;
-}
+# --- driver init (factored out for restart) ------------------------------------
+my %driver_opts = (
+    provider  => $o{provider},
+    model     => $o{model},
+    base_url  => $o{base_url},
+    api_key   => $o{api_key},
+    db        => $o{db},
+    workdir   => $o{workdir},
+    wit_paths => $o{wit_paths},
+);
 
-# Create sigil dispatcher for prompt commands.
 require Clank::Sigil;
 require Clank::App;
-my $sigil = Clank::Sigil->new(app => $driver);
-_register_clankd_sigils($sigil, $driver);
+
+my ($driver, $sigil);
+
+sub _init_driver {
+    my (%override) = @_;
+    my $d = eval {
+        Clank::Driver->new(%driver_opts, %override)
+            ->start(exists $override{resume} ? (resume => $override{resume}) : ());
+    };
+    if ($@) {
+        print STDERR "clankd: failed to start session: $@";
+        exit 1;
+    }
+    $driver = $d;
+    $sigil = Clank::Sigil->new(app => $driver);
+    _register_clankd_sigils($sigil, $driver);
+    return $d;
+}
+
+_init_driver;
 
 $| = 1;   # autoflush stdout — parents read line-by-line
 
@@ -300,6 +316,26 @@ sub handle_request {
                 session_id => $driver->session_id,
                 daemon     => $o{daemon} ? 1 : 0,
             };
+        } elsif ($cmd eq 'restart') {
+            my $old_sid = eval { $driver->session_id };
+            my $fresh   = $msg->{fresh} ? 1 : 0;
+            eval { $driver->close };
+            if ($@ && !$fresh && defined $old_sid) {
+                # close failed but we can try to start anyway
+            }
+            eval {
+                _init_driver($fresh ? () : (resume => $old_sid));
+            };
+            if ($@) {
+                $resp = { id => $msg->{id}, ok => 0, error => "restart failed: $@" };
+            } else {
+                $resp = {
+                    id         => $msg->{id},
+                    ok         => 1,
+                    session_id => $driver->session_id,
+                    resumed    => $fresh ? 0 : 1,
+                };
+            }
         } elsif ($cmd eq 'shutdown') {
             print STDERR "clankd: shutdown requested\n";
             my $out = jencode({ id => $msg->{id}, ok => 1, bye => 1 }) . "\n";

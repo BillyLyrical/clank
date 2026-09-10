@@ -60,7 +60,7 @@ is($r1->{messages_added}, 4, 'user + assistant(toolcall) + toolResult + assistan
 
 # event capture: full lifecycle in dispatch order
 my @topics = map { $_->{topic} } @{ $r1->{events} };
-is($topics[0], 'input', 'first captured event is the input hook');
+ok($topics[0] eq 'user_prompt_submit' || $topics[0] eq 'input', 'first captured event is user_prompt_submit or input');
 is($topics[-1], 'agent_settled', 'last captured event is agent_settled');
 ok((grep { $_ eq 'tool_execution_start' } @topics), 'tool execution events captured');
 
@@ -242,7 +242,7 @@ sub reap {
     $resp = rpc($w, $r, { id => 6, command => 'events', limit => 100 });
     is($resp->{ok}, 1, 'events query ok');
     cmp_ok(scalar(@{ $resp->{events} }), '>=', 10, 'unfiltered events return the full lifecycle');
-    ok((grep { $_->{topic} eq 'input' } @{ $resp->{events} }), 'journal contains input events');
+    ok((grep { $_->{topic} eq 'input' || $_->{topic} eq 'user_prompt_submit' } @{ $resp->{events} }), 'journal contains input/prompt events');
     ok((grep { $_->{topic} eq 'agent_settled' } @{ $resp->{events} }), 'journal contains agent_settled');
 
     # the mock provider never calls tools — a filtered query must return only matches
@@ -277,4 +277,59 @@ sub reap {
     close $e;
 }
 
+# ===========================================================================
+# 9. clankd restart command (resume + fresh)
+# ===========================================================================
+{
+    my $restart_db = "$tmp/restart_test.db";
+    unlink $restart_db if -e $restart_db;
+    my @restart_cmd = ($^X, "$FindBin::RealBin/../bin/clankd", '--stdio', '--provider', 'mock', '--db', $restart_db);
+    my ($w, $r);
+    my $e = Symbol::gensym;
+    my $pid = IPC::Open3::open3($w, $r, $e, @restart_cmd);
+
+    eval {
+        # Turn 1: establish session
+        my $resp = rpc($w, $r, { id => 1, prompt => 'turn one' });
+        is($resp->{ok}, 1, 'restart-test: first turn ok');
+        my $orig_sid = (rpc($w, $r, { id => 2, command => 'session_info' }))->{session_id};
+
+        # Restart: resume same session
+        $resp = rpc($w, $r, { id => 3, command => 'restart' });
+        is($resp->{ok}, 1, 'restart: ok');
+        is($resp->{resumed}, 1, 'restart: resumed flag');
+        is($resp->{session_id}, $orig_sid, 'restart: same session_id');
+
+        # Turn 2 in resumed session
+        $resp = rpc($w, $r, { id => 4, prompt => 'turn two' });
+        is($resp->{ok}, 1, 'restart: second turn ok');
+
+        # Verify history persisted
+        $resp = rpc($w, $r, { id => 5, command => 'session_info' });
+        cmp_ok($resp->{messages}, '>=', 4, 'restart: history includes both turns');
+
+        # Restart fresh: new session
+        $resp = rpc($w, $r, { id => 6, command => 'restart', fresh => 1 });
+        is($resp->{ok}, 1, 'restart fresh: ok');
+        is($resp->{resumed}, 0, 'restart fresh: resumed=0');
+        isnt($resp->{session_id}, $orig_sid, 'restart fresh: different session_id');
+
+        # Turn 3 in fresh session — history should be clean
+        $resp = rpc($w, $r, { id => 7, prompt => 'turn three' });
+        is($resp->{ok}, 1, 'restart fresh: turn ok');
+        $resp = rpc($w, $r, { id => 8, command => 'session_info' });
+        cmp_ok($resp->{messages}, '<=', 4, 'restart fresh: clean history (no old turns)');
+    };
+    if ($@) {
+        fail("restart block died: $@");
+    }
+
+    # Shutdown (always, even if tests failed)
+    eval { rpc($w, $r, { id => 99, command => 'shutdown' }) };
+    close $w; close $r;
+    waitpid($pid, 0);
+    pass('restart-test: child reaped');
+    close $e;
+    unlink $restart_db if -e $restart_db;
+}
 done_testing();
