@@ -244,22 +244,32 @@ sub _register_handlers {
     # % — Pipeline: run named pipeline.
     $sigil->register('%', sub {
         my ($app, $args) = @_;
-        return 'usage: % <pipeline-name> | % list' unless length $args;
+        require Clank::Pipeline;
+        return { output => 'usage: % <pipeline-name> | % list' } unless length $args;
+
         if ($args eq 'list') {
-            my $dir = "$ENV{HOME}/.clank/pipelines";
-            opendir my $dh, $dir or return { output => '(no pipelines directory)' };
-            my @files = sort map { s/\.clank$//r } grep { /\.clank$/ } readdir $dh;
-            closedir $dh;
-            return { output => @files ? "pipelines:\n  " . join("\n  ", @files) : '(no pipelines found)' };
+            my @names = Clank::Pipeline->list;
+            return { output => '(no pipelines found)' } unless @names;
+            return { output => "pipelines:\n  " . join("\n  ", @names) };
         }
-        return { output => "pipeline '$args' not yet implemented — use /agent instead" };
+
+        my $pipeline = Clank::Pipeline->load($args);
+        return { output => "pipeline '$args' not found" } unless $pipeline;
+
+        my $result = eval { Clank::Pipeline->run($pipeline, app => $app) };
+        if ($@) { return { output => "pipeline error: $@" } }
+        return { output => $result->{output} // '(no output)' };
     });
 
     # > — Pipe: inline pipeline construction.
     $sigil->register('>', sub {
         my ($app, $args) = @_;
+        require Clank::Pipeline;
         return { output => 'usage: > stage1 | stage2 | stage3' } unless length $args;
-        return { output => "inline pipes not yet implemented — use /agent instead" };
+        my $result = eval { Clank::Pipeline->run_inline($args, app => $app) };
+        if ($@) { return { output => "pipe error: $@" } }
+        unless ($result->{ok}) { return { output => $result->{error} } }
+        return { output => $result->{output} // '(no output)' };
     });
 
     # : — Topic: bus publish/subscribe.
