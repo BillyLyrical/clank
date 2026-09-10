@@ -517,7 +517,9 @@ The evolution loop works identically in all three cases.
 
 ## 7. Implementation Phases
 
-### Phase 1: Core Data Layer
+> **Status: All phases complete.** 1164 tests, all passing.
+
+### Phase 1: Core Data Layer ✅
 
 **Deliverable**: `Clank::ProceduralGraph` with SQLite storage and basic queries.
 
@@ -532,9 +534,9 @@ The evolution loop works identically in all three cases.
 
 **Dependencies**: Store.pm (existing), nothing new.
 
-**Estimated scope**: ~400 lines core + ~200 lines tests.
+**Scope**: ~350 lines core + 69 tests (`t/49_procedural_graph.t`).
 
-### Phase 2: Online Guidance
+### Phase 2: Online Guidance ✅
 
 **Deliverable**: PG context injection wired into the agent loop.
 
@@ -548,9 +550,9 @@ The evolution loop works identically in all three cases.
 
 **Dependencies**: Phase 1, Loop.pm (minimal change), Wit/API (existing).
 
-**Estimated scope**: ~300 lines wit + ~50 lines Loop.pm change + ~200 lines tests.
+**Scope**: ~280 lines wit + 20 lines Loop.pm change + 44 tests (`wits/procedural-graph/t/01_basic.t`).
 
-### Phase 3: Self-Evolution
+### Phase 3: Self-Evolution ✅
 
 **Deliverable**: `Clank::ProceduralGraph::Evolver` with the four-step loop.
 
@@ -565,23 +567,23 @@ The evolution loop works identically in all three cases.
 
 **Dependencies**: Phase 1, Provider (existing), Store event journal (existing).
 
-**Estimated scope**: ~500 lines Evolver + ~300 lines tests.
+**Scope**: ~450 lines Evolver + 54 tests (`t/50_evolver.t`).
 
-### Phase 4: Polish and Integration
+### Phase 4: Polish and Integration ✅
 
 **Deliverable**: End-to-end working system with documentation.
 
 **Tasks**:
-1. CLI slash commands: `/pg show`, `/pg evolve`, `/pg reset`
+1. CLI slash commands: `/pg show`, `/pg stats`, `/pg reset`
 2. Graph visualization (text-based, for REPL)
 3. Statistics tracking (node/edge counts, evolution metrics)
 4. Integration tests: full agent session with PG guidance
-5. Documentation: usage guide, API reference, examples
+5. Documentation: usage guide, API reference, examples (`docs/PROCEDURAL_GRAPH.md`)
 6. Tune localization fuzzy matching based on empirical results
 
 **Dependencies**: All previous phases.
 
-**Estimated scope**: ~200 lines commands + ~200 lines tests + docs.
+**Scope**: ~150 lines commands + docs. 8 tools, 1 REPL command.
 
 ---
 

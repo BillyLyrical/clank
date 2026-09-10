@@ -1,0 +1,16 @@
+{
+  "name": "Clank-Wits-ProceduralGraph",
+  "version": "0.1.0",
+  "description": "Procedural graph guidance for LLM agent execution",
+  "license": "Artistic-2.0",
+  "requires": {
+    "perl": "5.040001",
+    "Clank": "1.0"
+  },
+  "provides": {
+    "Clank::Wits::ProceduralGraph": {
+      "file": "lib/Clank/Wits/ProceduralGraph.pm",
+      "version": "0.1.0"
+    }
+  }
+}

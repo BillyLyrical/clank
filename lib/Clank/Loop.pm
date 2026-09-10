@@ -149,6 +149,21 @@ sub run_prompt {
             push @$msgs, $kmsg;
         }
 
+        # 3d) procedural guidance: query procedural graph for situational hints.
+        my $last_action = _extract_last_action($msgs);
+        my $pg_result = $bus->publish('context.procedural_guidance', {
+            prompt      => $last_msg,
+            last_action => $last_action,
+        });
+        for my $r (@{ $pg_result->{results} }) {
+            next unless ref $r eq 'HASH';
+            my $guidance = $r->{guidance} // '';
+            if (length $guidance) {
+                my $gmsg = { role => 'user', content => $guidance };
+                push @$msgs, $gmsg;
+            }
+        }
+
         # 4) build provider payload; before_provider_request may replace it.
         # RATS: select relevant tools based on the current prompt + context.
         my @all_tools = $session->tools;
@@ -537,6 +552,24 @@ sub _build_tool_context {
     }
 
     return \%ctx;
+}
+
+# Extract the last action from the message history for procedural graph localization.
+# Scans backwards for the most recent assistant tool call name.
+sub _extract_last_action {
+    my ($msgs) = @_;
+    for my $m (reverse @$msgs) {
+        my $role = $m->{role} // '';
+        if ($role eq 'assistant' && ref $m->{tool_calls} eq 'ARRAY' && @{$m->{tool_calls}}) {
+            my $last_tc = $m->{tool_calls}[-1];
+            return $last_tc->{function}{name} // '';
+        }
+        if ($role eq 'toolResult') {
+            my $c = $m->{content};
+            return $c->{name} // '' if ref $c eq 'HASH' && $c->{name};
+        }
+    }
+    return '';
 }
 
 # ---------------------------------------------------------------------------
