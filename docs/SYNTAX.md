@@ -1,7 +1,8 @@
 # Syntax, Semantics, and Pipeline Format
 
-Status: design document. How the REPL signals intent via sigils,
-how Minsky pipelines are declared, and how everything hooks together.
+Status: implemented (Phase 2 partial). Sigil dispatch library built and
+integrated into REPL and clankd. / Command fully wired, ? $ @ % > : ~ !
+stubbed. Pipeline format (§2) is design-only.
 
 ---
 
@@ -29,30 +30,19 @@ them to REPL modes is natural.
 
 ### 1.2 Parser Design
 
-The REPL parser becomes a sigil dispatch table. No regex chains,
-no nested if/else — just a hash of coderefs:
+The REPL parser uses `Clank::Sigil` — a shared dispatch library
+(`lib/Clank/Sigil.pm`) used by both `bin/clank` (terminal) and
+`bin/clankd` (NDJSON protocol). Harnesses register handlers:
 
 ```perl
-sub _dispatch {
-    my ($self, $app, $line) = @_;
-    return undef unless length $line;
+require Clank::Sigil;
+my $sigil = Clank::Sigil->new(app => $app);
+$sigil->register('/', sub { ... });  # command handler
+$sigil->register('$', sub { ... });  # eval handler
+# ...
 
-    my $sigil = substr($line, 0, 1);
-    my %dispatch = (
-        '/' => sub { $self->_command($app, $line) },
-        '?' => sub { $self->_query($app, $line) },
-        '$' => sub { $self->_eval($app, $line) },
-        '@' => sub { $self->_agent($app, $line) },
-        '%' => sub { $self->_pipeline($app, $line) },
-        '>' => sub { $self->_pipe($app, $line) },
-        ':' => sub { $self->_topic($app, $line) },
-        '~' => sub { $self->_wit($app, $line) },
-        '!' => sub { $self->_history($app, $line) },
-    );
-
-    my $handler = $dispatch{$sigil};
-    return $handler ? $handler->($line) : undef;
-}
+my $result = $sigil->dispatch($line);
+# returns {output => '...'} or undef (fall through to LLM)
 ```
 
 No sigil = no match = fall through to LLM prompt (existing behavior).
