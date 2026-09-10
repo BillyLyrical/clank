@@ -2,7 +2,7 @@
 # CLANK-WIT: version=1.0
 # CLANK-WIT: about=Core REPL commands: session management, help, tools, events
 # CLANK-WIT: usage=Loaded automatically by Clank::App. Ships with the harness.
-# CLANK-WIT: hint=REPL commands: /help, /new, /sessions, /resume, /compact, /wits, /tools, /model, /events, /exit
+# CLANK-WIT: hint=REPL commands: /help, /new, /sessions, /resume, /compact, /wits, /tools, /model, /events, /agents, /agent, /exit
 # CLANK-WIT: author=clank
 # CLANK-WIT: license=Artistic-2.0
 package Clank::Wit::Session;
@@ -137,6 +137,41 @@ sub register {
             return $ctx->{app}->pm->$method($name);
         }
         return "usage: /wit disable|enable NAME";
+    });
+
+    $api->register_command('agents', description => 'list available agent profiles', handler => sub {
+        my ($ctx) = @_;
+        require Clank::Agent;
+        my @names = Clank::Agent->list;
+        return '(no agent profiles found)' unless @names;
+        my @out;
+        for my $name (@names) {
+            my $p = Clank::Agent->load($name);
+            push @out, sprintf("  %-16s %s  (tools: %s)",
+                $p->{name}, $p->{description} // '', join(',', @{ $p->{tools} // [] }));
+        }
+        return "agents:\n" . join("\n", @out);
+    });
+
+    $api->register_command('agent', description => 'run an agent: /agent <name> <prompt>', handler => sub {
+        my ($ctx, $args) = @_;
+        require Clank::Agent;
+        if (!defined $args || $args !~ /^(\S+)\s+(.+)$/) {
+            my @names = Clank::Agent->list;
+            my $list = @names ? "available: " . join(', ', @names) : '(no profiles)';
+            return "usage: /agent <name> <prompt>\n$list";
+        }
+        my ($name, $prompt) = ($1, $2);
+        my $loop = $ctx->{app}->loop;
+        unless ($loop) {
+            return "no active loop — start a session first";
+        }
+        my $result = eval {
+            Clank::Agent->spawn(name => $name, prompt => $prompt, loop => $loop);
+        };
+        if ($@) { return "agent error: $@" }
+        my $out = "[$result->{agent}] turns: $result->{turns}\n\n" . ($result->{output} // '(no output)');
+        return $out;
     });
 
     for my $name (qw(exit quit)) {

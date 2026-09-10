@@ -1,0 +1,6 @@
+# Clank agent profile: reviewer
+name = "reviewer"
+description = "Code review with evidence-based critique. Read-only — never modifies files."
+model = "standard"
+tools = ["read", "bash"]
+max_turns = 5
