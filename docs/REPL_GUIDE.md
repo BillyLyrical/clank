@@ -1,5 +1,9 @@
 # Using the Clank REPL
 
+> **Note:** Some features described here are experimental and aspirational.
+> Clank is evolving rapidly — not every example may work perfectly yet.
+> If something doesn't behave as described, it's a known gap, not user error.
+
 A practical guide to Clank's interactive interface, from first prompt to complex
 multi-agent workflows.
 
@@ -759,4 +763,256 @@ $ $session->id
 **Compact early, compact often:**
 ```
 /compact keep the architecture discussion
+```
+
+---
+
+## Worked Examples
+
+These examples show realistic workflows combining multiple features.
+Some are aspirational — they describe where Clank is headed, not just
+where it is today.
+
+### Example 1: Study a Codebase and Crystallize Rules
+
+```
+clank> # Phase 1: explore the project structure
+clank> find all Perl modules in lib/
+clank> what are the main subsystems?
+
+clank> # Phase 2: learn the coding conventions
+clank> ? what naming conventions does this project use for error handling?
+clank> ? what's the standard pattern for registering bus subscriptions?
+
+clank> # Phase 3: crystallize what we learned
+clank> /instinct create error_handling_pattern \
+        condition="error.*handler|die.*catch|eval.*block" \
+        action="Always wrap eval blocks with specific error messages. Never use bare eval without $@ checking." \
+        confidence=0.85 \
+        domain=perl
+
+clank> /instinct create bus_subscription_pattern \
+        condition="subscribe.*bus|on.*event" \
+        action="Subscribe with name => 'wit:<name>' for tracking. Unsubscribe_all on disable." \
+        confidence=0.9 \
+        domain=architecture
+
+clank> /instinct status
+```
+
+### Example 2: Multi-Agent Code Review Pipeline
+
+```
+clank> # Step 1: get the diff
+clank> : publish git.diff.ready {}
+clank> # (or have a wit produce the diff automatically)
+
+clank> # Step 2: parallel review from multiple angles
+clank> @reviewer review lib/Clank/Store.pm for race conditions and API design
+clank> @security scan lib/Clank/Store.pm for SQL injection and injection attacks
+
+clank> # Step 3: synthesize findings
+clank> ? given these two reviews, what are the top 3 priorities?
+clank> The reviews found: [paste both outputs]
+
+clank> # Step 4: fix the critical issues
+clank> @debugger fix the SQL injection in Store.pm and the race condition in Bus.pm
+
+clank> # Step 5: verify the fix
+clank> @reviewer review the changes for correctness
+
+clank> # Step 6: compact and record lessons
+clank> /compact keep the Store.pm fix discussion
+clank> /instinct create store_sql_safety \
+        condition="Store\.pm.*query|SQL.*inject" \
+        action="Always use parameterized queries in Store.pm. Never interpolate user input into SQL." \
+        confidence=0.95 \
+        domain=security
+```
+
+### Example 3: Create a Custom Pipeline from the REPL
+
+```
+clank> # Define a pipeline inline using Perl eval
+clank> $ use Clank::Pipeline;
+clank> my @stages = (
+clank>   { name => 'summarize', prompt => 'Summarize the following code concisely' },
+clank>   { name => 'critique',  prompt => 'Find issues and suggest improvements' },
+clank>   { name => 'prioritize', prompt => 'Rank issues by severity and effort' },
+clank> );
+clank> my $result = Clank::Pipeline->run_inline(
+clank>   join(' | ', map { $_->{prompt} } @stages),
+clank>   app => $app
+clank> );
+clank> print $result->{output};
+```
+
+### Example 4: Interactive Exploration with History Replay
+
+```
+clank> # Explore the bus system
+clank> ? how does the pub/sub bus work?
+clank> what events does the bus publish?
+
+clank> # Oops, wrong direction — let's go back
+clank> ! 1     # re-run: what events does the bus publish?
+clank> ! -2     # re-run: how does the pub/sub bus work?
+
+clank> # Now dive deeper
+clank> @reviewer review lib/Clank/Bus.pm for thread safety
+clank> ? based on the review, what are the concurrency risks?
+
+clank> # Record what we learned
+clank> /instinct create bus_concurrency_risk \
+        condition="Bus.*concurr|thread.*safe|race.*condition" \
+        action="Bus publish() must snapshot subscriber list before iteration. See Bus.pm:67." \
+        confidence=0.9
+```
+
+### Example 5: Agent Chaining with Delegation
+
+```
+clank> # Start with high-level planning
+clank> @planner decompose the task 'refactor the store layer' into subtasks
+
+clank> # Review the plan
+clank> @reviewer review this plan for completeness and correctness
+
+clank> # Execute each subtask with the right agent
+clank> @debugger implement subtask 1: extract ConnectionPool from Store.pm
+clank> @security review the ConnectionPool for injection vulnerabilities
+clank> @debugger implement subtask 2: parameterize all queries
+
+clank> # Final verification
+clank> @architect validate the overall design changes
+
+clank> # Compact the session
+clank> /compact keep the store refactor discussion and final design
+```
+
+### Example 6: Live Debugging with Bus Monitoring
+
+```
+clank> # Start monitoring bus events
+clank> : listen tool_execution_start
+
+clank> # Run the problematic code
+clank> @debugger diagnose why clank crashes when resuming sessions
+
+clank> # Check what happened on the bus
+clank> : listen wit.error
+
+clank> # If the debugger didn't find it, use $ to inspect directly
+clank> $ use DBI;
+clank> my $dbh = DBI->connect("dbi:SQLite:dbname=$ENV{HOME}/.clank/clank.db");
+clank> my $rows = $dbh->selectall_arrayref("SELECT * FROM sessions ORDER BY updated_at DESC LIMIT 3");
+clank> $ rows->[0]{id}
+
+clank> # Now fix it
+clank> @debugger fix the resume crash — it's a missing column check in Store.pm
+```
+
+### Example 7: Knowledge Capture and Recall
+
+```
+clank> # Learn something new about the project
+clank> ? what is the WorldModel's query API?
+clank> how do entities and relations work?
+
+clank> # Capture it as a memory
+clank> /memory add reference "WorldModel Query API" "Entities are queried via query_entities(type). Relations via query_relations(from, to, type). Facts have temporal bounds (valid_from, valid_to)."
+
+clank> # Later, the LLM will recall this automatically
+clank> # when you ask about the WorldModel
+
+clank> # Also crystallize the pattern
+clank> /instinct create worldmodel_query_pattern \
+        condition="WorldModel.*query|query_entit" \
+        action="Use query_entities(type) for entities, query_relations(from,to,type) for relations. Always check temporal bounds." \
+        confidence=0.85 \
+        domain=architecture
+```
+
+### Example 8: Using Editor for Complex Prompts
+
+```
+clank> # Press Alt+E or Ctrl+X Ctrl+E to open your editor
+clank> # Write a multi-line prompt:
+
+# Code Review Request
+
+Review lib/Clank/Loop.pm with focus on:
+
+1. Error handling — are all edge cases covered?
+2. Performance — any N+1 patterns or unnecessary allocations?
+3. Security — can the LLM be tricked via prompt injection?
+4. Memory — does context grow unbounded?
+
+Output format:
+- [critical] must fix before merge
+- [warning] should fix, may cause issues
+- [suggestion] nice to have
+
+Save and exit — the text is sent to the REPL.
+
+clank> @reviewer (the above prompt is sent automatically)
+```
+
+### Example 9: Daemon Mode Workflow (clankd)
+
+```bash
+# Terminal 1: start the daemon
+clankd --provider=openai --model=gpt-4o --stdio
+
+# Terminal 2: interact via NDJSON
+# Ping
+echo '{"id":1,"command":"ping"}' | nc -U /tmp/clankd.sock
+
+# Run a review
+echo '{"id":2,"prompt":"@reviewer review lib/Clank/Store.pm"}' | nc -U /tmp/clankd.sock
+
+# Use /help via the command field
+echo '{"id":3,"command":"/help agents"}' | nc -U /tmp/clankd.sock
+
+# Check session state
+echo '{"id":4,"command":"session_info"}' | nc -U /tmp/clankd.sock
+
+# Monitor events
+echo '{"id":5,"command":"events","topic":"tool_*","limit":10}' | nc -U /tmp/clankd.sock
+```
+
+### Example 10: Full Session Lifecycle
+
+```
+clank> # Start fresh
+clank> /new
+
+clank> # Explore
+clank> what files are in this project?
+clank> what does the README say?
+
+clank> # Learn
+clank> ? what are the main design patterns used here?
+
+clank> # Build
+clank> @planner plan the implementation of a new /config command
+clank> @debugger implement the plan
+
+clank> # Review
+clank> @reviewer review the changes
+clank> @security check for issues
+
+clank> # Record
+clank> /instinct create config_command_pattern \
+        condition="config.*command|/config" \
+        action="Config commands should check ./ .clank/config.json first, then ~/.clank/config.json." \
+        confidence=0.8
+clank> /compact keep the /config command implementation
+
+clank> # Check what we've learned
+clank> /instinct status
+clank> /stats
+
+clank> # Save and move on
+clank> /exit
 ```
