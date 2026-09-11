@@ -131,7 +131,7 @@ sub execute {
     }
 
     # Publish director.done event.
-    $bus->publish('director_done', {
+    $bus->publish('director.done', {
         goal_id  => $goal_id,
         ok       => $all_ok,
         turns    => $total_turns,

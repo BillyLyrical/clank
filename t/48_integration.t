@@ -75,11 +75,16 @@ package MockSession {
 package MockAPI {
     sub new {
         my ($class, %args) = @_;
-        return bless { bus => $args{bus}, store => $args{store} }, $class;
+        return bless { bus => $args{bus}, store => $args{store}, commands => {} }, $class;
     }
     sub bus   { $_[0]->{bus} }
     sub store { $_[0]->{store} }
     sub on    { return 1 }
+    sub register_command {
+        my ($self, $name, %args) = @_;
+        $self->{commands}{$name} = \%args;
+        return 1;
+    }
 }
 
 package main;

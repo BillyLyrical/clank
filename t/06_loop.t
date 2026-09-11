@@ -71,7 +71,7 @@ sub chain_of { my ($store, $sid) = @_; return Clank::Session::Messages::chain($s
     my %topics = map { $_->{topic} => 1 } @{ $store->query_events(limit => 200) };
     for my $t (qw(input before_agent_start agent_start turn_start context
                   before_provider_request after_provider_response message_end
-                  tool_call tool_execution_start tool_result tool_execution_end
+                  pre_tool_use tool_execution_start post_tool_use tool_execution_end
                   turn_end agent_end agent_settled)) {
         ok($topics{$t}, "topic journaled: $t");
     }
@@ -97,7 +97,7 @@ sub chain_of { my ($store, $sid) = @_; return Clank::Session::Messages::chain($s
         return { choices => [ { finish_reason => 'stop', message => { content => 'ok' } } ] };
     });
 
-    $bus->subscribe('tool_call', sub {
+    $bus->subscribe('pre_tool_use', sub {
         my ($ev) = @_;
         return { block => 1, reason => 'no bash in tests' } if $ev->{payload}{name} eq 'bash';
         return undef;
@@ -123,7 +123,7 @@ sub chain_of { my ($store, $sid) = @_; return Clank::Session::Messages::chain($s
         return { choices => [ { finish_reason => 'stop', message => { content => 'done' } } ] };
     });
 
-    $bus->subscribe('tool_call', sub {
+    $bus->subscribe('pre_tool_use', sub {
         my ($ev) = @_;
         if ($ev->{payload}{name} eq 'write') {
             $ev->{payload}{input}{content} = 'mutated';   # in-place mutation
