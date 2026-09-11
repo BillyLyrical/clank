@@ -56,6 +56,60 @@ how it's handled. No sigil = bare text goes to the LLM.
 
 ## Slash Commands (`/`)
 
+### Online Help
+
+Clank has a rich help system. Type `/help` for the overview, or `/help <topic>`
+for detailed documentation on any subsystem:
+
+```
+clank> /help
+# shows overview of all sigils and commands
+
+clank> /help agents
+# detailed help on the agent system
+
+clank> /help wits
+# detailed help on wit discovery and management
+
+clank> /help neurosymbolic
+# details on world model, crystallizer, escalation
+```
+
+List all available topics:
+
+```
+clank> /help topics
+help topics:
+  overview             Quick reference for all sigils and commands
+  sigil:/              Slash commands — /help, /new, /sessions, ...
+  sigil:?              Query — ask the LLM without triggering tools
+  sigil:$              Eval — execute Perl in harness context
+  sigil:@              Agent — dispatch constrained subagents
+  sigil:%              Pipeline — run declarative multi-agent networks
+  sigil:>              Pipe — inline pipeline construction
+  sigil::              Topic — publish/subscribe to bus events
+  sigil:~              Wit — discover, load, inspect, manage wits
+  sigil:!              History — re-run previous commands
+  sigil:#              Comment — annotation, ignored
+  sigil:text           Bare text — send to the LLM (action mode)
+  agents               Agent profiles — constrained subagents
+  pipelines            Pipeline system — declarative workflows
+  wits                 Wit system — CPAN modules that extend Clank
+  config               Configuration — providers, API keys, dirs
+  neurosymbolic        World model, crystallizer, escalation
+  session              Session management — new, resume, compact
+  editor               Editor integration — multi-line input
+```
+
+Fuzzy matching — if you mistype a topic, Clank suggests close matches:
+
+```
+clank> /help agent
+no exact match for 'agent'. Did you mean:
+  /help agents
+  /help sigil:@
+```
+
 ### Session Management
 
 ```

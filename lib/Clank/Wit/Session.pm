@@ -14,14 +14,36 @@ sub new { bless { wit_name => 'session' }, shift }
 sub register {
     my ($self, $api) = @_;
 
-    $api->register_command('help', description => 'list all commands', handler => sub {
-        my ($ctx) = @_;
-        my %cmds = %{ $ctx->{app}->pm->all_commands };
-        my $out = "commands:\n";
-        for my $name (sort keys %cmds) {
-            $out .= sprintf "  /%-18s %s\n", $name, ($cmds{$name}{description} // '');
+    $api->register_command('help', description => 'online help — /help, /help <topic>', handler => sub {
+        my ($ctx, $args) = @_;
+        require Clank::REPL::Help;
+
+        # /help topics — list all available topics
+        if (( $args // '') eq 'topics') {
+            my @names = Clank::REPL::Help->topic_names;
+            my $out = "help topics:\n";
+            for my $n (@names) {
+                my $t = Clank::REPL::Help->get_topic($n);
+                $out .= sprintf "  %-20s %s\n", $n, $t->{summary};
+            }
+            return $out;
         }
-        return $out;
+
+        # /help <topic> — show specific topic
+        if (length($args // '')) {
+            my $body = Clank::REPL::Help->render_topic($args);
+            return $body if defined $body;
+            # fuzzy: try to find close matches
+            my @matches = Clank::REPL::Help->search_topics($args);
+            if (@matches) {
+                return "no exact match for '$args'. Did you mean:\n"
+                     . join("\n", map { "  /help $_" } @matches) . "\n";
+            }
+            return "unknown topic: $args\nType /help topics to list all available topics.";
+        }
+
+        # bare /help — overview
+        return Clank::REPL::Help->overview();
     });
 
     $api->register_command('new', description => 'start a new session', handler => sub {
