@@ -20,6 +20,19 @@ Create `~/.clank/config.json` to avoid passing flags every time:
 
 ```json
 {
+  "provider": "lmstudio",
+  "model": "local-model",
+  "base_url": "http://localhost:1234/v1"
+}
+```
+
+With LM Studio, start the local server and load a model first, then clank
+connects automatically — no API key needed.
+
+For cloud providers, add your key:
+
+```json
+{
   "provider": "openai",
   "model": "gpt-4o",
   "api_key": "sk-..."
