@@ -347,6 +347,14 @@ sub handle_request {
             cleanup();
             $SHUTTING_DOWN = 1;
             return ($out, 1);   # the process must not survive its own goodbye
+        } elsif ($cmd =~ m{^[/?@%>:~!\x23]}) {
+            # Sigil in command field — dispatch as REPL input.
+            my $sigil_result = $sigil->dispatch($cmd);
+            if ($sigil_result) {
+                $resp = { id => $msg->{id}, ok => 1, %$sigil_result };
+            } else {
+                $resp = { id => $msg->{id}, ok => 0, error => "no handler for '$cmd'" };
+            }
         } else {
             $resp = { id => $msg->{id}, ok => 0, error => "unknown command '$cmd'" };
         }
