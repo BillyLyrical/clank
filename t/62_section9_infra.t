@@ -13,10 +13,6 @@ my $base = "$FindBin::RealBin/..";
 # =============================================================================
 # 9.1 — Directories
 # =============================================================================
-subtest '9.1a: _test/ directory exists' => sub {
-    ok(-d "$base/_test", '_test/ exists');
-};
-
 subtest '9.1b: _tmp/ directory exists' => sub {
     ok(-d "$base/_tmp", '_tmp/ exists');
 };

@@ -32,24 +32,25 @@ working codebase proves it.
 - Daemon mode (`clankd`) with NDJSON protocol for programmatic access
 - Context engineering: capability manifest, RATS tool selection, knowledge bus, compression
 
-### 141 Curated Wits (14 decks)
+### 153 Curated Wits (15 decks)
 
 | Deck | Count | Purpose |
 |------|-------|---------|
 | logic | 51 | Datalog engine, rules DSL, FSM, behavior trees, SAT |
-| critic | 12 | Code critique heuristics |
-| git | 10 | Git operations (status, log, diff, blame, ...) |
+| perl | 17 | Perl development (syntax, review, POD, tests) |
+| critic | 13 | Code critique heuristics |
 | fs | 12 | Filesystem operations |
-| db | 8 | Database shell (connect, query, execute, schema, ...) |
-| perl | 16 | Perl development (syntax, review, POD, tests) |
-| psh | 3 | Perl Shell REPL |
-| search | 9 | Local + web search |
-| embedding | 1 | Semantic search via embeddings |
-| neuro | 3 | World model, crystallizer, constraints |
-| web | 4 | HTTP requests (fetch, post, put, delete) |
-| build | 4 | Build systems (make, perl build, cpanm, test) |
+| build | 10 | Build systems (make, perl build, cpanm, test) |
+| git | 10 | Git operations (status, log, diff, blame, ...) |
+| search | 10 | Local + web search |
+| db | 9 | Database shell (connect, query, execute, schema, ...) |
+| debug | 5 | Debugging tools (stacktrace, strace, lsof, pstack) |
 | devops | 4 | Docker + systemd |
-| debug | 4 | Debugging tools (stacktrace, strace, lsof, pstack) |
+| web | 4 | HTTP requests (fetch, post, put, delete) |
+| neuro | 3 | World model, crystallizer, constraints |
+| psh | 3 | Perl Shell REPL |
+| embedding | 1 | Semantic search via embeddings |
+| procedural-graph | 1 | Procedural graph for situational guidance |
 
 ### Neurosymbolic Features
 
@@ -177,10 +178,10 @@ multi-line input.
 ## Development
 
 ```bash
-git clone git@psycho:~/clank.git
-cd clank
+git clone https://github.com/BillyLyrical/Clank.git
+cd Clank
 perl link_wits.pl        # symlink wits/ into lib/
-prove -l t/              # run all tests (1450)
+prove -l t/              # run all tests (1487)
 prove -l wits/*/t/       # run wit tests
 ```
 

@@ -2,6 +2,9 @@
 *.swp
 *~
 .DS_Store
+.git/
+.mimocode/
+
 
 # clam runtime scratch (workdirs, installed wits) — never in-tree
 _work/
@@ -14,4 +17,3 @@ _tmp/
 
 # dev symlinks (created by bin/setup-dev-symlinks)
 lib/Clank/Wits/*
-
