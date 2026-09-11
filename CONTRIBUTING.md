@@ -11,8 +11,8 @@ you think is stupid.
 ## Getting Started
 
 ```bash
-git clone https://github.com/BillyLyrical/Clank
-cd Clank
+git clone https://github.com/BillyLyrical/clank
+cd clank
 cpanm --installdeps .
 perl link_wits.pl
 prove -l t/
