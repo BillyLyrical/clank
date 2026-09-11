@@ -69,6 +69,14 @@ prove -l t/
 
 ## Quick Start
 
+Clank stores its config and data in `~/.clank/`:
+
+```
+~/.clank/
+  config.json     # provider settings (optional)
+  clank.db        # session store, world model, metrics
+```
+
 ```bash
 # LM Studio (local, default):
 clank
@@ -95,6 +103,8 @@ perl -Ilib -e '
   $d->close;
 '
 ```
+
+See `docs/LLM_SETUP.md` for full provider configuration (API keys, base URLs, config file, env vars).
 
 ## The Sigil System
 
