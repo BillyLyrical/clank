@@ -1,0 +1,552 @@
+Clank Script — Proposal
+======================
+
+Status: proposal
+Date: 2026-09-11
+
+1. What Is a Clank Script?
+--------------------------
+
+A Clank script is a text file executed line-by-line by the Clank harness.
+It combines Perl control flow with Clank's sigil-based LLM dispatch.
+Think: a shell script where the shell can talk to LLMs, run agents,
+and crystallize rules — and the variable language is Perl.
+
+A Clank script runs non-interactively. No readline, no prompt, no TUI.
+It reads a file, executes each line through the same sigil dispatch as
+the REPL, and exits. Perl is the glue. The sigils are operators.
+
+    #!/usr/bin/env clank
+    use strict;
+    use warnings;
+
+    my $diff = `git diff HEAD~1`;
+    my $review = ? analyze this diff for risks: $diff
+
+    if ($review =~ /critical/i) {
+        @debugger fix the critical issues described: $review
+        /compact keep the fix discussion
+    }
+
+    exit 0;
+
+
+2. Why?
+-------
+
+The REPL is great for interactive exploration. But many tasks are
+reproducible: code review, deployment checks, CI pipelines, batch
+analysis. Writing these as scripts means:
+
+  - Version-controlled (git trackable)
+  - Composable (scripts call scripts)
+  - Testable (run in CI, assert on output)
+  - Shareable (team members run the same workflow)
+  - Automatable (cron, git hooks, CI/CD)
+
+The REPL is a shell. Shells have scripts. Clank should too.
+
+
+3. Design Principles
+---------------------
+
+  a) Perl is the language. No new DSL. No new parser. Perl variables,
+     conditionals, loops, regex, system calls — all native.
+
+  b) Sigils are operators. Each sigil line dispatches to the same
+     handler as the REPL. The return value becomes a Perl expression.
+
+  c) Minimal footprint. The script engine is the REPL loop with file
+     input instead of readline. No new modules needed beyond a thin
+     Clank::Script wrapper.
+
+  d) Progressive disclosure. A script can be pure Perl, pure sigils,
+     or a mix. Start simple, add complexity as needed.
+
+
+4. Syntax
+---------
+
+4.1 Shebang and Preamble
+
+    #!/usr/bin/env clank
+    use strict;
+    use warnings;
+
+The shebang tells the OS to run clank on this file. The preamble is
+standard Perl — Clank scripts are valid Perl programs.
+
+4.2 Sigil Lines (Return Values)
+
+Every sigil expression returns a value that can be assigned to a Perl
+variable:
+
+    # ? — query (no tools, informational)
+    my $answer = ? what is the Datalog engine?
+
+    # bare text — LLM with tools (action mode)
+    my $result = list the files in lib/Clank/
+
+    # @ — agent dispatch
+    my $review = @reviewer review lib/Clank/Store.pm
+
+    # % — pipeline
+    my $output = % code-review
+
+    # : — bus publish (returns event hash)
+    my $event = : publish git.diff.ready {"files":["lib/Clank.pm"]}
+
+    # ~ — wit operations
+    my $wits = ~ list
+
+    # / — slash command (returns output text)
+    my $tools = /tools
+
+    # $ — Perl eval (already Perl, returns the expression value)
+    my $time = $ time()
+
+4.3 Variable Interpolation in Prompts
+
+Perl variables are interpolated into LLM prompts via double-quoted
+strings or the implicit interpolation in sigil expressions:
+
+    my $file = "lib/Clank/Store.pm";
+    my $content = ? summarize this file: `$cat $file`
+
+    my $review = @reviewer review $file for injection vulnerabilities
+
+    my $analysis = $store->kv_get("last_analysis");
+    ? based on this analysis, what should we fix first: $analysis
+
+The LLM sees the interpolated text. It does not see Perl variables
+directly — they must be interpolated into the prompt string.
+
+4.4 Conditional Logic
+
+    my $review = @reviewer review lib/Clank.pm
+
+    if ($review =~ /critical/i) {
+        print "BLOCKED: critical issues found\n";
+        @debugger fix the critical issues: $review
+        exit 1;
+    }
+
+    if ($review =~ /warning/i) {
+        print "WARNINGS: non-critical issues found\n";
+    } else {
+        print "CLEAN: no issues found\n";
+    }
+
+4.5 Loops
+
+    my @files = glob("lib/Clank/*.pm");
+
+    for my $file (@files) {
+        my $review = @reviewer review $file for code quality
+        print "$file: " . ($review =~ /critical/ ? "FAIL" : "OK") . "\n";
+    }
+
+    # Or process a list of topics
+    my @topics = qw(perl security architecture concurrency);
+
+    for my $topic (@topics) {
+        ? what are the best practices for $topic in this codebase?
+    }
+
+4.6 Crystallization
+
+    /instinct create deploy_check \
+        condition="deploy.*risk|breaking.*change" \
+        action="Always run security + reviewer before deploy" \
+        confidence=0.9 \
+        domain=devops
+
+    # Or create from a variable
+    my $pattern = "store.*query|SQL.*inject";
+    /instinct create sql_safety \
+        condition=$pattern \
+        action="Always parameterize SQL queries in Store.pm" \
+        confidence=0.95
+
+4.7 Error Handling
+
+    my $review = eval { @reviewer review lib/Clank.pm };
+
+    if ($@) {
+        warn "agent failed: $@\n";
+        # fallback: try again with a simpler prompt
+        $review = ? summarize lib/Clank.pm
+    }
+
+    # Or use eval on any sigil
+    my $result = eval { ? complex analysis of: $big_input };
+
+    die "LLM call failed: $@" unless defined $result;
+
+4.8 Includes and Modules
+
+    # Use Perl's require for modularity
+    require "lib/Clank/Script/helpers.pl";
+
+    # Or use do for inline includes
+    do {
+        my $config = ? load and summarize the project config
+    };
+
+    # Clank modules are available
+    use Clank::Util qw(uuid4);
+    my $id = uuid4();
+
+4.9 Subroutines
+
+    # Standard Perl subs
+    sub review_file {
+        my ($file) = @_;
+        my $review = @reviewer review $file for security issues
+        return $review;
+    }
+
+    sub check_all {
+        my @files = @_;
+        my @results;
+        for my $f (@files) {
+            push @results, review_file($f);
+        }
+        return @results;
+    }
+
+    # Use them
+    my @reviews = check_all(glob("lib/Clank/*.pm"));
+
+
+5. Execution Models
+--------------------
+
+5.1 Direct Execution (in-process)
+
+    bin/clank --script deploy.clank
+    bin/clank --script deploy.clank --provider openai --model gpt-4o
+
+The script runs in the same process as Clank. The $app, $store, $bus,
+and $session objects are available as globals. No IPC overhead. This
+is the fast path.
+
+Implementation: bin/clank checks for --script, reads the file, and
+calls Clank::Script->run(file => $path, app => $app).
+
+5.2 Via clankd (remote)
+
+    cat deploy.clank | clankd --stdio --provider openai
+
+Each non-comment, non-blank line is sent as an NDJSON prompt message.
+The script runs against the daemon. Slower (IPC per line) but allows:
+
+  - Remote execution (script on machine A, LLM on machine B)
+  - Session persistence (resume across script runs)
+  - Monitoring (watch bus events during execution)
+  - Concurrent scripts (multiple scripts against one daemon)
+
+5.3 Shebang (executable)
+
+    #!/usr/bin/env clank --provider openai --model gpt-4o
+
+    # ... script content ...
+
+    chmod +x deploy.clank
+    ./deploy.clank
+
+The shebang passes flags to clank. The OS invokes clank as the
+interpreter. Standard Unix.
+
+
+6. The Variable Bridge
+-----------------------
+
+The core insight: Perl variables bridge LLM turns.
+
+  Turn 1: LLM analyzes code     → $analysis = ? analyze this
+  Turn 2: LLM reviews analysis  → $review = @reviewer review: $analysis
+  Turn 3: LLM fixes issues      → @debugger fix: $review
+  Turn 4: LLM verifies fix      → @reviewer verify the changes
+  Turn 5: Record what we learned → /instinct create ...
+
+Each turn's output feeds the next turn's input via Perl variables.
+The LLM never sees the variable names — it sees the interpolated
+text. But the script maintains state across turns.
+
+This is what makes Clank scripts more powerful than piping LLM calls:
+the script has memory (Perl variables), control flow (if/for/while),
+and side effects (file writes, git commands, crystallization).
+
+
+7. Script Library
+------------------
+
+7.1 deploy-check.clank
+
+    #!/usr/bin/env clank
+    # Pre-deployment safety check
+
+    my $diff = `git diff $ENV{BASE_BRANCH:-main}..HEAD`;
+    die "no changes to deploy\n" unless length $diff;
+
+    my $security = @security scan these changes for vulnerabilities: $diff
+    my $review   = @reviewer review these changes for breaking changes: $diff
+
+    if ($security =~ /critical/i || $review =~ /critical/i) {
+        print "BLOCKED: critical issues found\n";
+        print "Security:\n$security\n";
+        print "Review:\n$review\n";
+        exit 1;
+    }
+
+    print "DEPLOY OK: no critical issues\n";
+    exit 0;
+
+7.2 code-review.clank
+
+    #!/usr/bin/env clank
+    # Full code review pipeline
+
+    my @files = @ARGV ? @ARGV : glob("lib/Clank/*.pm");
+    my ($pass, $fail) = (0, 0);
+
+    for my $file (@files) {
+        print "Reviewing $file...\n";
+        my $review = @reviewer review $file thoroughly
+
+        if ($review =~ /critical/i) {
+            print "  FAIL: $file\n";
+            $fail++;
+        } else {
+            print "  OK: $file\n";
+            $pass++;
+        }
+    }
+
+    print "\nResults: $pass passed, $fail failed\n";
+    exit($fail ? 1 : 0);
+
+7.3 learn-project.clank
+
+    #!/usr/bin/env clank
+    # Explore a codebase and crystallize rules
+
+    my $readme = ? read and summarize the README
+    my $arch   = ? describe the architecture and main subsystems
+    my $style  = ? what coding conventions and patterns are used?
+
+    # Crystallize what we learned
+    /instinct create project_arch \
+        condition="architecture|subsystem|module" \
+        action=$arch \
+        confidence=0.8 \
+        domain=architecture
+
+    /instinct create project_style \
+        condition="convention|pattern|style" \
+        action=$style \
+        confidence=0.8 \
+        domain=style
+
+    /compact keep the project exploration and crystallized rules
+    print "Learned and crystallized project knowledge\n";
+
+7.4 batch-review.clank
+
+    #!/usr/bin/env clank
+    # Review a list of files from stdin
+
+    while (my $file = <STDIN>) {
+        chomp $file;
+        next unless -f $file;
+        print "[$file]\n";
+
+        my $review = @reviewer review $file for issues
+        print "$review\n\n";
+    }
+
+
+8. Implementation
+------------------
+
+8.1 Clank::Script Module
+
+A thin wrapper around the REPL's sigil dispatch loop:
+
+    package Clank::Script;
+    use strict;
+    use warnings;
+
+    sub run {
+        my (%args) = @_;
+        my $file = $args{file} or die "no script file\n";
+        my $app  = $args{app};
+
+        open my $fh, '<', $file or die "cannot open $file: $!\n";
+
+        my $sigil = Clank::Sigil->new(app => $app);
+        # Register all sigil handlers (same as REPL)
+        # ...
+
+        while (my $line = <$fh>) {
+            chomp $line;
+            $line =~ s/^\s+//;
+            next unless length $line;
+            next if $line =~ /^#/;     # skip comments
+
+            # Pure Perl line: eval in script context
+            if ($line !~ m{^[/?@%>:~!\$#]}) {
+                my $result = eval "no warnings; $line";
+                warn "perl error: $@\n" if $@;
+                next;
+            }
+
+            # Sigil dispatch
+            my $result = $sigil->dispatch($line);
+            if ($result && defined $result->{output}) {
+                print $result->{output}, "\n" if length $result->{output};
+            }
+        }
+
+        close $fh;
+    }
+
+8.2 bin/clank --script
+
+    # In bin/clank, after option parsing:
+    if ($opt{script}) {
+        require Clank::Script;
+        my $app = Clank::App->new(%opt);
+        $app->start_session();
+        Clank::Script->run(file => $opt{script}, app => $app);
+        $app->shutdown();
+        exit 0;
+    }
+
+8.3 Variable Capture
+
+For sigil lines that assign to Perl variables, the script engine
+needs to detect assignment:
+
+    my $x = ? question
+
+The engine checks if the line matches /^my\s+\$|^[\$@%]\w+\s*=/.
+If so, it evals the sigil dispatch and assigns the output to the
+variable. This is a thin regex check — not a parser.
+
+Implementation in Clank::Script:
+
+    if ($line =~ /^(?:my\s+)?([\$\@\%]\w+)\s*=\s*(.*)$/) {
+        my ($var, $expr) = ($1, $2);
+        my $result = $sigil->dispatch($expr);
+        my $val = $result->{output} // '';
+        # eval "$var = \$val" in the caller's namespace
+    }
+
+
+9. File Extension and Convention
+----------------------------------
+
+  - Extension: .clank
+  - MIME type: text/x-clank-script
+  - Shebang: #!/usr/bin/env clank
+  - Comments: # (same as Perl)
+  - Encoding: UTF-8
+
+Naming convention:
+
+    <action>.clank          # deploy-check.clank, code-review.clank
+    <noun>-<verb>.clank     # project-learn.clank, store-review.clank
+
+
+10. Open Questions
+-------------------
+
+  10.1 Should ? return raw text or structured data?
+
+      Raw text (current plan). The script can parse it with regex.
+      Structured access via $store->leaf_message() when needed.
+
+  10.2 Error handling: die or soft failure?
+
+      Die by default (Perl convention). Wrap in eval for soft failure.
+      Scripts that want soft failure: my $r = eval { ? ... } // "fallback";
+
+  10.3 Streaming in scripts?
+
+      Off by default (batch mode). --stream flag enables it per-script.
+      Individual lines could opt in: ? --stream summarize this file
+
+  10.4 Session sharing?
+
+      Scripts get their own session by default. --resume shares one.
+      This prevents scripts from polluting interactive sessions.
+
+  10.5 Testing?
+
+      Scripts are testable. Run the script, capture stdout, assert:
+        prove -l t/scripts/
+        ./t/scripts/deploy-check.clank 2>&1 | grep -q "DEPLOY OK"
+
+  10.6 Package management?
+
+      Not yet. Scripts use require/do for includes. A future
+      Clank::Script::Lib could provide common utilities.
+
+
+11. Relationship to Pipelines
+------------------------------
+
+Clank scripts subsume pipelines. A pipeline is a declarative graph.
+A script is imperative code. They serve different needs:
+
+  Pipeline (.clank blueprint):
+    Declarative, visual, event-driven
+    Good for: multi-agent coordination, data flow graphs
+    Limited: no conditionals, no loops, no variables
+
+  Script (.clank file):
+    Imperative, linear, stateful
+    Good for: automation, CI/CD, batch processing, complex logic
+    Full: Perl control flow, variables, error handling
+
+A script can invoke a pipeline:
+
+    % code-review
+    my $result = % code-review
+
+A pipeline cannot invoke a script. Scripts are the superset.
+
+
+12. Future Directions
+-----------------------
+
+  12.1 Clank::Script::Lib — common utilities
+
+      sub llm { ... }       # shorthand for ? with options
+      sub agent { ... }     # shorthand for @ with structured output
+      sub review { ... }    # pre-configured review workflow
+      sub deploy { ... }    # pre-configured deployment check
+
+  12.2 Script caching — memoize LLM calls
+
+      If the same prompt is asked twice with the same context,
+      return the cached result. Saves tokens.
+
+  12.3 Script testing framework
+
+      use Clank::Script::Test;
+      run_script("t/scripts/deploy-check.clank");
+      like(output(), qr/DEPLOY OK/);
+
+  12.4 Editor integration — edit scripts from the REPL
+
+      /edit deploy-check.clank
+      Opens $EDITOR with the script. Save to run.
+
+  12.5 Script marketplace — share scripts
+
+      clank script install deploy-check
+      clank script list
+      clank script run deploy-check
