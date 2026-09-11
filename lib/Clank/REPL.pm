@@ -69,8 +69,8 @@ sub run {
     # If Gnu loaded but didn't initialise properly (SSH, missing libreadline, etc.),
     # fall back to the plain Stub backend so the REPL still works.
     if (!$term || ref($term) !~ /Gnu/ || !eval { $term->readline_version }) {
-        require Term::ReadLine::Stub;
-        $term = Term::ReadLine::Stub->new('clank', \*STDIN, \*STDOUT);
+        require Term::ReadLine::Perl;
+        $term = Term::ReadLine::Perl->new('clank', \*STDIN, \*STDOUT);
     }
     while (1) {
         my $line = $term->readline('clank> ');
