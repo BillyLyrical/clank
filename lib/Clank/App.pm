@@ -59,6 +59,7 @@ sub compactor { $_[0]->{compactor} }
 sub session   { $_[0]->{session} }
 sub loop      { $_[0]->{loop} }
 sub pm        { $_[0]->{pm} }
+sub metrics   { $_[0]->{metrics} }
 sub wits      { @{ $_[0]->{wits} // [] } }
 
 # Create (or resume) a session, load wits, attach tools + discovered resources.
@@ -202,15 +203,6 @@ sub shutdown {
     my ($self) = @_;
     $self->{bus}->publish('session_shutdown', {}) if $self->{bus};
 }
-
-# Accessors for wits and REPL commands.
-sub store   { $_[0]->{store} }
-sub bus     { $_[0]->{bus} }
-sub provider { $_[0]->{provider} }
-sub metrics { $_[0]->{metrics} }
-sub pm      { $_[0]->{pm} }
-sub session { $_[0]->{session} }
-sub wits    { @{ $_[0]->{wits} // [] } }
 
 # Create a minimal Wit::API-like object for bus-driven wits.
 sub _make_api {

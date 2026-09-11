@@ -62,9 +62,18 @@ sub run {
     warn "[wits] load errors:\n  $_\n" for @{ $app->pm->errors };
     print "type /help for commands\n";
 
-    my $term = Term::ReadLine->new('clank');
+    my $term;
+    if (eval { require Term::ReadLine::Gnu }) {
+        $term = Term::ReadLine->new('clank');
+    }
+    # If Gnu loaded but didn't initialise properly (SSH, missing libreadline, etc.),
+    # fall back to the plain Stub backend so the REPL still works.
+    if (!$term || ref($term) !~ /Gnu/ || !eval { $term->readline_version }) {
+        require Term::ReadLine::Stub;
+        $term = Term::ReadLine::Stub->new('clank', \*STDIN, \*STDOUT);
+    }
     while (1) {
-        my $line = $term->read('clank> ');
+        my $line = $term->readline('clank> ');
         last unless defined $line;
 
         # Ctrl+X Ctrl+E or Alt+E: open $EDITOR for multi-line input
