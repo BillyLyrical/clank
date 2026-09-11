@@ -122,6 +122,25 @@ After the first grep scan, metadata is cached in the SQLite DB. Subsequent
 lookups query the DB, not the filesystem. The DB is the runtime view; the
 `# CLANK-WIT:` comment is the source of truth.
 
+### Listing Discovered Wits
+
+On startup, Clank scans `@INC` for `# CLANK-WIT:` markers and registers all
+wits in the SQLite DB. Use `~ list` in the REPL to see every discovered wit:
+
+```
+clank> ~ list
+wits (153):
+  session              active    /path/to/lib/Clank/Wits/Session.pm
+  git                  active    /path/to/lib/Clank/Wits/Git.pm
+  critic               available /path/to/lib/Clank/Wits/Critic.pm
+```
+
+States: `active` (loaded and running), `available` (discovered, not loaded),
+`disabled` (manually unloaded).
+
+Use `~ status` for a count summary, or `~ inspect <name>` for details on a
+specific wit.
+
 ## 4. Registration: `register($api)`
 
 The comment is for discovery. The `register($api)` function is for runtime

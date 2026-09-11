@@ -71,6 +71,8 @@ GetOptions(
     'stdio'      => \$o{stdio},
     'daemon'     => \$o{daemon},
     'pidfile=s'  => \$o{pidfile},
+    'local'      => \$o{local},
+    'home'       => \$o{home},
     'status'     => \$o{status},
     'stop'       => \$o{stop},
     'help'       => \$o{help},
@@ -83,19 +85,22 @@ Options:
   --provider=NAME   provider name (default lmstudio; 'mock' = offline echo)
   --model=NAME      model name
   --base_url=URL    OpenAI-compatible endpoint
-  --api_key=KEY     API key (or CLANK_API_KEY env / ~/.clank/config.json)
-  --db=PATH         SQLite path (default ~/.clank/clank.db; ':memory:' for ephemerality)
+  --api_key=KEY     API key (or CLANK_API_KEY env / config.json)
+  --db=PATH         SQLite path (default: auto, see below)
   --workdir=DIR     working directory the agent operates in
   --resume=ID       continue an existing session from --db
   --timeout=N       default per-prompt timeout in seconds
   -w, --wit DIR     extra wit/deck path (repeatable)
+  --local           use project-local .clank/ dir
+  --home            use user-global ~/.clank/ dir
   --socket PATH     listen on a UNIX socket instead of stdio
   --stdio           force stdio transport (the default without --socket)
   --daemon          fork to background (requires --socket)
   --pidfile=PATH    PID file (default ~/.clank/clankd.pid)
-   --status          check if a daemon is running, then exit
-   --stop            send shutdown to a running daemon, then exit
+  --status          check if a daemon is running, then exit
+  --stop            send shutdown to a running daemon, then exit
 
+Data directory precedence: --local > ./ .clank/ (if exists) > --home > ~/.clank/
 Protocol: newline-delimited JSON; see the header comment for commands.
 USAGE
 

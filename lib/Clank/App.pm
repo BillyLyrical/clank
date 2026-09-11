@@ -29,7 +29,12 @@ sub new {
         stream    => 0,
         %o,
     }, $class;
-    $app->{store}    = Clank::Store->new(path => $o{db} // "$ENV{HOME}/.clank/clank.db");
+
+    # Resolve data directory: --local > ./ .clank/ (if exists) > --home > ~/. .clank/
+    my $data_dir = _resolve_data_dir(local => $o{local}, home => $o{home});
+    $app->{data_dir} = $data_dir;
+
+    $app->{store}    = Clank::Store->new(path => $o{db} // "$data_dir/clank.db");
     $app->{bus}      = Clank::Bus->new(store => $app->{store}, sender => 'app');
 
     # provider: a name (registry lookup) or a ready-made provider object — the
@@ -39,6 +44,7 @@ sub new {
         model    => $o{model},
         base_url => $o{base_url},
         api_key  => $o{api_key},
+        data_dir => $data_dir,
     );
     $app->{compactor} = Clank::Session::Compaction->new(%{ $o{compact} // {} });
 
@@ -215,6 +221,38 @@ sub run_prompt { $_[0]->{loop}->run_prompt($_[1]) }
 sub shutdown {
     my ($self) = @_;
     $self->{bus}->publish('session_shutdown', {}) if $self->{bus};
+}
+
+# Resolve data directory with CLI overrides.
+# --local  = force project-local .clank/
+# --home   = force user-global ~/.clank/
+# default  = ./ .clank/ if it exists, else ~/.clank/
+sub _resolve_data_dir {
+    my (%o) = @_;
+    my $project = Cwd::getcwd() . '/.clank';
+    my $home    = "$ENV{HOME}/.clank";
+
+    if ($o{local}) {
+        unless (-d $project) {
+            require File::Path;
+            File::Path::make_path($project);
+        }
+        return $project;
+    }
+    if ($o{home}) {
+        unless (-d $home) {
+            require File::Path;
+            File::Path::make_path($home);
+        }
+        return $home;
+    }
+    # Auto-detect: project-local if it exists, else user-global.
+    return $project if -d $project;
+    unless (-d $home) {
+        require File::Path;
+        File::Path::make_path($home);
+    }
+    return $home;
 }
 
 # Create a minimal Wit::API-like object for bus-driven wits.

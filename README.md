@@ -69,12 +69,20 @@ prove -l t/
 
 ## Quick Start
 
-Clank stores its config and data in `~/.clank/`:
+Clank stores its config and data in `.clank/`:
 
 ```
-~/.clank/
+.clank/
   config.json     # provider settings (optional)
   clank.db        # session store, world model, metrics
+```
+
+By default, Clank checks for a project-local `.clank/` directory first. If it
+doesn't exist, it falls back to `~/.clank/`. You can force either with flags:
+
+```bash
+clank --local    # force project-local .clank/
+clank --home     # force user-global ~/.clank/
 ```
 
 ```bash

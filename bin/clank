@@ -17,6 +17,8 @@ GetOptions(
     'wit|w+'     => \@wit_paths,
     'resume=s'   => \$opt{resume},
     'stream'     => \$opt{stream},
+    'local'      => \$opt{local},
+    'home'       => \$opt{home},
     'help|h'     => \$opt{help},
 ) or exit _usage(2);
 $opt{wit_paths} = \@wit_paths if @wit_paths;
@@ -65,11 +67,15 @@ options:
   --model NAME        model id                   (env CLANK_MODEL)
   --base-url URL      OpenAI-compatible endpoint (env CLANK_BASE_URL)
   --api-key KEY       API key (env CLANK_API_KEY; never persisted to db/logs)
-  --db PATH           SQLite db path             (default ~/.clank/clank.db)
+  --db PATH           SQLite db path             (default: auto, see below)
   -w, --wit DIR       extra wit directory        (repeatable; env CLANK_WITS_PATH)
+  --local             use project-local .clank/ dir
+  --home              use user-global ~/.clank/ dir
   --resume ID         resume a session
   --stream            stream tokens to stdout
   -h, --help          this help
+
+Data directory precedence: --local > ./ .clank/ (if exists) > --home > ~/.clank/
 
 With no prompt: interactive REPL. With a prompt: one-shot run.
 EOF

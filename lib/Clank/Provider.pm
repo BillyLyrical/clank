@@ -6,12 +6,18 @@ use strict; use warnings;
 
 sub new {
     my ($class, %o) = @_;
-    my $cfg_file = "$ENV{HOME}/.clank/config.json";
+    # Config precedence: CLI flags > env > data_dir/config.json > ~/.clank/config.json > defaults
     my %file_cfg;
-    if (-f $cfg_file) {
-        require JSON::PP;
-        my $j = eval { JSON::PP->new->decode(slurp_json($cfg_file)) };
-        %file_cfg = ref $j eq 'HASH' ? %$j : ();
+    my @cfg_dirs = ($o{data_dir}, "$ENV{HOME}/.clank");
+    for my $dir (@cfg_dirs) {
+        next unless defined $dir;
+        my $cfg = "$dir/config.json";
+        if (-f $cfg) {
+            require JSON::PP;
+            my $j = eval { JSON::PP->new->decode(slurp_json($cfg)) };
+            %file_cfg = ref $j eq 'HASH' ? %$j : ();
+            last;
+        }
     }
     my %c = (
         name      => $o{name}       // $ENV{CLANK_PROVIDER} // $file_cfg{provider} // 'lmstudio',

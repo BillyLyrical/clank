@@ -2,18 +2,30 @@
 
 Clank supports 7 LLM providers. Configuration uses a layered precedence:
 
-    CLI flags  >  environment variables  >  ~/.clank/config.json  >  defaults
+    CLI flags  >  environment variables  >  .clank/config.json  >  defaults
 
 API keys are never written to the database or logs.
 
 ## Config File
 
-Clank stores its config and data in `~/.clank/`:
+Clank stores its config and data in `.clank/`. By default it looks for a
+project-local `.clank/` directory first, falling back to `~/.clank/`:
 
 ```
-~/.clank/
-  config.json     # provider settings (optional)
-  clank.db        # session store, world model, metrics
+.clank/                 # project-local (checked first)
+  config.json           # provider settings (optional)
+  clank.db              # session store, world model, metrics
+
+~/.clank/               # user-global (fallback)
+  config.json
+  clank.db
+```
+
+Force a specific location with flags:
+
+```bash
+clank --local    # always use project-local .clank/
+clank --home     # always use user-global ~/.clank/
 ```
 
 Create `~/.clank/config.json` to avoid passing flags every time:
@@ -180,7 +192,9 @@ Full flag list:
 --model NAME        model identifier (e.g. gpt-4o, claude-sonnet-4-20250514)
 --base-url URL      API endpoint
 --api-key KEY       authentication key
---db PATH           SQLite database path (default ~/.clank/clank.db)
+--db PATH           SQLite database path (default: auto)
+--local             use project-local .clank/ dir
+--home              use user-global ~/.clank/ dir
 -w, --wit DIR       extra wit directory (repeatable)
 --resume ID         resume a previous session
 --stream            stream tokens to stdout
@@ -207,7 +221,8 @@ clank --provider openai --model gpt-4o "explain what a monad is"
 
 ## Security Notes
 
-- API keys can be passed via env vars, CLI flags, or `~/.clank/config.json`
+- API keys can be passed via env vars, CLI flags, or `.clank/config.json`
 - Keys are never stored in the SQLite database
 - Keys are redacted in all log output (shown as `sk***ey`)
-- Prefer `~/.clank/config.json` over CLI flags to avoid shell history leakage
+- Prefer `.clank/config.json` over CLI flags to avoid shell history leakage
+- Use `--home` if you don't want project-local config committed to git

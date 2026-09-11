@@ -330,29 +330,63 @@ published to git.commit.done
 
 ## Wit Management (`~`)
 
+### Listing All Discovered Wits
+
+On startup, Clank scans `@INC` for `# CLANK-WIT:` markers and registers all
+found wits in the SQLite DB. Use `~ list` to see everything — loaded and
+available:
+
 ```
 clank> ~ list
-wits:
-  session              active    /path/to/wits/session
-  logic                active    /path/to/wits/logic
-  git                  active    /path/to/wits/git
-  fs                   active    /path/to/wits/fs
-  critic               active    /path/to/wits/critic
+wits (153):
+  session              active    /path/to/lib/Clank/Wits/Session.pm
+  logic                active    /path/to/lib/Clank/Wits/Logic.pm
+  git                  active    /path/to/lib/Clank/Wits/Git.pm
+  fs                   active    /path/to/lib/Clank/Wits/Fs.pm
+  critic               active    /path/to/lib/Clank/Wits/Critic.pm
+  search               available /path/to/lib/Clank/Wits/Search.pm
+  ...
+```
 
+States: `active` (loaded and running), `available` (discovered but not loaded),
+`disabled` (manually unloaded).
+
+```
 clank> ~ status
-wits: 12 active, 15 total
+wits: 12 active, 141 available, 153 total
+```
 
+### Inspecting a Wit
+
+```
 clank> ~ inspect critic
 critic:
-  state: active
-  dir:   /path/to/wits/critic
-  pkg:   Clank::Wits::Critique::Code
+  state:   active
+  path:    /path/to/lib/Clank/Wits/Critic.pm
+  version: 0.0.1
+  about:   Code critique heuristics
+```
+
+### Loading and Unloading
+
+```
+clank> ~ load /path/to/custom/wit
+loaded 1 wit(s) from /path/to/custom/wit
 
 clank> ~ unload git
 disabled git — 3 hook subscription(s) removed
+```
 
-clank> ~ load /path/to/custom/wit
-loaded 1 wit(s) from /path/to/custom/wit
+### Finding Wits from the Shell
+
+You can also discover wits without starting the REPL:
+
+```bash
+# Find all installed wits with their metadata
+grep -rh "# CLANK-WIT:" $(perl -e 'print join ":", @INC')/Clank/Wits/*.pm
+
+# Search for wits matching a keyword
+grep -l "# CLANK-WIT:.*hint=.*git" $(perl -e 'print join ":", @INC')/Clank/Wits/*.pm
 ```
 
 ---
