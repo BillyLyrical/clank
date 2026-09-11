@@ -66,16 +66,16 @@ sub register {
         else         { return "nothing to compact" }
     });
 
-    $api->register_command('wits', description => 'list loaded wits (with state)', handler => sub {
+    $api->register_command('wits', description => 'list all discovered wits (DB registry)', handler => sub {
         my ($ctx) = @_;
-        my @ws = $ctx->{app}->wits;
-        unless (@ws) { return "(none loaded)" }
+        my @ws = $ctx->{app}->store->wit_list;
+        unless (@ws) { return "(no wits discovered)" }
         my @out;
         for my $w (@ws) {
-            push @out, sprintf("%-20s %-9s %s  (%s)",
-                $w->{name}, $w->{state} // 'active', $w->{dir}, $w->{pkg});
+            push @out, sprintf("%-20s %-9s %s",
+                $w->{name}, $w->{state} // 'available', $w->{path} // '');
         }
-        return join("\n", @out);
+        return "wits (" . scalar(@ws) . "):\n" . join("\n", @out);
     });
 
     $api->register_command('tools', description => 'list available tools', handler => sub {

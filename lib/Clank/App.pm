@@ -89,6 +89,19 @@ sub start_session {
     # discovered wits from filesystem roots
     my @wits = $pm->load_all(extra_paths => $self->{wit_paths});
 
+    # Scan filesystem for # CLANK-WIT: markers and register in DB.
+    # This populates the wit registry so ~ list shows all available wits.
+    require Clank::Wit::Scanner;
+    my $scanned = Clank::Wit::Scanner->scan(dirs => [
+        map { "$_/Clank/Wits" } grep { -d "$_/Clank/Wits" } @INC
+    ]);
+    Clank::Wit::Scanner->register_in_db($self->{store}, $scanned) if @$scanned;
+
+    # Mark loaded wits as active in the DB.
+    for my $w (@wits) {
+        $self->{store}->wit_set_state($w->{name}, 'active');
+    }
+
     # tools: builtins + wit-registered
     $session->add_tool($_) for builtin_tools();
     $session->add_tool($_) for $pm->all_tools();

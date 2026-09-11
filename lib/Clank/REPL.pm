@@ -325,13 +325,13 @@ sub _register_handlers {
         my $pm = $app->pm;
 
         if ($sub eq 'list' || $sub eq '') {
-            my @ws = $app->wits;
-            return { output => '(no wits loaded)' } unless @ws;
+            my @ws = $app->store->wit_list;
+            return { output => '(no wits discovered)' } unless @ws;
             my @out;
             for my $w (@ws) {
-                push @out, sprintf("  %-20s %-9s %s", $w->{name}, $w->{state} // 'active', $w->{dir});
+                push @out, sprintf("  %-20s %-9s %s", $w->{name}, $w->{state} // 'available', $w->{path} // '');
             }
-            return { output => "wits:\n" . join("\n", @out) };
+            return { output => "wits (" . scalar(@ws) . "):\n" . join("\n", @out) };
         }
 
         if ($sub eq 'load') {
@@ -350,23 +350,23 @@ sub _register_handlers {
 
         if ($sub eq 'inspect') {
             return { output => 'usage: ~ inspect <wit-name>' } unless defined $rest && length $rest;
-            my @ws = $app->wits;
-            for my $w (@ws) {
-                if ($w->{name} eq $rest) {
-                    my @out = ("$rest:");
-                    push @out, "  state: " . ($w->{state} // 'active');
-                    push @out, "  dir:   $w->{dir}";
-                    push @out, "  pkg:   $w->{pkg}";
-                    return { output => join("\n", @out) };
-                }
+            my $w = $app->store->wit_get($rest);
+            if ($w) {
+                my @out = ("$rest:");
+                push @out, "  state:   " . ($w->{state} // 'available');
+                push @out, "  path:    " . ($w->{path} // '');
+                push @out, "  version: " . ($w->{version} // '');
+                push @out, "  about:   " . ($w->{about} // '') if $w->{about};
+                return { output => join("\n", @out) };
             }
             return { output => "wit '$rest' not found" };
         }
 
         if ($sub eq 'status') {
-            my @ws = $app->wits;
-            my $active = grep { !($_->{state} // '') eq 'disabled' } @ws;
-            return { output => "wits: $active active, " . scalar(@ws) . " total" };
+            my @all = $app->store->wit_list;
+            my $active = grep { $_->{state} eq 'active' } @all;
+            my $available = grep { $_->{state} eq 'available' } @all;
+            return { output => "wits: $active active, $available available, " . scalar(@all) . " total" };
         }
 
         return { output => "usage: ~ list | ~ load <path> | ~ unload <name> | ~ inspect <name> | ~ status" };
