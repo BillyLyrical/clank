@@ -178,7 +178,7 @@ multi-line input.
 ## Development
 
 ```bash
-git clone https://github.com/BillyLyrical/Clank.git
+git clone https://github.com/BillyLyrical/Clank
 cd Clank
 perl link_wits.pl        # symlink wits/ into lib/
 prove -l t/              # run all tests (1487)
