@@ -31,9 +31,11 @@ Slash commands manage the REPL session and inspect state.
   /events [topic]  peek at the bus event journal
   /stats           show self-improvement metrics
   /agents          list available agent profiles
+  /agent <name>    run a constrained subagent
   /wits            list all discovered wits (from DB)
+  /wit disable|e   enable or disable a wit at runtime
   /memory          knowledge document management
-  /instinct        crystallized rule management
+  /instinct        crystallized rule management (status|create|decay|...)
   /exit            leave the REPL
 
 Wits can register additional /commands. Type /help to see them all.
@@ -465,6 +467,70 @@ Useful for:
   - Long multi-line prompts
   - Complex Perl eval expressions ($ ...)
   - Editing pipeline blueprints before running them
+EOF
+
+    instinct => _topic('instinct',
+        'Crystallized rules — deterministic patterns that shortcut the LLM',
+        <<'EOF'),
+Crystallization captures LLM solutions as deterministic Perl rules. Once
+crystallized, the rule fires in ~1ms instead of an LLM call at ~500ms.
+
+  /instinct status                  show rule counts and top instincts
+  /instinct create <name>           create a rule (see below)
+  /instinct decay                   apply confidence decay to unused rules
+  /instinct promote                 promote project rules to global scope
+  /instinct domain <domain>         filter rules by domain tag
+
+Creating a rule:
+
+  /instinct create <name> condition=<regex> action=<text> [confidence=0.8] [scope=global] [domain=general]
+
+Examples:
+
+  /instinct create python_list_vs_tuple \
+    condition=python.*(list|tuple) \
+    action="Lists are mutable, tuples are immutable. Use lists when you need to modify." \
+    confidence=0.9
+
+  /instinct create git_fix_pattern \
+    condition="^fix[:(]" \
+    action="Commit is a bugfix — look for related test changes" \
+    confidence=0.85 \
+    domain=git
+
+Fields:
+  name        unique rule identifier
+  condition   regex pattern to match against prompts
+  action      text returned when the rule matches
+  confidence  0.0-1.0 (default 0.8, higher = more trusted)
+  scope       'global' or 'project' (default global)
+  domain      category tag for filtering (default general)
+
+Rules are auto-crystallized from conversations. The escalation system
+checks crystallized rules before calling the LLM, so the system gets
+cheaper with use.
+
+See also: /help neurosymbolic for the full escalation pipeline.
+EOF
+
+    memory => _topic('memory',
+        'Knowledge documents — structured facts the LLM can recall',
+        <<'EOF'),
+Memory stores knowledge documents that the LLM can search and retrieve
+during conversations. Documents persist across sessions.
+
+  /memory list                  list all memory documents
+  /memory search <query>        search memory by keyword
+  /memory get <id>              get a specific document
+  /memory stats                 show memory statistics
+
+Memory documents have kinds: lesson, fact, reference, pattern, decision.
+The LLM can add memories during conversation via the memory tool.
+
+When the LLM encounters a relevant memory, it's injected into the
+conversation context automatically (via the knowledge_request bus event).
+
+See also: /help neurosymbolic for how memory integrates with the world model.
 EOF
 );
 

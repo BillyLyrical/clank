@@ -469,8 +469,32 @@ sub _cmd_instinct {
         $out .= "  (none)\n" unless @$instincts;
         return $out;
     }
+    elsif ($subcmd eq 'create') {
+        # /instinct create <name> condition=<regex> action=<text> [confidence=N] [scope=global|project] [domain=<tag>]
+        my %opts;
+        for my $arg (@rest) {
+            if ($arg =~ /^(\w+)=(.*)$/) { $opts{$1} = $2 }
+        }
+        my $name = $opts{name} // $rest[0] // '';
+        return "Usage: /instinct create <name> condition=<regex> action=<text> [confidence=0.8] [scope=global] [domain=general]\n"
+            unless length $name && length($opts{condition} // '') && length($opts{action} // '');
+        my $confidence = $opts{confidence} // 0.8;
+        my $scope = $opts{scope} // 'global';
+        my $domain = $opts{domain} // 'general';
+        my $sid = $ctx && $ctx->{session} ? $ctx->{session}->id : undef;
+        my $id = $self->_store_rule({
+            name       => $name,
+            type       => 'pattern',
+            condition  => $opts{condition},
+            action     => $opts{action},
+            confidence => $confidence,
+            scope      => $scope,
+            domain     => $domain,
+        }, session_id => $sid);
+        return "created rule '$name' (id=$id, confidence=$confidence, scope=$scope, domain=$domain)";
+    }
 
-    return "Usage: /instinct status|decay|promote|domain <domain>\n";
+    return "Usage: /instinct status|create|decay|promote|domain <domain>\n";
 }
 
 # === PATTERN EXTRACTION ===
